@@ -154,10 +154,11 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
                         int day = int.parse(doc['date'].split('-')[2]);
                         
                         if (!totals.containsKey(day)) {
-                          totals[day] = {'weight': 0.0, 'advance': 0.0, 'fert': 0.0, 'tea': 0.0};
+                          totals[day] = {'weight': 0.0, 'weight2': 0.0, 'advance': 0.0, 'fert': 0.0, 'tea': 0.0};
                         }
                         
                         totals[day]!['weight'] = totals[day]!['weight']! + (doc['netWeight'] ?? 0).toDouble();
+                        totals[day]!['weight2'] = totals[day]!['weight2']! + (doc['netWeight2'] ?? 0).toDouble();
                         totals[day]!['advance'] = totals[day]!['advance']! + (doc['advanceAmount'] ?? 0).toDouble();
                         
                         double f1 = (doc['fertilizer1Qty'] ?? 0).toDouble();
@@ -210,13 +211,14 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
                       itemBuilder: (context, index) {
                         int day = index + 1;
                         
-                        var dayData = totals[day] ?? {'weight': 0.0, 'advance': 0.0, 'fert': 0.0, 'tea': 0.0};
+                        var dayData = totals[day] ?? {'weight': 0.0, 'weight2': 0.0, 'advance': 0.0, 'fert': 0.0, 'tea': 0.0};
                         double weight = dayData['weight']!;
+                        double weight2 = (dayData['weight2'] ?? 0.0);
                         double advance = dayData['advance']!;
                         double fert = dayData['fert']!;
                         double tea = dayData['tea']!;
                         
-                        bool hasData = weight > 0 || advance > 0 || fert > 0 || tea > 0;
+                        bool hasData = weight > 0 || weight2 > 0 || advance > 0 || fert > 0 || tea > 0;
 
                         DateTime cellDate = DateTime(_selectedMonth.year, _selectedMonth.month, day);
                         bool isFuture = cellDate.isAfter(today);
@@ -249,18 +251,25 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
                                         : (hasData ? Colors.black87 : Colors.grey)
                                   )
                                 ),
-                                const Spacer(), 
-                                
-                                if (weight > 0) 
-                                  _buildAlignedRow(Icons.eco, Colors.green, weight.toStringAsFixed(1)),
-                                if (advance > 0) 
-                                  _buildAlignedRow(Icons.money, Colors.blue, NumberFormat.compact().format(advance)),
-                                if (fert > 0) 
-                                  _buildAlignedRow(Icons.eco, const Color.fromARGB(255, 60, 6, 6), fert.toStringAsFixed(0)), 
-                                if (tea > 0) 
-                                  _buildAlignedRow(Icons.local_cafe, Colors.orange, tea.toStringAsFixed(0)),
-                                  
-                                const SizedBox(height: 2),
+                                const SizedBox(height: 2), 
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      children: [
+                                        if (weight > 0) 
+                                          _buildAlignedRow(prefix: 'N', color: Colors.green, text: weight.toStringAsFixed(1)),
+                                        if (weight2 > 0) 
+                                          _buildAlignedRow(prefix: 'S', color: Colors.green.shade700, text: weight2.toStringAsFixed(1)),
+                                        if (advance > 0) 
+                                          _buildAlignedRow(icon: Icons.money, color: Colors.blue, text: NumberFormat.compact().format(advance)),
+                                        if (fert > 0) 
+                                          _buildAlignedRow(icon: Icons.shopping_bag, color: Colors.brown.shade700, text: fert.toStringAsFixed(0)), 
+                                        if (tea > 0) 
+                                          _buildAlignedRow(icon: Icons.local_cafe, color: Colors.orange, text: tea.toStringAsFixed(0)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -277,7 +286,7 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
     );
   }
 
-  Widget _buildAlignedRow(IconData icon, Color color, String text) {
+  Widget _buildAlignedRow({IconData? icon, String? prefix, required Color color, required String text}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2.0),
       child: Row(
@@ -286,7 +295,9 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
             flex: 4,
             child: Align(
               alignment: Alignment.centerRight,
-              child: Icon(icon, size: 12, color: color),
+              child: prefix != null
+                  ? Text(prefix, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color))
+                  : Icon(icon, size: 12, color: color),
             ),
           ),
           const SizedBox(width: 4),

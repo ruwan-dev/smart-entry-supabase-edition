@@ -356,7 +356,7 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
                     Row(
                       children: [
                         const Text(
-                          'තේ දළු කිලෝ 1 ක මිල: Rs.',
+                          'සාමාන්‍ය දළු කිලෝ 1 ක මිල: Rs.',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,

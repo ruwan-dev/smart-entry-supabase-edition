@@ -19,6 +19,7 @@ class BillPdfService {
         build: (pw.Context context) {
           // --- ගණනය කිරීම් මෙතැන සිදු කරයි ---
           double teaRate = (bill['teaRate'] ?? 0.0).toDouble();
+          double teaRate2 = (bill['teaRate2'] ?? 0.0).toDouble();
           double grossIncome = (bill['grossIncome'] ?? 0.0).toDouble();
           double transportCost = (bill['transportCost'] ?? 0.0).toDouble();
 
@@ -50,7 +51,9 @@ class BillPdfService {
                   
                   pw.Text('Name: $customerName'.padRight(40) + 'Ref: $refNumber'),
                   pw.Text('Month: ${bill['displayMonth']}'),
-                  pw.Text('Tea Rate: Rs.${teaRate.toStringAsFixed(2)} | Trans. Rate: Rs.${transRate.toStringAsFixed(2)}'),
+                  pw.Text(teaRate2 > 0 
+                    ? 'Tea Rates: Rs.${teaRate.toStringAsFixed(2)}/Rs.${teaRate2.toStringAsFixed(2)} | Trans: Rs.${transRate.toStringAsFixed(2)}'
+                    : 'Tea Rate: Rs.${teaRate.toStringAsFixed(2)} | Trans. Rate: Rs.${transRate.toStringAsFixed(2)}'),
                   pw.Text('-' * 65),
                   
                   // Table Header
@@ -65,11 +68,16 @@ class BillPdfService {
 
                   // Table Data Rows
                   ...(bill['tableRows'] as List).map((row) {
+                    String weightStr = row['weight'].toStringAsFixed(1);
+                    if ((row['weight2'] ?? 0) > 0) {
+                      weightStr += '+${(row['weight2'] as num).toDouble().toStringAsFixed(1)}';
+                    }
+
                     List items = row['items'];
                     if (items.isEmpty) {
                       return pw.Row(children: [
                         pw.Expanded(flex: 2, child: pw.Text(row['date'])),
-                        pw.Expanded(flex: 2, child: pw.Text(row['weight'].toStringAsFixed(1))),
+                        pw.Expanded(flex: 2, child: pw.Text(weightStr)),
                         pw.Expanded(flex: 4, child: pw.Text('-')),
                         pw.Expanded(flex: 2, child: pw.Text('-')),
                         pw.Expanded(flex: 2, child: pw.Text('-')),
@@ -86,7 +94,7 @@ class BillPdfService {
 
                           return pw.Row(children: [
                             pw.Expanded(flex: 2, child: pw.Text(isFirst ? row['date'] : '')),
-                            pw.Expanded(flex: 2, child: pw.Text(isFirst ? row['weight'].toStringAsFixed(1) : '')),
+                            pw.Expanded(flex: 2, child: pw.Text(isFirst ? weightStr : '')),
                             pw.Expanded(flex: 4, child: pw.Text(descOnly)),
                             pw.Expanded(flex: 2, child: pw.Text(qtyOnly)),
                             pw.Expanded(flex: 2, child: pw.Text(item['amt'].toStringAsFixed(2))),

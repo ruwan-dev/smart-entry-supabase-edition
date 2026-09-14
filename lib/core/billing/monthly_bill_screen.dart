@@ -125,9 +125,11 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
   Widget _buildInvoiceCard(Map<String, dynamic> bill) {
     // Calculate totals and extract days
     Map<int, double> weightByDay = {};
+    Map<int, double> weight2ByDay = {};
     Map<int, double> advanceByDay = {};
     double totalAdvance = 0;
     double totalWeight = 0;
+    double totalWeight2 = 0;
 
     for (var row in bill['tableRows']) {
       String dateStr = row['date'] ?? '';
@@ -137,8 +139,13 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
       if (day == 0) continue;
 
       double weight = _parseDouble(row['weight']);
+      double weight2 = _parseDouble(row['weight2']);
+      
       weightByDay[day] = weight;
+      weight2ByDay[day] = weight2;
+      
       totalWeight += weight;
+      totalWeight2 += weight2;
 
       for (var item in row['items']) {
         if (item['desc'] == 'Advance') {
@@ -173,7 +180,19 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
         if (day <= 31) {
           rowChildren.add(_gridCell(day.toString()));
           double w = weightByDay[day] ?? 0;
-          rowChildren.add(_gridCell(w > 0 ? w.toStringAsFixed(1) : '-'));
+          double w2 = weight2ByDay[day] ?? 0;
+          
+          String formatW(double val) => val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1);
+          String wStr = '-';
+          if (w > 0 && w2 > 0) {
+            wStr = '${formatW(w)}/${formatW(w2)}';
+          } else if (w > 0) {
+            wStr = formatW(w);
+          } else if (w2 > 0) {
+            wStr = '-/${formatW(w2)}';
+          }
+          
+          rowChildren.add(_gridCell(wStr));
         } else {
           rowChildren.add(_gridCell(''));
           rowChildren.add(_gridCell(''));
@@ -298,7 +317,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            'ප්‍රවාහන ගාස්තු (${totalWeight.toStringAsFixed(1)}kg) : Rs.${bill['transportCost'].toStringAsFixed(2)}',
+                            'ප්‍රවාහන ගාස්තු (${((totalWeight + totalWeight2) % 1 == 0) ? (totalWeight + totalWeight2).toInt() : (totalWeight + totalWeight2).toStringAsFixed(1)}kg) : Rs.${bill['transportCost'].toStringAsFixed(2)}',
                             style: const TextStyle(fontSize: 12),
                           ),
                         ],
@@ -316,14 +335,20 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                         ),
                         child: Column(
                           children: [
-                            _summaryRow(
-                              'මුළු දළු බර',
-                              '${totalWeight.toStringAsFixed(1)} Kg',
-                            ),
-                            _summaryRow(
-                              'දළු කිලෝවක මිල',
-                              'Rs. ${bill['teaRate'].toStringAsFixed(2)}',
-                            ),
+                            if (totalWeight > 0 || totalWeight2 == 0)
+                              _summaryGridRow(
+                                'සාමාන්‍ය දළු',
+                                '${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} Kg',
+                                'Rs. ${(bill['teaRate'] ?? 0).toStringAsFixed(2)}',
+                                isBold: true,
+                              ),
+                            if (totalWeight2 > 0)
+                              _summaryGridRow(
+                                'සුපිරි දළු',
+                                '${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} Kg',
+                                'Rs. ${(bill['teaRate2'] ?? 0).toStringAsFixed(2)}',
+                                isBold: true,
+                              ),
                             const Divider(
                               color: Colors.black,
                               thickness: 1,
@@ -461,6 +486,54 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     );
   }
 
+  Widget _summaryGridRow(
+    String label,
+    String weightVal,
+    String rateVal, {
+    bool isBold = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            flex: 5,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              weightVal,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 4,
+            child: Text(
+              rateVal,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _summaryRow(String label, String value, {bool isBold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -495,7 +568,14 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     double netPayable = _parseDouble(bill['netPayable']);
 
     double teaRate = _parseDouble(bill['teaRate']);
-    double totalWeight = teaRate > 0 ? grossIncome / teaRate : 0;
+    double teaRate2 = _parseDouble(bill['teaRate2']);
+    double totalWeight = _parseDouble(bill['totalWeight']);
+    double totalWeight2 = _parseDouble(bill['totalWeight2']);
+
+    // Fallback if older bills don't have totalWeight stored
+    if (totalWeight == 0 && totalWeight2 == 0 && teaRate > 0) {
+      totalWeight = grossIncome / teaRate;
+    }
 
     double advTotal = _parseDouble(bill['advTotal']);
     double f1Total = _parseDouble(bill['f1Total']);
@@ -509,10 +589,18 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
 
     String msg =
         "ආයුබෝවන් *${widget.customerName}*,\n\n"
-        "ඔබගේ $displayMonth මාසයේ බිල්පත:\n\n"
-        "මුළු දළු බර: *${totalWeight.toStringAsFixed(1)} kg*\n"
-        "දළු කිලෝවක මිල: *Rs ${currencyF.format(teaRate)}*\n"
-        "මුළු දළු ආදායම: *Rs ${currencyF.format(grossIncome)}*\n\n";
+        "ඔබගේ $displayMonth මාසයේ බිල්පත:\n\n";
+
+    if (totalWeight > 0 || totalWeight2 == 0) {
+      msg += "සාමාන්‍ය දළු: *${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} kg*\n"
+             "සාමාන්‍ය දළු මිල: *Rs ${currencyF.format(teaRate)}*\n";
+    }
+    if (totalWeight2 > 0) {
+      msg += "සුපිරි දළු: *${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} kg*\n"
+             "සුපිරි දළු මිල: *Rs ${currencyF.format(teaRate2)}*\n";
+    }
+
+    msg += "\nමුළු දළු ආදායම: *Rs ${currencyF.format(grossIncome)}*\n\n";
 
     if (totalDeductions > 0) {
       msg += "අඩුකිරීම්:\n";

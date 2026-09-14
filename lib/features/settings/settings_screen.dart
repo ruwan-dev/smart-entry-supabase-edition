@@ -28,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // මාසික ගාස්තු සඳහා Controllers
   final _monthlyFormKey = GlobalKey<FormState>();
   final TextEditingController _teaRateController = TextEditingController();
+  final TextEditingController _teaRate2Controller = TextEditingController();
   final TextEditingController _transportRateController =
       TextEditingController();
 
@@ -321,12 +322,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'year': _selectedYear,
           'month': _selectedMonth,
           'teaRate': double.parse(_teaRateController.text.trim()),
+          'teaRate2': double.tryParse(_teaRate2Controller.text.trim()) ?? 0.0,
           'transportRate': double.parse(_transportRateController.text.trim()),
           'updatedAt': DateTime.now().toIso8601String(),
           'sortValue': sortValue,
         });
 
         _teaRateController.clear();
+        _teaRate2Controller.clear();
         _transportRateController.clear();
 
         if (mounted)
@@ -482,6 +485,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     _teaRateController.dispose();
+    _teaRate2Controller.dispose();
     _transportRateController.dispose();
     _fert1PriceController.dispose();
     _fert2PriceController.dispose();
@@ -804,7 +808,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: TextFormField(
                           controller: _teaRateController,
                           decoration: _buildInputDecoration(
-                            'තේ දළු මිල (Rs)',
+                            'සාමාන්‍ය දළු මිල (Rs)',
                             Icons.monetization_on_outlined,
                           ),
                           keyboardType: const TextInputType.numberWithOptions(
@@ -815,6 +819,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(width: 16),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _teaRate2Controller,
+                          decoration: _buildInputDecoration(
+                            'සුපිරි දළු (Rs) - Option',
+                            Icons.monetization_on_outlined,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
                       Expanded(
                         child: TextFormField(
                           controller: _transportRateController,
@@ -829,6 +850,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               val!.isEmpty ? 'ගාස්තුව ඇතුළත් කරන්න' : null,
                         ),
                       ),
+                      const SizedBox(width: 16),
+                      const Spacer(),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -978,7 +1001,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           children: [
                             _buildTableHeader('මාසය'),
-                            _buildTableHeader('තේ දළු\n(Rs)'),
+                            _buildTableHeader('දළු මිල\n(Rs)'),
                             _buildTableHeader('ප්‍රවාහනය\n(Rs)'),
                             _buildTableHeader(''),
                           ],
@@ -991,9 +1014,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 isBold: true,
                               ),
                               _buildTableCell(
-                                (doc['teaRate'] as num? ?? 0)
-                                    .toDouble()
-                                    .toStringAsFixed(2),
+                                ((doc['teaRate2'] as num? ?? 0) > 0)
+                                    ? 'සාමාන්‍ය: ${(doc['teaRate'] as num? ?? 0).toDouble().toStringAsFixed(2)}\nසුපිරි: ${(doc['teaRate2'] as num? ?? 0).toDouble().toStringAsFixed(2)}'
+                                    : (doc['teaRate'] as num? ?? 0).toDouble().toStringAsFixed(2),
                               ),
                               _buildTableCell(
                                 (doc['transportRate'] as num? ?? 0)

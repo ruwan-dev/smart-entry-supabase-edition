@@ -50,10 +50,12 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
         var b = doc['billData'];
         if (b != null) {
           double totalWeight = 0;
+          double totalWeight2 = 0;
           double totalAdvances = 0;
           if (b['tableRows'] != null) {
              for(var r in b['tableRows']) {
                 totalWeight += _parseDouble(r['weight']);
+                totalWeight2 += _parseDouble(r['weight2']);
                 if (r['items'] != null) {
                   for (var item in r['items']) {
                     if (item['desc'] == 'Advance') {
@@ -70,6 +72,7 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
             'netPayable': _parseDouble(b['netPayable']),
             'arrears': _parseDouble(b['arrears']),
             'weight': totalWeight,
+            'weight2': totalWeight2,
             'advances': totalAdvances,
             'finalizedAt': doc['finalizedAt']
           });
@@ -225,7 +228,9 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _infoRow('ලබාදුන් තේ දළු බර:', '${item['weight'].toStringAsFixed(1)} Kg'),
+                    _infoRow('ලබාදුන් සාමාන්‍ය දළු බර:', '${item['weight'].toStringAsFixed(1)} Kg'),
+                    if ((item['weight2'] ?? 0) > 0)
+                      _infoRow('ලබාදුන් සුපිරි දළු බර:', '${item['weight2'].toStringAsFixed(1)} Kg'),
                     _infoRow('දළ ආදායම:', 'Rs. ${currencyF.format(item['grossIncome'])}'),
                     _infoRow('ලබාගත් අත්තිකාරම්:', 'Rs. ${currencyF.format(item['advances'])}', color: Colors.orange.shade700),
                     if (item['arrears'] > 0)

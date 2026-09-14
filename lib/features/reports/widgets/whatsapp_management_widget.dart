@@ -202,7 +202,14 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
     double netPayable = (bill['netPayable'] ?? 0).toDouble();
 
     double teaRate = (bill['teaRate'] ?? 0).toDouble();
-    double totalWeight = teaRate > 0 ? grossIncome / teaRate : 0;
+    double teaRate2 = (bill['teaRate2'] ?? 0).toDouble();
+    double totalWeight = (bill['totalWeight'] ?? 0).toDouble();
+    double totalWeight2 = (bill['totalWeight2'] ?? 0).toDouble();
+
+    // Fallback if older bills don't have totalWeight stored
+    if (totalWeight == 0 && totalWeight2 == 0 && teaRate > 0) {
+      totalWeight = grossIncome / teaRate;
+    }
 
     double advTotal = (bill['advTotal'] ?? 0).toDouble();
     double f1Total = (bill['f1Total'] ?? 0).toDouble();
@@ -214,10 +221,18 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
 
     String msg =
         "ආයුබෝවන් *$name*,\n\n"
-        "ඔබගේ ${_sinhalaMonths[_selectedMonth - 1]} මාසයේ බිල්පත:\n\n"
-        "මුළු දළු බර: *${totalWeight.toStringAsFixed(1)} kg*\n"
-        "දළු කිලෝවක මිල: *Rs ${currencyF.format(teaRate)}*\n"
-        "මුළු දළු ආදායම: *Rs ${currencyF.format(grossIncome)}*\n\n";
+        "ඔබගේ ${_sinhalaMonths[_selectedMonth - 1]} මාසයේ බිල්පත:\n\n";
+
+    if (totalWeight > 0 || totalWeight2 == 0) {
+      msg += "සාමාන්‍ය දළු: *${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} kg*\n"
+             "සාමාන්‍ය දළු මිල: *Rs ${currencyF.format(teaRate)}*\n";
+    }
+    if (totalWeight2 > 0) {
+      msg += "සුපිරි දළු: *${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} kg*\n"
+             "සුපිරි දළු මිල: *Rs ${currencyF.format(teaRate2)}*\n";
+    }
+
+    msg += "\nමුළු දළු ආදායම: *Rs ${currencyF.format(grossIncome)}*\n\n";
 
     if (totalDeductions > 0) {
       msg += "අඩුකිරීම්:\n";

@@ -115,6 +115,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
       var pData = priceDoc ?? {};
 
       double teaRate = (ratesDoc['teaRate'] ?? 0).toDouble();
+      double teaRate2 = (ratesDoc['teaRate2'] ?? 0).toDouble();
       double transRate = (ratesDoc['transportRate'] ?? 0).toDouble();
 
       var customers = await Supabase.instance.client.from('customers').select();
@@ -169,11 +170,12 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           (a, b) => a['date'].toString().compareTo(b['date'].toString()),
         );
 
-        double totalW = 0, totalAdv = 0, f1Q = 0, f2Q = 0, t1Q = 0, t2Q = 0;
+        double totalW = 0, totalW2 = 0, totalAdv = 0, f1Q = 0, f2Q = 0, t1Q = 0, t2Q = 0;
         List<Map<String, dynamic>> rows = [];
 
         for (var d in monthlyEntries) {
           double w = (d['netWeight'] ?? 0).toDouble();
+          double w2 = (d['netWeight2'] ?? 0).toDouble();
           double adv = (d['advanceAmount'] ?? 0).toDouble();
           double f1q = (d['fertilizer1Qty'] ?? 0).toDouble();
           double f2q = (d['fertilizer2Qty'] ?? 0).toDouble();
@@ -181,6 +183,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           double t2q = (d['teaPacket2Qty'] ?? 0).toDouble();
 
           totalW += w;
+          totalW2 += w2;
           totalAdv += adv;
           f1Q += f1q;
           f2Q += f2q;
@@ -219,7 +222,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
               'amt': t2q * (pData['teaPacket2Price'] ?? 0),
             });
 
-          rows.add({'date': d['date'], 'weight': w, 'items': items});
+          rows.add({'date': d['date'], 'weight': w, 'weight2': w2, 'items': items});
         }
 
         double lastMonthArrears = 0.0;
@@ -237,8 +240,8 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           }
         }
 
-        double gross = totalW * teaRate;
-        double trans = totalW * transRate;
+        double gross = (totalW * teaRate) + (totalW2 * teaRate2);
+        double trans = (totalW + totalW2) * transRate;
         double other =
             totalAdv +
             (f1Q * (pData['fertilizer1Price'] ?? 0)) +
@@ -254,6 +257,9 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           'bill': {
             'displayMonth': displayMonth,
             'teaRate': teaRate,
+            'teaRate2': teaRate2,
+            'totalWeight': totalW,
+            'totalWeight2': totalW2,
             'grossIncome': gross,
             'transportCost': trans,
             'otherCosts': other,
@@ -833,12 +839,26 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
 
       double netPayable = (bill['netPayable'] ?? 0.0).toDouble();
 
-      String message =
-          "ආයුබෝවන් $name,\n\n"
-          "ඔබගේ ${months[_selectedMonth - 1]} මාසයේ බිල්පත:\n\n"
-          "මුළු දළු ආදායම: Rs ${currencyF.format(bill['grossIncome'] ?? 0)}\n"
-          "මුළු අඩුකිරීම්: Rs ${currencyF.format(bill['totalDeductions'] ?? 0)}\n"
-          "ලබා දිය යුතු මුදල: Rs ${currencyF.format(netPayable)}\n\n"
+      double totalW = (bill['totalWeight'] ?? 0.0).toDouble();
+      double totalW2 = (bill['totalWeight2'] ?? 0.0).toDouble();
+      double rate1 = (bill['teaRate'] ?? 0.0).toDouble();
+      double rate2 = (bill['teaRate2'] ?? 0.0).toDouble();
+
+      String message = "ආයුබෝවන් *$name*,\n\n"
+          "ඔබගේ ${months[_selectedMonth - 1]} මාසයේ බිල්පත:\n\n";
+
+      if (totalW > 0 || totalW2 == 0) {
+        message += "සාමාන්‍ය දළු: *${totalW % 1 == 0 ? totalW.toInt() : totalW.toStringAsFixed(1)} kg*\n"
+                   "සාමාන්‍ය දළු මිල: *Rs ${currencyF.format(rate1)}*\n";
+      }
+      if (totalW2 > 0) {
+        message += "සුපිරි දළු: *${totalW2 % 1 == 0 ? totalW2.toInt() : totalW2.toStringAsFixed(1)} kg*\n"
+                   "සුපිරි දළු මිල: *Rs ${currencyF.format(rate2)}*\n";
+      }
+
+      message += "\nමුළු දළු ආදායම: *Rs ${currencyF.format(bill['grossIncome'] ?? 0)}*\n"
+          "මුළු අඩුකිරීම්: *Rs ${currencyF.format(bill['totalDeductions'] ?? 0)}*\n"
+          "ලබා දිය යුතු මුදල: *Rs ${currencyF.format(netPayable)}*\n\n"
           "ස්තූතියි!\nSmartEntry";
 
       billsToSend.add({"phone": phone, "message": message});
@@ -1151,15 +1171,22 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
     var b = item['bill'];
 
     Map<int, double> dailyWeights = {};
+    Map<int, double> dailyWeights2 = {};
     List<String> advanceRecords = [];
     double totalW = 0;
+    double totalW2 = 0;
 
     for (var row in b['tableRows']) {
       int day = int.parse(row['date'].toString().split('-').last);
       double w = (row['weight'] ?? 0.0).toDouble();
+      double w2 = (row['weight2'] ?? 0.0).toDouble();
       if (w > 0) {
         dailyWeights[day] = (dailyWeights[day] ?? 0.0) + w;
         totalW += w;
+      }
+      if (w2 > 0) {
+        dailyWeights2[day] = (dailyWeights2[day] ?? 0.0) + w2;
+        totalW2 += w2;
       }
 
       List items = row['items'] ?? [];
@@ -1194,9 +1221,29 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           rowChildren.addAll([_pdfCell('', engFont), _pdfCell('', engFont)]);
         } else {
           double w = dailyWeights[day] ?? 0.0;
+          double w2 = dailyWeights2[day] ?? 0.0;
+          String wStr = '-';
+          double customFontSize = 8.0;
+
+          String formatW(double val) => val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1);
+
+          if (w > 0 && w2 > 0) {
+            wStr = '${formatW(w)}/${formatW(w2)}';
+          } else if (w > 0) {
+            wStr = formatW(w);
+          } else if (w2 > 0) {
+            wStr = '-/${formatW(w2)}';
+          }
+
+          if (wStr.length >= 8) {
+            customFontSize = 5.5; 
+          } else if (wStr.length >= 6) {
+            customFontSize = 6.5; 
+          }
+
           rowChildren.addAll([
             _pdfCell(day.toString(), engFont),
-            _pdfCell(w > 0 ? w.toStringAsFixed(1) : '-', engFont),
+            _pdfCell(wStr, engFont, fontSize: customFontSize),
           ]);
         }
       }
@@ -1325,7 +1372,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       pw.Row(
                         children: [
                           pw.Text(
-                            'fmdfydr 01 : ',
+                            'fmdfydr 01 ',
                             style: pw.TextStyle(font: fmFont, fontSize: 10),
                           ),
                           pw.Text(
@@ -1339,7 +1386,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       pw.Row(
                         children: [
                           pw.Text(
-                            'fmdfydr 02 : ',
+                            'fmdfydr 02 ',
                             style: pw.TextStyle(font: fmFont, fontSize: 10),
                           ),
                           pw.Text(
@@ -1367,7 +1414,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       pw.Row(
                         children: [
                           pw.Text(
-                            'f;a fld< 02 : ',
+                            'f;a fld< 02  ',
                             style: pw.TextStyle(font: fmFont, fontSize: 10),
                           ),
                           pw.Text(
@@ -1385,7 +1432,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                           style: pw.TextStyle(font: fmFont, fontSize: 10),
                         ),
                         pw.Text(
-                          '(${totalW.toStringAsFixed(1)}kg) : Rs.${b['transportCost'].toStringAsFixed(2)}',
+                          '(${((totalW + totalW2) % 1 == 0) ? (totalW + totalW2).toInt() : (totalW + totalW2).toStringAsFixed(1)}kg) : Rs.${b['transportCost'].toStringAsFixed(2)}',
                           style: pw.TextStyle(font: engFont, fontSize: 8),
                         ),
                       ],
@@ -1428,19 +1475,24 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                 ),
                 child: pw.Column(
                   children: [
-                    _pdfSummaryRow(
-                      'uq¿ o¿ nr',
-                      '${totalW.toStringAsFixed(1)} Kg',
-                      fmFont,
-                      engFont,
-                      bold: true,
-                    ),
-                    _pdfSummaryRow(
-                      'o¿ lsf,dajl ñ,',
-                      'Rs. ${b['teaRate'].toStringAsFixed(2)}',
-                      fmFont,
-                      engFont,
-                    ),
+                    if (totalW > 0 || totalW2 == 0)
+                      _pdfGridSummaryRow(
+                        'idudkH o¿',
+                        '${totalW % 1 == 0 ? totalW.toInt() : totalW.toStringAsFixed(1)} Kg',
+                        'Rs. ${(b['teaRate'] ?? 0).toStringAsFixed(2)}',
+                        fmFont,
+                        engFont,
+                        bold: true,
+                      ),
+                    if (totalW2 > 0)
+                      _pdfGridSummaryRow(
+                        'iqmsß o¿',
+                        '${totalW2 % 1 == 0 ? totalW2.toInt() : totalW2.toStringAsFixed(1)} Kg',
+                        'Rs. ${(b['teaRate2'] ?? 0).toStringAsFixed(2)}',
+                        fmFont,
+                        engFont,
+                        bold: true,
+                      ),
                     pw.Divider(thickness: 0.5),
                     _pdfSummaryRow(
                       'o< wdodhu',
@@ -1518,7 +1570,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
     );
   }
 
-  pw.Widget _pdfCell(String text, pw.Font font, {bool bold = false}) {
+  pw.Widget _pdfCell(String text, pw.Font font, {bool bold = false, double? fontSize}) {
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 1),
       child: pw.Text(
@@ -1526,9 +1578,62 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
         textAlign: pw.TextAlign.center,
         style: pw.TextStyle(
           font: font,
-          fontSize: 8,
+          fontSize: fontSize ?? 8,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
         ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfGridSummaryRow(
+    String fmLabel,
+    String weightVal,
+    String rateVal,
+    pw.Font fmFont,
+    pw.Font engFont, {
+    bool bold = false,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Expanded(
+            flex: 5,
+            child: pw.Text(
+              fmLabel,
+              style: pw.TextStyle(
+                font: fmFont,
+                fontSize: 11,
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              ),
+            ),
+          ),
+          pw.Expanded(
+            flex: 3,
+            child: pw.Text(
+              weightVal,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(
+                font: engFont,
+                fontSize: 8,
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              ),
+            ),
+          ),
+          pw.Expanded(
+            flex: 4,
+            child: pw.Text(
+              rateVal,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(
+                font: engFont,
+                fontSize: 8,
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

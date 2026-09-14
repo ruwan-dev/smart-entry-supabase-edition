@@ -26,6 +26,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
   String? _existingEntryId;
   
   final TextEditingController _grossWeightController = TextEditingController();
+  final TextEditingController _netWeight2Controller = TextEditingController();
   final TextEditingController _deductionController = TextEditingController(text: '0');
   final TextEditingController _advanceController = TextEditingController();
   final TextEditingController _fertilizer1Controller = TextEditingController();
@@ -65,6 +66,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
           _existingEntryId = doc['id']; 
           
           _grossWeightController.text = _formatValue(doc['grossWeight']);
+          _netWeight2Controller.text = _formatValue(doc['netWeight2']);
           _deductionController.text = _formatValue(doc['deductions'], isDeduction: true);
           _advanceController.text = _formatValue(doc['advanceAmount']);
           _fertilizer1Controller.text = _formatValue(doc['fertilizer1Qty']);
@@ -115,6 +117,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
 
   String? _validateInput(String? value) {
     bool isAllEmpty = _grossWeightController.text.trim().isEmpty &&
+        _netWeight2Controller.text.trim().isEmpty &&
         (_deductionController.text.trim().isEmpty || _deductionController.text.trim() == '0') &&
         _advanceController.text.trim().isEmpty &&
         _fertilizer1Controller.text.trim().isEmpty &&
@@ -171,6 +174,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
       double grossWeight = double.tryParse(_grossWeightController.text.trim()) ?? 0.0;
       double deductions = double.tryParse(_deductionController.text.trim()) ?? 0.0;
       double netWeight = grossWeight - deductions;
+      double netWeight2 = double.tryParse(_netWeight2Controller.text.trim()) ?? 0.0;
 
       double advance = double.tryParse(_advanceController.text.trim()) ?? 0.0;
       double fertilizer1Qty = double.tryParse(_fertilizer1Controller.text.trim()) ?? 0.0;
@@ -182,6 +186,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
         'grossWeight': grossWeight,
         'deductions': deductions,
         'netWeight': netWeight,
+        'netWeight2': netWeight2,
         'advanceAmount': advance,
         'fertilizer1Qty': fertilizer1Qty,
         'fertilizer2Qty': fertilizer2Qty,
@@ -220,6 +225,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
   @override
   void dispose() {
     _grossWeightController.dispose();
+    _netWeight2Controller.dispose();
     _deductionController.dispose();
     _advanceController.dispose();
     _fertilizer1Controller.dispose();
@@ -283,10 +289,23 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
                   TextFormField(
                     controller: _grossWeightController,
                     decoration: InputDecoration(
-                      labelText: 'මුළු තේ දළු ප්‍රමාණය (Gross Weight)',
+                      labelText: 'සාමාන්‍ය දළු ප්‍රමාණය (Normal Leaf Weight)',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       prefixIcon: const Icon(Icons.scale),
+                      suffixText: 'Kg',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: _validateInput, 
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _netWeight2Controller,
+                    decoration: InputDecoration(
+                      labelText: 'සුපිරි දළු ප්‍රමාණය (Super Leaf - Optional)',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.star_border),
                       suffixText: 'Kg',
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -341,7 +360,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
                             labelText: 'පොහොර 01 (Rs. $_fert1Price)',
                             floatingLabelBehavior: FloatingLabelBehavior.always,
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.eco),
+                            prefixIcon: const Icon(Icons.shopping_bag),
                           ),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           validator: _validateInput, 
@@ -355,7 +374,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
                             labelText: 'පොහොර 02 (Rs. $_fert2Price)',
                             floatingLabelBehavior: FloatingLabelBehavior.always,
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.eco),
+                            prefixIcon: const Icon(Icons.shopping_bag),
                           ),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           validator: _validateInput, 

@@ -6,8 +6,8 @@ const String supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXB
 
 final Map<String, List<String>> allowedColumns = {
   'customers': ['id', 'refNumber', 'name', 'address', 'phone', 'registeredAt'],
-  'daily_entries': ['id', 'customerId', 'customerName', 'date', 'timestamp', 'grossWeight', 'deductions', 'netWeight', 'advanceAmount', 'fertilizer1Qty', 'fertilizer2Qty', 'teaPacket1Qty', 'teaPacket2Qty', 'createdAt', 'updatedAt'],
-  'monthly_rates': ['id', 'teaRate'],
+  'daily_entries': ['id', 'customerId', 'customerName', 'date', 'timestamp', 'grossWeight', 'deductions', 'netWeight', 'netWeight2', 'advanceAmount', 'fertilizer1Qty', 'fertilizer2Qty', 'teaPacket1Qty', 'teaPacket2Qty', 'createdAt', 'updatedAt'],
+  'monthly_rates': ['id', 'teaRate', 'teaRate2'],
   'monthly_summaries': ['id', 'totalWeight', 'totalGross', 'totalAdvance', 'totalTransport', 'totalF1Amt', 'totalF2Amt', 'totalT1Amt', 'totalT2Amt', 'totalNegativeNet', 'totalPositiveNet', 'totalNet', 'totalF1Qty', 'totalF2Qty', 'totalT1Qty', 'totalT2Qty', 'totalFertilizer', 'totalTeaPacket', 'finalizedAt'],
   'global_settings': ['id', 'password', 'fertilizer1Price', 'fertilizer2Price', 'teaPacket1Price', 'teaPacket2Price']
 };
