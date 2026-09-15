@@ -20,6 +20,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _pinController = TextEditingController();
 
   bool _isLoading = false;
   String _searchQuery = '';
@@ -78,6 +79,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           'name': name,
           'address': _addressController.text.trim(),
           'phone': _phoneController.text.trim(),
+          'pin': _pinController.text.trim(),
         }).select();
 
         String docId = response.first['id'];
@@ -86,6 +88,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         _nameController.clear();
         _addressController.clear();
         _phoneController.clear();
+        _pinController.clear();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -332,6 +335,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
     _nameController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
+    _pinController.dispose();
     super.dispose();
   }
 
@@ -677,28 +681,59 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   ],
                 ),
               ),
-              // දුරකථන අංකය
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _tagPurpleBg,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.phone, size: 12, color: _tagPurpleText),
-                    const SizedBox(width: 4),
-                    Text(
-                      data['phone'] ?? '',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _tagPurpleText,
-                        fontWeight: FontWeight.w600,
+              // දුරකථන අංකය සහ PIN
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _tagPurpleBg,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.phone, size: 12, color: _tagPurpleText),
+                        const SizedBox(width: 4),
+                        Text(
+                          data['phone'] ?? '',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _tagPurpleText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // PIN tag
+                  if ((data['pin'] ?? '').toString().isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock, size: 12, color: Colors.orange.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            'PIN: ${data['pin']}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
             ],
           ),
@@ -888,6 +923,12 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   );
                 },
               ),
+              _buildActionButton(
+                label: 'PIN',
+                icon: Icons.lock_reset,
+                color: Colors.orange.shade400,
+                onTap: () => _showEditPinDialog(context, docId, data['name'] ?? ''),
+              ),
               // Delete බොත්තම
               InkWell(
                 onTap: () =>
@@ -911,6 +952,58 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Edit PIN Dialog ---
+  void _showEditPinDialog(BuildContext context, String docId, String customerName) {
+    final pinController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('$customerName - PIN වෙනස් කරන්න'),
+        content: TextField(
+          controller: pinController,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'අලුත් 6-digit PIN',
+            prefixIcon: Icon(Icons.lock),
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('අවලංගු'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () async {
+              String newPin = pinController.text.trim();
+              if (newPin.length != 6) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('PIN 6 ඉලක්කම් විය යුතුය.'), backgroundColor: Colors.red),
+                );
+                return;
+              }
+              await Supabase.instance.client
+                  .from('customers')
+                  .update({'pin': newPin})
+                  .eq('id', docId);
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('PIN සාර්ථකව වෙනස් විය!'), backgroundColor: Colors.green),
+                );
+              }
+            },
+            child: const Text('සුරකින්න', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

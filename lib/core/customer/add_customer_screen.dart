@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:smart_entry/core/entries/daily_entries_screen.dart';
+import 'dart:math';
 
 class AddCustomerScreen extends StatefulWidget {
   const AddCustomerScreen({super.key});
@@ -12,21 +12,32 @@ class AddCustomerScreen extends StatefulWidget {
 
 class _AddCustomerScreenState extends State<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
-  
+
   final TextEditingController _refNumberController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _pinController = TextEditingController();
-  
-  bool _isLoading = false;
 
-  final Color _primaryColor = const Color(0xFF4A4ECA); 
-  final Color _backgroundColor = const Color(0xFFF9FAFC); 
+  bool _isLoading = false;
+  bool _isPinVisible = false;
+
+  final Color _primaryColor = const Color(0xFF4A4ECA);
+  final Color _backgroundColor = const Color(0xFFF9FAFC);
   final Color _cardColor = Colors.white;
-  final Color _textColorPrimary = const Color(0xFF1E293B); 
-  final Color _textColorSecondary = const Color(0xFF64748B); 
-  final Color _borderColor = const Color(0xFFE2E8F0); 
+  final Color _textColorPrimary = const Color(0xFF1E293B);
+  final Color _textColorSecondary = const Color(0xFF64748B);
+  final Color _borderColor = const Color(0xFFE2E8F0);
+
+  // Auto-generate a random 6-digit PIN
+  void _generatePin() {
+    final random = Random.secure();
+    final pin = (100000 + random.nextInt(900000)).toString();
+    setState(() {
+      _pinController.text = pin;
+      _isPinVisible = true; // Show it so admin can note it down
+    });
+  }
 
   Future<void> _saveCustomer() async {
     if (_formKey.currentState!.validate()) {
@@ -51,10 +62,10 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             );
             setState(() { _isLoading = false; });
           }
-          return; 
+          return;
         }
 
-        var response = await Supabase.instance.client.from('customers').insert({
+        await Supabase.instance.client.from('customers').insert({
           'refNumber': refNumber,
           'name': name,
           'address': _addressController.text.trim(),
@@ -62,19 +73,17 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           'pin': _pinController.text.trim(),
         }).select();
 
-        String docId = response.first['id'];
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('පාරිභෝගිකයා සාර්ථකව සුරකින ලදී'), backgroundColor: Colors.green),
           );
-
-          // Pop back to list and optionally navigate to daily entries
           Navigator.pop(context);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('දෝෂයකි: $e'), backgroundColor: Colors.red));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('දෝෂයකි: $e'), backgroundColor: Colors.red),
+          );
         }
       } finally {
         if (mounted) { setState(() { _isLoading = false; }); }
@@ -88,10 +97,16 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     _nameController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
+    _pinController.dispose();
     super.dispose();
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, bool isNumber = false}) {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool isNumber = false,
+  }) {
     return TextFormField(
       controller: controller,
       decoration: InputDecoration(
@@ -100,8 +115,14 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
         prefixIcon: Icon(icon, color: _textColorSecondary, size: 20),
         filled: true,
         fillColor: _backgroundColor,
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: _borderColor)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: _primaryColor)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: _borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: _primaryColor),
+        ),
         contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       ),
       style: TextStyle(color: _textColorPrimary, fontSize: 14),
@@ -111,12 +132,101 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     );
   }
 
+  Widget _buildPinField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // PIN field with visibility toggle
+        TextFormField(
+          controller: _pinController,
+          obscureText: !_isPinVisible,
+          maxLength: 6,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            labelText: 'රහස්‍ය අංකය (6-digit PIN)',
+            labelStyle: TextStyle(color: _textColorSecondary, fontSize: 14),
+            prefixIcon: Icon(Icons.lock, color: _textColorSecondary, size: 20),
+            filled: true,
+            fillColor: _backgroundColor,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: _borderColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: _primaryColor),
+            ),
+            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            suffixIcon: IconButton(
+              icon: Icon(_isPinVisible ? Icons.visibility : Icons.visibility_off),
+              onPressed: () => setState(() => _isPinVisible = !_isPinVisible),
+            ),
+          ),
+          style: TextStyle(color: _textColorPrimary, fontSize: 14, letterSpacing: 4),
+          validator: (value) {
+            if (value == null || value.isEmpty) return 'PIN අවශ්‍ය වේ';
+            if (value.length != 6) return 'PIN ඉලක්කම් 6ක් විය යුතුය';
+            return null;
+          },
+        ),
+        const SizedBox(height: 8),
+        // Auto-generate and Copy buttons
+        Row(
+          children: [
+            // Auto Generate button
+            OutlinedButton.icon(
+              onPressed: _generatePin,
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('ස්වයංක්‍රීයව ජනනය කරන්න'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _primaryColor,
+                side: BorderSide(color: _primaryColor),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Copy to clipboard button
+            OutlinedButton.icon(
+              onPressed: _pinController.text.isEmpty
+                  ? null
+                  : () {
+                      Clipboard.setData(ClipboardData(text: _pinController.text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('PIN clipboard එකට copy විය!'),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: Colors.teal,
+                        ),
+                      );
+                    },
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Copy'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.teal,
+                side: const BorderSide(color: Colors.teal),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(
-        title: const Text('නව පාරිභෝගිකයෙකු එකතු කරන්න', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+        title: const Text(
+          'නව පාරිභෝගිකයෙකු එකතු කරන්න',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: _textColorPrimary,
@@ -137,7 +247,10 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('අලුත් පාරිභෝගිකයෙකු ලියාපදිංචි කිරීම', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _textColorPrimary)),
+              Text(
+                'අලුත් පාරිභෝගිකයෙකු ලියාපදිංචි කිරීම',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _textColorPrimary),
+              ),
               const SizedBox(height: 20),
               Form(
                 key: _formKey,
@@ -168,6 +281,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                       icon: Icons.phone,
                       isNumber: true,
                     ),
+                    const SizedBox(height: 12),
+                    _buildPinField(),
                   ],
                 ),
               ),
@@ -184,7 +299,11 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
                   ),
                   child: _isLoading
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
                       : const Text('පාරිභෝගිකයා සුරකින්න', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
