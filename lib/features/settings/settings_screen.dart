@@ -4,6 +4,7 @@ import '../../core/widgets/skeleton_box.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
+import '../../core/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -256,11 +257,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       try {
         var authDoc = await Supabase.instance.client
-            .from('global_settings')
+            .from('app_users')
             .select()
-            .eq('id', 'auth')
+            .eq('username', AppState.username!)
             .maybeSingle();
-        if (authDoc == null) throw Exception("මුරපද දත්ත සොයාගත නොහැක.");
+        if (authDoc == null) throw Exception("පරිශීලක දත්ත සොයාගත නොහැක.");
         String dbPassword = authDoc['password'].toString();
 
         if (currentInput != dbPassword) {
@@ -277,10 +278,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return;
         }
 
-        await Supabase.instance.client.from('global_settings').upsert({
-          'id': 'auth',
+        await Supabase.instance.client.from('app_users').update({
           'password': newInput,
-        });
+        }).eq('username', AppState.username!);
 
         _currentPasswordController.clear();
         _newPasswordController.clear();

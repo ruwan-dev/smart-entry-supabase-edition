@@ -17,6 +17,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _pinController = TextEditingController();
   
   bool _isLoading = false;
 
@@ -44,7 +45,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('මෙම යොමු අංකය දැනටමත් භාවිතයේ පවතී'),
+                content: Text('මෙම යොමු අංකය භාවිතා කර ඇත!'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -58,6 +59,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           'name': name,
           'address': _addressController.text.trim(),
           'phone': _phoneController.text.trim(),
+          'pin': _pinController.text.trim(),
         }).select();
 
         String docId = response.first['id'];

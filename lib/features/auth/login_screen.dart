@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_entry/features/dashboard/dashboard_screen.dart';
 import 'package:smart_entry/core/widgets/blinking_logo_loader.dart';
-
+import 'package:smart_entry/core/app_state.dart';
 // (හෝ DashboardScreen එක තියෙන නිවැරදි path එක)
 
 class LoginScreen extends StatefulWidget {
@@ -14,46 +14,45 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // Hardcoded password එක ඉවත් කළා.
-  // final String _correctPassword = "123";
-
   bool _isPasswordVisible = false;
-  bool _isLoading = false; // Loading තත්ත්වය පරීක්ෂා කිරීමට
+  bool _isLoading = false;
 
-  // Supabase වෙතින් මුරපදය පරීක්ෂා කරන අලුත් login function එක
   Future<void> _login() async {
+    String inputUsername = _usernameController.text.trim();
     String inputPassword = _passwordController.text.trim();
 
-    if (inputPassword.isEmpty) {
+    if (inputUsername.isEmpty || inputPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('කරුණාකර මුරපදය ඇතුළත් කරන්න.')),
+        const SnackBar(content: Text('කරුණාකර පරිශීලක නාමය සහ මුරපදය ඇතුළත් කරන්න.')),
       );
       return;
     }
 
     setState(() {
       _isLoading = true;
-    }); // Loading ආරම්භය
+    });
 
     try {
-      // Supabase වෙතින් මුරපදය ලබා ගැනීම
-      var adminDoc = await Supabase.instance.client
-          .from('global_settings')
-          .select('password')
-          .eq('id', 'auth')
+      var userDoc = await Supabase.instance.client
+          .from('app_users')
+          .select('password, organization_id')
+          .eq('username', inputUsername)
           .maybeSingle();
 
-      if (adminDoc == null) {
-        // ජාල දෝෂයක් හෝ document එක නැතිනම්
-        throw Exception("මුරපද දත්ත සොයාගත නොහැකි විය. (Database error)");
+      if (userDoc == null) {
+        throw Exception("පරිශීලක නාමය වැරදියි.");
       }
 
-      String dbPassword = adminDoc['password'].toString();
+      String dbPassword = userDoc['password'].toString();
 
       if (inputPassword == dbPassword) {
-        // Navigate to Dashboard and remove Login Screen from backstack
+        // Set Organization ID globally
+        AppState.currentOrganizationId.value = userDoc['organization_id'].toString();
+        AppState.currentUsername.value = inputUsername;
+
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -190,6 +189,37 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(fontSize: 14, color: Colors.blueGrey),
                 ),
                 const SizedBox(height: 48),
+
+                // Username Field
+                TextField(
+                  controller: _usernameController,
+                  decoration: InputDecoration(
+                    labelText: 'Username',
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.6),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                      borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                      borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF42A5F5),
+                        width: 1.5,
+                      ),
+                    ),
+                    prefixIcon: const Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Password Field
                 TextField(

@@ -339,14 +339,14 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
                               _summaryGridRow(
                                 'සාමාන්‍ය දළු',
                                 '${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} Kg',
-                                'Rs. ${(bill['teaRate'] ?? 0).toStringAsFixed(2)}',
+                                'Rs. ${_parseDouble(bill['teaRate']).toStringAsFixed(2)}',
                                 isBold: true,
                               ),
                             if (totalWeight2 > 0)
                               _summaryGridRow(
                                 'සුපිරි දළු',
                                 '${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} Kg',
-                                'Rs. ${(bill['teaRate2'] ?? 0).toStringAsFixed(2)}',
+                                'Rs. ${(_parseDouble(bill['teaRate2']) == 0 && _parseDouble(bill['grossIncome']) > 0 ? ((_parseDouble(bill['grossIncome']) - (totalWeight * _parseDouble(bill['teaRate']))) / totalWeight2) : _parseDouble(bill['teaRate2'])).toStringAsFixed(2)}',
                                 isBold: true,
                               ),
                             const Divider(
@@ -572,9 +572,19 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     double totalWeight = _parseDouble(bill['totalWeight']);
     double totalWeight2 = _parseDouble(bill['totalWeight2']);
 
-    // Fallback if older bills don't have totalWeight stored
+    if (totalWeight == 0 && totalWeight2 == 0 && bill['tableRows'] != null) {
+      for (var row in bill['tableRows']) {
+        totalWeight += _parseDouble(row['weight']);
+        totalWeight2 += _parseDouble(row['weight2']);
+      }
+    }
+
     if (totalWeight == 0 && totalWeight2 == 0 && teaRate > 0) {
       totalWeight = grossIncome / teaRate;
+    }
+
+    if (teaRate2 == 0 && totalWeight2 > 0 && grossIncome > 0) {
+      teaRate2 = (grossIncome - (totalWeight * teaRate)) / totalWeight2;
     }
 
     double advTotal = _parseDouble(bill['advTotal']);
@@ -584,6 +594,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     double t2Total = _parseDouble(bill['t2Total']);
     double transportCost = _parseDouble(bill['transportCost']);
     double arrears = _parseDouble(bill['arrears']);
+    double otherCosts = _parseDouble(bill['otherCosts']);
 
     String displayMonth = bill['displayMonth'] ?? '';
 
@@ -592,12 +603,16 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
         "ඔබගේ $displayMonth මාසයේ බිල්පත:\n\n";
 
     if (totalWeight > 0 || totalWeight2 == 0) {
+      double normalAmount = totalWeight * teaRate;
       msg += "සාමාන්‍ය දළු: *${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} kg*\n"
-             "සාමාන්‍ය දළු මිල: *Rs ${currencyF.format(teaRate)}*\n";
+             "සාමාන්‍ය දළු මිල: *Rs ${currencyF.format(teaRate)}*\n"
+             "සාමාන්‍ය දළු වටිනාකම: *Rs ${currencyF.format(normalAmount)}*\n";
     }
     if (totalWeight2 > 0) {
+      double superAmount = totalWeight2 * teaRate2;
       msg += "සුපිරි දළු: *${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} kg*\n"
-             "සුපිරි දළු මිල: *Rs ${currencyF.format(teaRate2)}*\n";
+             "සුපිරි දළු මිල: *Rs ${currencyF.format(teaRate2)}*\n"
+             "සුපිරි දළු වටිනාකම: *Rs ${currencyF.format(superAmount)}*\n";
     }
 
     msg += "\nමුළු දළු ආදායම: *Rs ${currencyF.format(grossIncome)}*\n\n";
@@ -614,6 +629,8 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
         msg += "• තේ කොළ 02: *Rs ${currencyF.format(t2Total)}*\n";
       if (transportCost > 0)
         msg += "• ප්‍රවාහනය: *Rs ${currencyF.format(transportCost)}*\n";
+      if (otherCosts > 0)
+        msg += "• වෙනත් අඩු කිරීම්: *Rs ${currencyF.format(otherCosts)}*\n";
       if (arrears > 0)
         msg += "• හිඟ මුදල්: *Rs ${currencyF.format(arrears)}*\n";
       msg += "\nමුළු අඩුකිරීම්: *Rs ${currencyF.format(totalDeductions)}*\n\n";
