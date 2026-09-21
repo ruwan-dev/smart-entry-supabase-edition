@@ -79,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _companyLine2Controller = TextEditingController();
   final TextEditingController _companyLine3Controller = TextEditingController();
   final TextEditingController _companyLine4Controller = TextEditingController();
-  final TextEditingController _companyLine5Controller = TextEditingController();
+  final TextEditingController _orgNameController = TextEditingController();
 
   // App Theme Color
   final Color primaryAppColor = const Color(0xFF1976D2);
@@ -98,22 +98,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadCompanyName() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _companyLine1Controller.text =
-          prefs.getString('company_line_1') ?? 'SmartEntry';
-      _companyLine2Controller.text = prefs.getString('company_line_2') ?? '';
-      _companyLine3Controller.text = prefs.getString('company_line_3') ?? '';
-      _companyLine4Controller.text = prefs.getString('company_line_4') ?? '';
-      _companyLine5Controller.text = prefs.getString('company_line_5') ?? '';
-    });
+    try {
+      final res = await Supabase.instance.client
+          .from('organizations')
+          .select('company_line_1, company_line_2, company_line_3, company_line_4, name')
+          .eq('id', AppState.currentOrganizationId.value ?? '')
+          .maybeSingle();
+      if (res != null) {
+        setState(() {
+          _companyLine1Controller.text = res['company_line_1'] ?? 'SmartEntry';
+          _companyLine2Controller.text = res['company_line_2'] ?? '';
+          _companyLine3Controller.text = res['company_line_3'] ?? '';
+          _companyLine4Controller.text = res['company_line_4'] ?? '';
+          _orgNameController.text = res['name'] ?? '';
+        });
+      }
+    } catch (e) {
+      print('Error loading company name from org table: $e');
+    }
   }
 
   Future<void> _loadRatingConfig() async {
     try {
       var doc = await Supabase.instance.client
           .from('global_settings')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('id', 'rating_config')
           .maybeSingle();
       if (doc != null) {
@@ -131,7 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       var doc = await Supabase.instance.client
           .from('global_settings')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('id', 'prices')
           .maybeSingle();
       if (doc != null) {
@@ -167,7 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ];
 
       for (String col in collections) {
-        var snapshot = await Supabase.instance.client.from(col).select();
+        var snapshot = await Supabase.instance.client.from(col).select().eq('organization_id', AppState.currentOrganizationId.value ?? '');
         fullBackupData[col] = snapshot;
       }
 
@@ -217,34 +226,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveCompanyName() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'company_line_1',
-      _companyLine1Controller.text.trim(),
-    );
-    await prefs.setString(
-      'company_line_2',
-      _companyLine2Controller.text.trim(),
-    );
-    await prefs.setString(
-      'company_line_3',
-      _companyLine3Controller.text.trim(),
-    );
-    await prefs.setString(
-      'company_line_4',
-      _companyLine4Controller.text.trim(),
-    );
-    await prefs.setString(
-      'company_line_5',
-      _companyLine5Controller.text.trim(),
-    );
-    if (mounted)
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ආයතනයේ නම සාර්ථකව සුරැකිණි!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+    try {
+      await Supabase.instance.client.from('organizations').update({
+        'company_line_1': _companyLine1Controller.text.trim(),
+        'company_line_2': _companyLine2Controller.text.trim(),
+        'company_line_3': _companyLine3Controller.text.trim(),
+        'company_line_4': _companyLine4Controller.text.trim(),
+        'name': _orgNameController.text.trim(),
+      }).eq('id', AppState.currentOrganizationId.value ?? '');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('ආයතනයේ නම සාර්ථකව සුරැකිණි!'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _changePassword() async {
@@ -258,7 +262,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       try {
         var authDoc = await Supabase.instance.client
             .from('app_users')
-            .select()
+            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .eq('username', AppState.username!)
             .maybeSingle();
         if (authDoc == null) throw Exception("පරිශීලක දත්ත සොයාගත නොහැක.");
@@ -318,6 +322,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '$_selectedYear-${(_months.indexOf(_selectedMonth) + 1).toString().padLeft(2, '0')}';
 
         await Supabase.instance.client.from('monthly_rates').upsert({
+          'organization_id': AppState.currentOrganizationId.value ?? '',
           'id': docId,
           'year': _selectedYear,
           'month': _selectedMonth,
@@ -357,6 +362,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
       try {
         await Supabase.instance.client.from('global_settings').upsert({
+          'organization_id': AppState.currentOrganizationId.value ?? '',
           'id': 'prices',
           'fertilizer1Price': double.parse(_fert1PriceController.text.trim()),
           'fertilizer2Price': double.parse(_fert2PriceController.text.trim()),
@@ -390,7 +396,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       await Supabase.instance.client.from('global_settings').upsert({
-        'id': 'rating_config',
+        'organization_id': AppState.currentOrganizationId.value ?? '',
+          'id': 'rating_config',
         'highVolumeThreshold':
             double.tryParse(_highVolumeThresholdController.text.trim()) ??
             150.0,
@@ -920,7 +927,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: Supabase.instance.client
                 .from('monthly_rates')
-                .stream(primaryKey: ['id']),
+                .stream(primaryKey: ['id']).eq('organization_id', AppState.currentOrganizationId.value ?? ''),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return ListView.builder(
@@ -1424,6 +1431,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               children: [
                 _buildCompanyLineField(
+                  'ආයතනයේ නම (Organization Name)',
+                  _orgNameController,
+                ),
+                _buildCompanyLineField(
                   'පළමු පේළිය (Company Name - Line 1)',
                   _companyLine1Controller,
                 ),
@@ -1438,10 +1449,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildCompanyLineField(
                   'හතරවන පේළිය (Line 4 - Optional)',
                   _companyLine4Controller,
-                ),
-                _buildCompanyLineField(
-                  'පස්වන පේළිය (Line 5 - Optional)',
-                  _companyLine5Controller,
                 ),
                 const SizedBox(height: 8),
                 SizedBox(

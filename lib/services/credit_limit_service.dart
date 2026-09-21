@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class CreditLimitService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -11,7 +12,7 @@ class CreditLimitService {
 
       var snapshot = await _supabase
           .from('daily_entries') 
-          .select('netWeight')
+          .select('netWeight').eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('customerId', customerId)
           .gte('timestamp', threeMonthsAgo.toIso8601String());
 

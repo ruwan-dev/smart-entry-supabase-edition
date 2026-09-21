@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../core/widgets/skeleton_box.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class CustomerTimelineScreen extends StatefulWidget {
   final String customerId;
@@ -41,7 +42,7 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
     try {
       var billsSnap = await Supabase.instance.client
           .from('finalized_bills')
-          .select('billData, finalizedAt')
+          .select('billData, finalizedAt').eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('customerId', widget.customerId)
           .order('finalizedAt', ascending: false);
 
@@ -212,8 +213,10 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item['month'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1F2937))),
+                        Expanded(child: Text(item['month'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1F2937)))),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
@@ -238,8 +241,10 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
                     const Divider(height: 20, color: Color(0xFFF3F4F6)),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('ශුද්ධ ශේෂය (Net Balance):', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4B5563))),
+                        const Expanded(child: Text('ශුද්ධ ශේෂය (Net Balance):', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4B5563)))),
+                        const SizedBox(width: 8),
                         Text(
                           'Rs. ${currencyF.format(item['netPayable'])}', 
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: statusColor)
@@ -261,8 +266,10 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)))),
+          const SizedBox(width: 8),
           Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color ?? const Color(0xFF374151))),
         ],
       ),

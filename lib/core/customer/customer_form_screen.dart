@@ -404,23 +404,25 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           child: Container(color: _borderColor, height: 1.0),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddCustomerScreen()),
-          );
-          _fetchCustomers(); // Refresh the list after adding a new customer
-        },
-        backgroundColor: _primaryColor,
-        icon: const Icon(Icons.person_add, color: Colors.white),
-        label: const Text(
-          'නව පාරිභෝගිකයෙකු',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      ),
+      floatingActionButton: MediaQuery.of(context).size.width >= 600
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AddCustomerScreen()),
+                );
+                _fetchCustomers(); // Refresh the list after adding a new customer
+              },
+              backgroundColor: _primaryColor,
+              icon: const Icon(Icons.person_add, color: Colors.white),
+              label: const Text(
+                'නව පාරිභෝගිකයෙකු',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            )
+          : null,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 100.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -647,8 +649,11 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 1. උඩ පේළිය: යොමු අංකය සහ දුරකථන අංකය
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               // යොමු අංකය
               Container(
@@ -682,9 +687,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                 ),
               ),
               // දුරකථන අංකය සහ PIN
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -707,9 +709,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 6),
                   // PIN tag
-                  if ((data['pin'] ?? '').toString().isNotEmpty)
+                  if ((data['pin'] ?? '').toString().isNotEmpty && MediaQuery.of(context).size.width >= 600)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -733,8 +734,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                         ],
                       ),
                     ),
-                ],
-              ),
             ],
           ),
 
@@ -923,34 +922,36 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   );
                 },
               ),
-              _buildActionButton(
-                label: 'PIN',
-                icon: Icons.lock_reset,
-                color: Colors.orange.shade400,
-                onTap: () => _showEditPinDialog(context, docId, data['name'] ?? ''),
-              ),
+              if (MediaQuery.of(context).size.width >= 600) ...[
+                _buildActionButton(
+                  label: 'PIN',
+                  icon: Icons.lock_reset,
+                  color: Colors.orange.shade400,
+                  onTap: () => _showEditPinDialog(context, docId, data['name'] ?? ''),
+                ),
               // Delete බොත්තම
-              InkWell(
-                onTap: () =>
-                    _deleteCustomer(context, docId, data['name'] ?? ''),
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.red.shade300.withOpacity(0.5)),
-                    borderRadius: BorderRadius.circular(6),
-                    color: Colors.red.shade50,
-                  ),
-                  child: Icon(
-                    Icons.delete_outline,
-                    color: Colors.red.shade400,
-                    size: 16,
+                InkWell(
+                  onTap: () =>
+                      _deleteCustomer(context, docId, data['name'] ?? ''),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.red.shade300.withOpacity(0.5)),
+                      borderRadius: BorderRadius.circular(6),
+                      color: Colors.red.shade50,
+                    ),
+                    child: Icon(
+                      Icons.delete_outline,
+                      color: Colors.red.shade400,
+                      size: 16,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ],

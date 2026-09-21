@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:smart_entry/core/widgets/blinking_logo_loader.dart';
 import 'widgets/monthly_closing_widget.dart';
 import 'widgets/whatsapp_management_widget.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -56,7 +57,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _fetchCustomers() async {
     var snap = await Supabase.instance.client
         .from('customers')
-        .select()
+        .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
         .order('name');
     setState(() {
       _customers = List.from(snap);
@@ -109,7 +110,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     try {
       var priceDoc = await Supabase.instance.client
           .from('global_settings')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('id', 'prices')
           .maybeSingle();
       if (priceDoc != null) {
@@ -134,7 +135,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('daily_entries')
-            .select()
+            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .gte('timestamp', _startDate.toIso8601String())
             .lte('timestamp', endOfDay.toIso8601String())
             .range(offset, offset + limit - 1);

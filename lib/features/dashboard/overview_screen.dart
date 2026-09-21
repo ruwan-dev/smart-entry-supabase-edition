@@ -10,6 +10,7 @@ import 'total_outstanding_balances_screen.dart';
 import 'top_suppliers_screen.dart';
 import 'customer_analysis_screen.dart';
 import '../../core/widgets/skeleton_box.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -81,9 +82,22 @@ class _OverviewScreenState extends State<OverviewScreen> {
   @override
   void initState() {
     super.initState();
+    AppState.refreshTrigger.addListener(_onRefresh);
     _fetchDashboardData();
     _fetchChartData();
     _fetchHeatmapData();
+  }
+
+  void _onRefresh() {
+    _fetchDashboardData();
+    _fetchChartData();
+    _fetchHeatmapData();
+  }
+
+  @override
+  void dispose() {
+    AppState.refreshTrigger.removeListener(_onRefresh);
+    super.dispose();
   }
 
   Future<void> _fetchHeatmapData() async {
@@ -98,7 +112,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('daily_entries')
-            .select('timestamp, netWeight')
+            .select('timestamp, netWeight').eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .gte('timestamp', start.toIso8601String())
             .lte('timestamp', end.toIso8601String())
             .range(offset, offset + limit - 1);
@@ -161,7 +175,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     try {
       var latestSummaries = await Supabase.instance.client
           .from('monthly_summaries')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .order('finalizedAt', ascending: false)
           .limit(2);
 
@@ -182,7 +196,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
       var priceDoc = await Supabase.instance.client
           .from('global_settings')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('id', 'prices')
           .maybeSingle();
       if (priceDoc != null) {
@@ -194,7 +208,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
       var ratesSnap = await Supabase.instance.client
           .from('monthly_rates')
-          .select();
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '');
       Map<String, double> ratesMap = {};
       for (var doc in ratesSnap) {
         ratesMap[doc['id']] = (doc['teaRate'] ?? 0.0).toDouble();
@@ -206,7 +220,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('customers')
-            .select()
+            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .range(offset, offset + limit - 1);
         customersSnapshot.addAll(chunk);
         if (chunk.length < limit) break;
@@ -223,7 +237,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('daily_entries')
-            .select()
+            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .gte('timestamp', start.toIso8601String())
             .lte('timestamp', end.toIso8601String())
             .range(offset, offset + limit - 1);
@@ -266,7 +280,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       // If netPayable < 0, that is the true outstanding amount.
       var allFinalizedBills = await Supabase.instance.client
           .from('finalized_bills')
-          .select('customerId, customerName, refNumber, billData, finalizedAt')
+          .select('customerId, customerName, refNumber, billData, finalizedAt').eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .order('finalizedAt', ascending: false);
 
       // Group by customerId — keep only the LATEST bill per customer
@@ -357,7 +371,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     try {
       var summarySnapshot = await Supabase.instance.client
           .from('monthly_summaries')
-          .select();
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '');
       _allMonthlySummaries = List<Map<String, dynamic>>.from(summarySnapshot);
 
       List<double> incVals = [];
@@ -852,7 +866,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
 
     return Container(
-      height: isMobile ? null : 266,
+      height: isMobile ? null : 362,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -894,22 +908,24 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
                   children: [
                     if (isNarrow) ...[
-                      const Text(
-                        'දෛනික දළු එකතුව (Heatmap)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      const Center(
+                        child: Text(
+                          'දෛනික දළු එකතුව',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      monthNavigator,
+                      Center(child: monthNavigator),
                     ] else
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Expanded(
                             child: Text(
-                              'දෛනික දළු එකතුව (Heatmap)',
+                              'දෛනික දළු එකතුව',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -1459,7 +1475,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required VoidCallback onTap,
   }) {
     return Container(
-      height: 125, // Fixed height to ensure both tiles match exactly
+      height: 173, // Fixed height to ensure both tiles match exactly
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -1516,12 +1532,40 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             child: Icon(icon, color: color, size: 20),
                           ),
                           const SizedBox(width: 12),
-                          Text(
-                            title,
-                            style: TextStyle(
-                              color: Colors.blueGrey.shade600,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: TextStyle(
+                                color: Colors.blueGrey.shade600,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'See',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: color,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 10,
+                                  color: color,
+                                ),
+                              ],
                             ),
                           ),
                         ],

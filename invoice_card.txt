@@ -1,0 +1,365 @@
+﻿  Widget _buildInvoiceCard(Map<String, dynamic> bill) {
+    // Calculate totals and extract days
+    Map<int, double> weightByDay = {};
+    Map<int, double> weight2ByDay = {};
+    Map<int, double> advanceByDay = {};
+    double totalAdvance = 0;
+    double totalWeight = 0;
+    double totalWeight2 = 0;
+
+    for (var row in bill['tableRows']) {
+      String dateStr = row['date'] ?? '';
+      if (dateStr.isEmpty) continue;
+
+      int day = int.tryParse(dateStr.split('-').last) ?? 0;
+      if (day == 0) continue;
+
+      double weight = _parseDouble(row['weight']);
+      double weight2 = _parseDouble(row['weight2']);
+      
+      weightByDay[day] = weight;
+      weight2ByDay[day] = weight2;
+      
+      totalWeight += weight;
+      totalWeight2 += weight2;
+
+      for (var item in row['items']) {
+        if (item['desc'] == 'Advance') {
+          double amt = _parseDouble(item['amt']);
+          if (amt > 0) {
+            totalAdvance += amt;
+            advanceByDay[day] = (advanceByDay[day] ?? 0) + amt;
+          }
+        }
+      }
+    }
+
+    // Grid Rows
+    List<TableRow> gridRows = [];
+    gridRows.add(
+      TableRow(
+        decoration: BoxDecoration(color: Colors.grey.shade200),
+        children: List.generate(
+          8,
+          (index) => [
+            _gridCell('Day', isHeader: true),
+            _gridCell('Kg', isHeader: true),
+          ],
+        ).expand((x) => x).toList(),
+      ),
+    );
+
+    for (int r = 0; r < 4; r++) {
+      List<Widget> rowChildren = [];
+      for (int c = 0; c < 8; c++) {
+        int day = r * 8 + c + 1;
+        if (day <= 31) {
+          rowChildren.add(_gridCell(day.toString()));
+          double w = weightByDay[day] ?? 0;
+          double w2 = weight2ByDay[day] ?? 0;
+          
+          String formatW(double val) => val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1);
+          String wStr = '-';
+          if (w > 0 && w2 > 0) {
+            wStr = '${formatW(w)}/${formatW(w2)}';
+          } else if (w > 0) {
+            wStr = formatW(w);
+          } else if (w2 > 0) {
+            wStr = '-/${formatW(w2)}';
+          }
+          
+          rowChildren.add(_gridCell(wStr));
+        } else {
+          rowChildren.add(_gridCell(''));
+          rowChildren.add(_gridCell(''));
+        }
+      }
+      gridRows.add(TableRow(children: rowChildren));
+    }
+
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.only(bottom: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: ExpansionTile(
+        title: Text(
+          bill['displayMonth'],
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        subtitle: Text(
+          'à·à·”à¶¯à·Šà¶° à¶œà·™à·€à·“à¶¸: Rs. ${bill['netPayable'].toStringAsFixed(2)}',
+          style: TextStyle(
+            color: bill['netPayable'] < 0 ? Colors.red : Colors.green.shade800,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(15),
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'NALEEN SURANGA',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Authorized Green Dealer - Gangoda, Rakwana',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          'Tel: 0713444934 / 0758258544',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Name: ${widget.customerName} | Ref: ${widget.refNumber}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          'Month: ${bill['displayMonth']}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+
+                // Day / Kg Grid
+                Table(
+                  border: TableBorder.all(color: Colors.black, width: 0.5),
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: gridRows,
+                ),
+                const SizedBox(height: 15),
+
+                // Bottom Section
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left Column - Deductions Info
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'à¶…à¶©à·” à¶šà·’à¶»à·“à¶¸à·Š à·€à·’à·ƒà·Šà¶­à¶»à¶º',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'à¶…à¶­à·Šà¶­à·’à¶šà·à¶»à¶¸à·Š (Total: Rs.${totalAdvance.toStringAsFixed(2)})',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Wrap(
+                            spacing: 5,
+                            runSpacing: 5,
+                            children: advanceByDay.entries.map((e) {
+                              String dayStr = e.key.toString().padLeft(2, '0');
+                              return SizedBox(
+                                width: 90,
+                                child: Text(
+                                  'D$dayStr: Rs.${e.value.toStringAsFixed(0)}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'à¶´à·Šâ€à¶»à·€à·à·„à¶± à¶œà·à·ƒà·Šà¶­à·” (${((totalWeight + totalWeight2) % 1 == 0) ? (totalWeight + totalWeight2).toInt() : (totalWeight + totalWeight2).toStringAsFixed(1)}kg) : Rs.${bill['transportCost'].toStringAsFixed(2)}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+
+                    // Right Column - Summary Box
+                    Expanded(
+                      flex: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.black, width: 1),
+                        ),
+                        child: Column(
+                          children: [
+                            if (totalWeight > 0 || totalWeight2 == 0)
+                              _summaryGridRow(
+                                'à·ƒà·à¶¸à·à¶±à·Šâ€à¶º à¶¯à·…à·”',
+                                '${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} Kg',
+                                'Rs. ${_parseDouble(bill['teaRate']).toStringAsFixed(2)}',
+                                isBold: true,
+                              ),
+                            if (totalWeight2 > 0)
+                              _summaryGridRow(
+                                'à·ƒà·”à¶´à·’à¶»à·’ à¶¯à·…à·”',
+                                '${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} Kg',
+                                'Rs. ${(_parseDouble(bill['teaRate2']) == 0 && _parseDouble(bill['grossIncome']) > 0 ? ((_parseDouble(bill['grossIncome']) - (totalWeight * _parseDouble(bill['teaRate']))) / totalWeight2) : _parseDouble(bill['teaRate2'])).toStringAsFixed(2)}',
+                                isBold: true,
+                              ),
+                            const Divider(
+                              color: Colors.black,
+                              thickness: 1,
+                              height: 15,
+                            ),
+
+                            _summaryRow(
+                              'à¶¯à·… à¶†à¶¯à·à¶ºà¶¸',
+                              'Rs. ${bill['grossIncome'].toStringAsFixed(2)}',
+                            ),
+                            const SizedBox(height: 5),
+                            _summaryRow(
+                              'à¶¸à·”à·…à·” à¶…à¶­à·Šà¶­à·’à¶šà·à¶»à¶¸à·Š',
+                              '-${totalAdvance.toStringAsFixed(2)}',
+                            ),
+                            _summaryRow(
+                              'à¶´à·œà·„à·œà¶» à·ƒà·„ à¶­à·š à¶šà·œà·…',
+                              '-${bill['otherCosts'].toStringAsFixed(2)}',
+                            ),
+                            _summaryRow(
+                              'à¶´à·Šâ€à¶»à·€à·à·„à¶± à¶œà·à·ƒà·Šà¶­à·”',
+                              '-${bill['transportCost'].toStringAsFixed(2)}',
+                            ),
+                            if (bill['previousArrears'] > 0)
+                              _summaryRow(
+                                'à¶´à·ƒà·”à¶œà·’à¶º à·„à·’à¶Ÿ à¶¸à·”à¶¯à¶½',
+                                '-${bill['previousArrears'].toStringAsFixed(2)}',
+                              ),
+
+                            const Divider(
+                              color: Colors.black,
+                              thickness: 1,
+                              height: 15,
+                            ),
+                            _summaryRow(
+                              'à¶¸à·”à·…à·” à¶…à¶©à·” à¶šà·’à¶»à·“à¶¸à·Š',
+                              '-${bill['totalDeductions'].toStringAsFixed(2)}',
+                            ),
+
+                            const Divider(
+                              color: Colors.black,
+                              thickness: 1,
+                              height: 15,
+                            ),
+                            _summaryRow(
+                              'à¶œà·™à·€à·’à¶º à¶ºà·”à¶­à·” à·à·”à¶¯à·Šà¶° à¶¸à·”à¶¯à¶½',
+                              'Rs. ${bill['netPayable'].toStringAsFixed(2)}',
+                              isBold: true,
+                            ),
+                            const Divider(
+                              color: Colors.black,
+                              thickness: 2,
+                              height: 5,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 25),
+                const Center(
+                  child: Text(
+                    'Thank You! | Powered by OrbitView Innovations',
+                    style: TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => _sendIndividualWhatsApp(bill),
+                      icon: const Icon(Icons.message, size: 18),
+                      label: const Text('Send Bill (WhatsApp)'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _gridCell(String text, {bool isHeader = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeleton() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: 6,
+      itemBuilder: (context, index) {
+        return Card(
+          elevation: 4,
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SkeletonBox(width: 120, height: 20),
+                    const SizedBox(height: 8),
+                    const SkeletonBox(width: 180, height: 16),
+                  ],
+                ),
+                const SkeletonBox(width: 24, height: 24, borderRadius: 12), // for dropdown arrow
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _summaryGridRow(

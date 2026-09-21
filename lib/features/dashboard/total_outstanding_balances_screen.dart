@@ -196,10 +196,13 @@ class _TotalOutstandingBalancesScreenState extends State<TotalOutstandingBalance
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Showing ${((_currentPage - 1) * _itemsPerPage) + 1} to ${((_currentPage * _itemsPerPage) > _displayList.length) ? _displayList.length : (_currentPage * _itemsPerPage)} of ${_displayList.length}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                  Expanded(
+                    child: Text(
+                      'Showing ${((_currentPage - 1) * _itemsPerPage) + 1} to ${((_currentPage * _itemsPerPage) > _displayList.length) ? _displayList.length : (_currentPage * _itemsPerPage)} of ${_displayList.length}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Row(
                     children: [
                       InkWell(

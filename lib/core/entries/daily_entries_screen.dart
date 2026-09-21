@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_entry/core/entries/daily_entry_form_screen.dart'; 
+import '../app_state.dart';
 
 class DailyEntriesScreen extends StatefulWidget {
   final String? initialCustomerId;
@@ -74,13 +75,16 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('දෛනික සටහන්')),
-      body: Column(
-        children: [
-          Container(
+      body: ValueListenableBuilder<int>(
+        valueListenable: AppState.refreshTrigger,
+        builder: (context, triggerValue, child) {
+          return Column(
+            children: [
+              Container(
             padding: const EdgeInsets.all(16.0),
             color: Colors.white,
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: Supabase.instance.client.from('customers').stream(primaryKey: ['id']).order('name'),
+              stream: Supabase.instance.client.from('customers').stream(primaryKey: ['id']).eq('organization_id', AppState.currentOrganizationId.value ?? '').order('name'),
               builder: (context, snapshot) {
                 if (snapshot.hasData) _allCustomers = snapshot.data!;
 
@@ -140,7 +144,7 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: Supabase.instance.client
                   .from('daily_entries')
-                  .stream(primaryKey: ['id'])
+                  .stream(primaryKey: ['id']).eq('organization_id', AppState.currentOrganizationId.value ?? '')
                   .gte('date', '$monthPrefix-01')
                   .lte('date', '$monthPrefix-31'),
               builder: (context, snapshot) {
@@ -281,7 +285,9 @@ class _DailyEntriesScreenState extends State<DailyEntriesScreen> {
               },
             ),
           ),
-        ],
+          ],
+        );
+      },
       ),
     );
   }

@@ -9,7 +9,7 @@ Future<void> main() async {
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0bHhyZHhsZHRvYmZmemZpY3h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwMDU4MjAsImV4cCI6MjEwNDU4MTgyMH0.ZphFjMlc9-RpJ0Pr7zdCYPSVgl1FK0plC6JwPC9IwIY',
   );
 
-  final file = File('smart_entry_backup_1789453398026.json');
+  final file = File('smart_entry_backup_1789477984705.json');
   if (!await file.exists()) {
     print('Backup file not found!');
     exit(1);
@@ -30,10 +30,11 @@ Future<void> main() async {
         'refNumber': doc['refNumber'],
         'phone': doc['phone'],
         'address': doc['address'],
+        'pin': doc['pin'], // Adding pin just in case
+        'organization_id': doc['organization_id'], // Adding org_id
         'registeredAt': doc['registeredAt'],
       });
     }
-    // Batch insert
     for (int i = 0; i < customers.length; i += 500) {
       final batch = customers.skip(i).take(500).toList();
       await client.from('customers').insert(batch);
@@ -67,6 +68,7 @@ Future<void> main() async {
       rates.add({
         'id': doc['documentId'],
         'teaRate': doc['teaRate'],
+        'teaRate2': doc['teaRate2'], // Add second rate
         'transportRate': doc['transportRate'],
         'month': doc['month'],
         'year': doc['year'],
@@ -91,6 +93,7 @@ Future<void> main() async {
         'grossWeight': doc['grossWeight'],
         'deductions': doc['deductions'],
         'netWeight': doc['netWeight'],
+        'netWeight2': doc['netWeight2'], // Support for second weight
         'advanceAmount': doc['advanceAmount'],
         'fertilizer1Qty': doc['fertilizer1Qty'],
         'fertilizer2Qty': doc['fertilizer2Qty'],
@@ -100,7 +103,6 @@ Future<void> main() async {
       });
     }
     
-    // Batch insert 500 at a time to avoid payload limits
     for (int i = 0; i < entries.length; i += 500) {
       final batch = entries.skip(i).take(500).toList();
       await client.from('daily_entries').insert(batch);
@@ -109,8 +111,40 @@ Future<void> main() async {
     print('✓ Daily Entries imported (${entries.length})');
   }
 
-  // FinalizedBills and MonthlySummaries usually don't need backup restoration if they are empty or we can just restore them if they exist in JSON.
-  // We'll skip them if they aren't in this backup.
+  // 5. Import FinalizedBills
+  if (data.containsKey('FinalizedBills')) {
+    print('Importing Finalized Bills...');
+    List<Map<String, dynamic>> bills = [];
+    for (var doc in data['FinalizedBills']) {
+      bills.add({
+        'id': doc['documentId'],
+        'customerId': doc['customerId'],
+        'customerName': doc['customerName'],
+        'refNumber': doc['refNumber'],
+        'billData': doc['billData'],
+        'finalizedAt': doc['finalizedAt'],
+      });
+    }
+    for (int i = 0; i < bills.length; i += 500) {
+      final batch = bills.skip(i).take(500).toList();
+      await client.from('finalized_bills').insert(batch);
+    }
+    print('✓ Finalized Bills imported (${bills.length})');
+  }
+
+  // 6. Import MonthlySummaries
+  if (data.containsKey('MonthlySummaries')) {
+    print('Importing Monthly Summaries...');
+    List<Map<String, dynamic>> summaries = [];
+    for (var doc in data['MonthlySummaries']) {
+      summaries.add(doc);
+    }
+    for (int i = 0; i < summaries.length; i += 500) {
+      final batch = summaries.skip(i).take(500).toList();
+      await client.from('monthly_summaries').insert(batch);
+    }
+    print('✓ Monthly Summaries imported (${summaries.length})');
+  }
 
   print('🎉 All data successfully restored to Supabase!');
   exit(0);

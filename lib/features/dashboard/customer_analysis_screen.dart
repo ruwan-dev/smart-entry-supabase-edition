@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/widgets/skeleton_box.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class CustomerAnalysisScreen extends StatefulWidget {
   const CustomerAnalysisScreen({super.key});
@@ -44,7 +45,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
       try {
         var settingDoc = await Supabase.instance.client
             .from('global_settings')
-            .select()
+            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .eq('id', 'rating_config')
             .maybeSingle();
         if (settingDoc != null && settingDoc['highVolumeThreshold'] != null) {
@@ -56,7 +57,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
       // 1. Get all customers
       var customersSnap = await Supabase.instance.client
           .from('customers')
-          .select('id, name, phone, refNumber');
+          .select('id, name, phone, refNumber').eq('organization_id', AppState.currentOrganizationId.value ?? '');
       _totalCustomers = customersSnap.length;
 
       // 2. Get active customers (active within last 45 days to match rating logic)
@@ -65,7 +66,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
 
       var entriesSnap = await Supabase.instance.client
           .from('daily_entries')
-          .select('customerId')
+          .select('customerId').eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .gte('timestamp', startDate.toIso8601String());
 
       Set<String> activeIds = {};
@@ -87,7 +88,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
       // 3. Get debtors from latest finalized bills
       var allFinalizedBills = await Supabase.instance.client
           .from('finalized_bills')
-          .select('customerId, billData')
+          .select('customerId, billData').eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .order('finalizedAt', ascending: false);
 
       Map<String, double> latestArrears = {};
@@ -131,7 +132,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
         while (true) {
           var res = await Supabase.instance.client
               .from('daily_entries')
-              .select('customerId, timestamp, netWeight')
+              .select('customerId, timestamp, netWeight').eq('organization_id', AppState.currentOrganizationId.value ?? '')
               .filter('customerId', 'in', chunk)
               .range(offset, offset + limit - 1);
           allEntries.addAll(res);
@@ -616,26 +617,49 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth < 450) {
+                        return Column(
+                          children: [
+                        _buildStatCard(
+                            'මුළු පාරිභෝගිකයින්',
+                            '$_totalCustomers',
+                            Icons.people_alt_rounded,
+                            primaryAppColor,
+                        ),
+                            const SizedBox(height: 12),
+                        _buildStatCard(
+                            'ණය සහිත අය',
+                            '$_debtorCustomers',
+                            Icons.account_balance_wallet_rounded,
+                            const Color(0xFFD32F2F),
+                        ),
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
                           'මුළු පාරිභෝගිකයින්',
                           '$_totalCustomers',
                           Icons.people_alt_rounded,
                           primaryAppColor,
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
                           'ණය සහිත අය',
                           '$_debtorCustomers',
                           Icons.account_balance_wallet_rounded,
                           const Color(0xFFD32F2F),
                         ),
-                      ),
-                    ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   _buildPieChart(),

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class WhatsAppBatchDialog extends StatefulWidget {
   final List<Map<String, dynamic>> bills;
@@ -98,7 +99,7 @@ class _WhatsAppBatchDialogState extends State<WhatsAppBatchDialog> {
           
           var response = await Supabase.instance.client
               .from('finalized_bills')
-              .select('billData')
+              .select('billData').eq('organization_id', AppState.currentOrganizationId.value ?? '')
               .eq('id', billId)
               .maybeSingle();
 
@@ -108,7 +109,7 @@ class _WhatsAppBatchDialogState extends State<WhatsAppBatchDialog> {
 
             await Supabase.instance.client
                 .from('finalized_bills')
-                .update({'billData': billData})
+                .update({'billData': billData}).eq('organization_id', AppState.currentOrganizationId.value ?? '')
                 .eq('id', billId);
           }
         } catch (e) {

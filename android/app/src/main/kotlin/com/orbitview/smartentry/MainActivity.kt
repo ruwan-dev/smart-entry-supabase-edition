@@ -1,4 +1,4 @@
-package com.example.smart_entry
+package com.orbitview.smartentry
 
 import io.flutter.embedding.android.FlutterActivity
 

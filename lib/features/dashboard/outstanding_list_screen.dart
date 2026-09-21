@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/billing/monthly_bill_screen.dart';
 import 'customer_timeline_screen.dart';
 import '../../core/widgets/skeleton_box.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class OutstandingListScreen extends StatefulWidget {
   final List<Map<String, dynamic>> arrearsList;
@@ -56,7 +57,7 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('daily_entries')
-            .select('customerId, netWeight')
+            .select('customerId, netWeight').eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .gte('timestamp', targetPastDate.toIso8601String())
             .range(offset, offset + limit - 1);
         snapshot.addAll(chunk);
@@ -351,18 +352,17 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
                 ),
                 const SizedBox(height: 12),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'සාමාන්‍ය දළු කිලෝ 1 ක මිල: Rs.',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: Color(0xFF374151),
-                          ),
+                    const Expanded(
+                      child: Text(
+                        'සාමාන්‍ය දළු කිලෝ 1 ක මිල: Rs.',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Color(0xFF374151),
                         ),
+                      ),
+                    ),
                         const SizedBox(width: 12),
                         SizedBox(
                           width: 80,
@@ -390,23 +390,25 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
                             onChanged: (val) => setState(() {}),
                           ),
                         ),
-                      ],
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const Text(
-                      'සාමාන්‍යය සඳහා මාස ගණන:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        color: Color(0xFF374151),
+                    const Expanded(
+                      flex: 4,
+                      child: Text(
+                        'සාමාන්‍යය සඳහා මාස ගණන:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Color(0xFF374151),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
+                      flex: 5,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [3, 6, 12, 24].map((month) {
@@ -623,14 +625,17 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Showing ${((_currentPage - 1) * _itemsPerPage) + 1} to ${((_currentPage * _itemsPerPage) > _displayList.length) ? _displayList.length : (_currentPage * _itemsPerPage)} of ${_displayList.length}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6B7280),
-                      fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: Text(
+                      'Showing ${((_currentPage - 1) * _itemsPerPage) + 1} to ${((_currentPage * _itemsPerPage) > _displayList.length) ? _displayList.length : (_currentPage * _itemsPerPage)} of ${_displayList.length}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Row(
                     children: [
                       InkWell(

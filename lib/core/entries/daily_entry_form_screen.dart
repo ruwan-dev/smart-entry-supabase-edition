@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class DailyEntryFormScreen extends StatefulWidget {
   final DateTime selectedDate;
@@ -54,7 +55,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
       
       var response = await Supabase.instance.client
           .from('daily_entries')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('customerId', widget.customerId)
           .eq('date', formattedDate)
           .limit(1);
@@ -101,7 +102,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
 
   Future<void> _fetchGlobalPrices() async {
     try {
-      var response = await Supabase.instance.client.from('global_settings').select().eq('id', 'prices').maybeSingle();
+      var response = await Supabase.instance.client.from('global_settings').select().eq('organization_id', AppState.currentOrganizationId.value ?? '').eq('id', 'prices').maybeSingle();
       if (response != null && mounted) {
         setState(() {
           _fert1Price = (response['fertilizer1Price'] ?? 0.0).toDouble();
@@ -196,18 +197,20 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
 
       if (isUpdate && _existingEntryId != null) {
         entryData['updatedAt'] = DateTime.now().toIso8601String();
-        await Supabase.instance.client.from('daily_entries').update(entryData).eq('id', _existingEntryId!);
+        await Supabase.instance.client.from('daily_entries').update(entryData).eq('organization_id', AppState.currentOrganizationId.value ?? '').eq('id', _existingEntryId!);
       } else {
         entryData['customerId'] = widget.customerId;
         entryData['customerName'] = widget.customerName;
         entryData['date'] = DateFormat('yyyy-MM-dd').format(widget.selectedDate);
         entryData['timestamp'] = widget.selectedDate.toIso8601String();
         entryData['createdAt'] = DateTime.now().toIso8601String();
+        entryData['organization_id'] = AppState.currentOrganizationId.value;
         
         await Supabase.instance.client.from('daily_entries').insert(entryData);
       }
 
       if (mounted) {
+        AppState.triggerRefresh();
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(isUpdate ? 'දෛනික සටහන සාර්ථකව යාවත්කාලීන කරන ලදි!' : 'දෛනික සටහන සාර්ථකව සුරකින ලදි!')),

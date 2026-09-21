@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:smart_entry/features/reports/widgets/whatsapp_batch_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../shared_report_state.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class WhatsappManagementWidget extends StatefulWidget {
   const WhatsappManagementWidget({super.key});
@@ -25,7 +26,6 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
   String _companyLine2 = '';
   String _companyLine3 = '';
   String _companyLine4 = '';
-  String _companyLine5 = '';
 
   final List<String> _monthLabels = [
     "January",
@@ -85,13 +85,23 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
   }
 
   Future<void> _loadCompanyName() async {
-    final prefs = await SharedPreferences.getInstance();
+    final orgRes = await Supabase.instance.client
+        .from('organizations')
+        .select('company_line_1, company_line_2, company_line_3, company_line_4')
+        .eq('id', AppState.currentOrganizationId.value ?? '')
+        .maybeSingle();
     setState(() {
-      _companyLine1 = prefs.getString('company_line_1') ?? 'SmartEntry';
-      _companyLine2 = prefs.getString('company_line_2') ?? '';
-      _companyLine3 = prefs.getString('company_line_3') ?? '';
-      _companyLine4 = prefs.getString('company_line_4') ?? '';
-      _companyLine5 = prefs.getString('company_line_5') ?? '';
+      if (orgRes != null) {
+        _companyLine1 = orgRes['company_line_1'] ?? 'SmartEntry';
+        _companyLine2 = orgRes['company_line_2'] ?? '';
+        _companyLine3 = orgRes['company_line_3'] ?? '';
+        _companyLine4 = orgRes['company_line_4'] ?? '';
+      } else {
+        _companyLine1 = 'SmartEntry';
+        _companyLine2 = '';
+        _companyLine3 = '';
+        _companyLine4 = '';
+      }
     });
   }
 
@@ -140,7 +150,7 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
       // 1. Fetch finalized bills for this month
       var billsRes = await Supabase.instance.client
           .from('finalized_bills')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .like('id', '%_$monthKey');
 
       if (billsRes.isEmpty) {
@@ -151,7 +161,7 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
       // 2. Fetch customers to get their phone numbers
       var customersRes = await Supabase.instance.client
           .from('customers')
-          .select('id, phone');
+          .select('id, phone').eq('organization_id', AppState.currentOrganizationId.value ?? '');
       Map<String, String> phoneMap = {};
       for (var c in customersRes) {
         String cId = c['id'].toString();
@@ -273,7 +283,6 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
       _companyLine2,
       _companyLine3,
       _companyLine4,
-      _companyLine5,
     ];
     String companySignature = companyLines
         .where((l) => l.trim().isNotEmpty)

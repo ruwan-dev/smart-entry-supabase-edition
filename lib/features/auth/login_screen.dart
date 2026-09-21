@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_entry/features/dashboard/dashboard_screen.dart';
 import 'package:smart_entry/core/widgets/blinking_logo_loader.dart';
@@ -19,6 +20,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  String? _savedUsername;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedUsername();
+  }
+
+  Future<void> _loadSavedUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedUser = prefs.getString('last_username');
+    if (savedUser != null && savedUser.isNotEmpty) {
+      setState(() {
+        _savedUsername = savedUser;
+        _usernameController.text = savedUser;
+      });
+    }
+  }
 
   Future<void> _login() async {
     String inputUsername = _usernameController.text.trim();
@@ -134,11 +153,16 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildLoginForm(BuildContext context) {
+  Widget _buildLoginForm(BuildContext context, {bool isMobile = false}) {
+    final borderRadius = isMobile
+        ? const BorderRadius.vertical(top: Radius.circular(40))
+        : BorderRadius.circular(24);
+
     return Container(
-      constraints: const BoxConstraints(maxWidth: 420),
+      width: isMobile ? double.infinity : null,
+      constraints: isMobile ? null : const BoxConstraints(maxWidth: 420),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: borderRadius,
         boxShadow: [
           BoxShadow(
             color: Colors.blue.withOpacity(0.05),
@@ -149,25 +173,23 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: borderRadius,
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            padding: const EdgeInsets.all(40),
+            padding: isMobile
+                ? const EdgeInsets.only(left: 32, right: 32, top: 48, bottom: 48)
+                : const EdgeInsets.all(40),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.white.withOpacity(0.7),
-                  Colors.white.withOpacity(0.4),
+                  Colors.white.withOpacity(0.95),
+                  Colors.white.withOpacity(0.85),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.8),
-                width: 1.5,
-              ),
+              borderRadius: borderRadius,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -183,77 +205,67 @@ class _LoginScreenState extends State<LoginScreen> {
                   'Smart Entry',
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'කරුණාකර පරිපාලක මුරපදය ඇතුළත් කරන්න',
-                  style: TextStyle(fontSize: 14, color: Colors.blueGrey),
-                ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 40),
 
-                // Username Field
-                TextField(
-                  controller: _usernameController,
+                // If saved username, show Welcome, else show Username Field
+                if (_savedUsername != null) ...[
+                  Text(
+                    'Welcome back, $_savedUsername!',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                  ),
+                  const SizedBox(height: 24),
+                ] else ...[
+                  // Username Field
+                  TextField(
+                    controller: _usernameController,
                   decoration: InputDecoration(
-                    labelText: 'Username',
+                    hintText: 'Username',
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.6),
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16.0),
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.8),
-                      ),
+                      borderRadius: BorderRadius.circular(30.0),
+                      borderSide: BorderSide.none,
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16.0),
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.8),
-                      ),
+                      borderRadius: BorderRadius.circular(30.0),
+                      borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16.0),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF42A5F5),
-                        width: 1.5,
-                      ),
+                      borderRadius: BorderRadius.circular(30.0),
+                      borderSide: const BorderSide(color: Color(0xFF42A5F5), width: 1.5),
                     ),
-                    prefixIcon: const Icon(Icons.person_outline),
+                    prefixIcon: const Icon(Icons.person_outline, color: Colors.black54),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 18),
                   ),
                 ),
                 const SizedBox(height: 16),
+              ],
 
                 // Password Field
                 TextField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
                   decoration: InputDecoration(
-                    labelText: 'Password',
+                    hintText: 'Password',
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.6),
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16.0),
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.8),
-                      ),
+                      borderRadius: BorderRadius.circular(30.0),
+                      borderSide: BorderSide.none,
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16.0),
-                      borderSide: BorderSide(
-                        color: Colors.white.withOpacity(0.8),
-                      ),
+                      borderRadius: BorderRadius.circular(30.0),
+                      borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16.0),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF42A5F5),
-                        width: 1.5,
-                      ),
+                      borderRadius: BorderRadius.circular(30.0),
+                      borderSide: const BorderSide(color: Color(0xFF42A5F5), width: 1.5),
                     ),
-                    prefixIcon: const Icon(Icons.lock_outline),
+                    prefixIcon: const Icon(Icons.lock_outline, color: Colors.black54),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off,
+                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                        color: Colors.black54,
                       ),
                       onPressed: () {
                         setState(() {
@@ -261,6 +273,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         });
                       },
                     ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 18),
                   ),
                   onSubmitted: (_) => _login(),
                 ),
@@ -269,29 +282,41 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Login Button
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: 56,
                   child: ElevatedButton(
                     onPressed: _login,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(
-                        0xFF42A5F5,
-                      ), // Soft blue matching the logo hue
+                      backgroundColor: const Color(0xFF42A5F5),
                       foregroundColor: Colors.white,
-                      elevation: 0,
+                      elevation: 4,
+                      shadowColor: const Color(0xFF42A5F5).withOpacity(0.5),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16.0),
+                        borderRadius: BorderRadius.circular(30.0),
                       ),
                     ),
                     child: const Text(
-                      'ඇතුළු වන්න',
+                      'LOGIN',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
+                        letterSpacing: 1.5,
                       ),
                     ),
                   ),
                 ),
+                if (_savedUsername != null) ...[
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _savedUsername = null;
+                        _usernameController.clear();
+                        _passwordController.clear();
+                      });
+                    },
+                    child: const Text('Log in with another account', style: TextStyle(color: Colors.blueGrey)),
+                  ),
+                ],
               ],
             ),
           ),
@@ -353,18 +378,20 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           } else {
             // Mobile layout
-            return Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildBrandingPanel(context),
-                    const SizedBox(height: 64),
-                    _buildLoginForm(context),
-                  ],
+            return Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 48.0, left: 32.0, right: 32.0, bottom: 32.0),
+                        child: _buildBrandingPanel(context),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                _buildLoginForm(context, isMobile: true),
+              ],
             );
           }
         },

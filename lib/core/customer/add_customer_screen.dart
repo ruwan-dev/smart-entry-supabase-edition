@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../app_state.dart';
 import 'dart:math';
 
 class AddCustomerScreen extends StatefulWidget {
@@ -49,7 +50,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
 
         var querySnapshot = await Supabase.instance.client
             .from('customers')
-            .select()
+            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .eq('refNumber', refNumber);
 
         if (querySnapshot.isNotEmpty) {
@@ -71,9 +72,11 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           'address': _addressController.text.trim(),
           'phone': _phoneController.text.trim(),
           'pin': _pinController.text.trim(),
+          'organization_id': AppState.currentOrganizationId.value ?? '',
         }).select();
 
         if (mounted) {
+          AppState.triggerRefresh();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('පාරිභෝගිකයා සාර්ථකව සුරකින ලදී'), backgroundColor: Colors.green),
           );

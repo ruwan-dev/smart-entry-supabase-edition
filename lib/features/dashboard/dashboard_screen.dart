@@ -8,6 +8,9 @@ import 'overview_screen.dart';
 import '../reports/reports_screen.dart';
 
 import '../../core/network_service.dart';
+import '../../core/app_state.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../auth/login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -18,6 +21,69 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  String _orgName = 'Smart Entry';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchOrgName();
+    AppState.refreshTrigger.addListener(_fetchOrgName);
+  }
+
+  @override
+  void dispose() {
+    AppState.refreshTrigger.removeListener(_fetchOrgName);
+    super.dispose();
+  }
+
+  Future<void> _fetchOrgName() async {
+    try {
+      final orgRes = await Supabase.instance.client
+          .from('organizations')
+          .select('name')
+          .eq('id', AppState.currentOrganizationId.value ?? '')
+          .maybeSingle();
+      if (orgRes != null && mounted) {
+        setState(() {
+          _orgName = orgRes['name'] ?? 'Smart Entry';
+        });
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  Future<void> _logout() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to log out of the system?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      AppState.currentOrganizationId.value = null;
+      AppState.currentUsername.value = '';
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
+    }
+  }
 
   // All 5 screens always alive in IndexedStack
   final List<Widget> _screens = [
@@ -113,11 +179,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Smart Entry',
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Welcome, ${_orgName.toUpperCase()}',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                ),
+              ),
             ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -149,6 +222,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Logout',
+            onPressed: _logout,
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: Container(

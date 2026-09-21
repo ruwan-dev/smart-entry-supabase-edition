@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'dart:ui';
 import 'package:smart_entry/features/reports/widgets/whatsapp_batch_dialog.dart';
 import '../shared_report_state.dart';
+import 'package:smart_entry/core/app_state.dart';
 
 class MonthlyClosingWidget extends StatefulWidget {
   const MonthlyClosingWidget({super.key});
@@ -86,7 +87,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
 
       var ratesDoc = await Supabase.instance.client
           .from('monthly_rates')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('id', ratesDocId)
           .maybeSingle();
       if (ratesDoc == null) {
@@ -99,7 +100,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
 
       var summaryDoc = await Supabase.instance.client
           .from('monthly_summaries')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('id', ratesDocId)
           .maybeSingle();
       if (summaryDoc != null) {
@@ -109,7 +110,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
 
       var priceDoc = await Supabase.instance.client
           .from('global_settings')
-          .select()
+          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('id', 'prices')
           .maybeSingle();
       var pData = priceDoc ?? {};
@@ -118,7 +119,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
       double teaRate2 = (ratesDoc['teaRate2'] ?? 0).toDouble();
       double transRate = (ratesDoc['transportRate'] ?? 0).toDouble();
 
-      var customers = await Supabase.instance.client.from('customers').select();
+      var customers = await Supabase.instance.client.from('customers').select().eq('organization_id', AppState.currentOrganizationId.value ?? '');
 
       String searchKey =
           "$_currentYear-${_selectedMonth.toString().padLeft(2, '0')}";
@@ -128,7 +129,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('daily_entries')
-            .select()
+            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .gte('date', "$searchKey-01")
             .lte('date', "$searchKey-31")
             .range(offset, offset + limit - 1);
@@ -148,7 +149,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           .map(
             (customer) => Supabase.instance.client
                 .from('finalized_bills')
-                .select()
+                .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
                 .eq('id', "${customer['id']}_$prevMonthKey")
                 .maybeSingle(),
           )
@@ -349,6 +350,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
             'refNumber': item['ref'],
             'billData': b,
             'finalizedAt': DateTime.now().toIso8601String(),
+            'organization_id': AppState.currentOrganizationId.value ?? '',
           });
         }
 
@@ -419,6 +421,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           'totalNegativeNet': totalNegativeNet,
           'totalNet': totalNet,
           'finalizedAt': DateTime.now().toIso8601String(),
+          'organization_id': AppState.currentOrganizationId.value ?? '',
         });
       }
 
