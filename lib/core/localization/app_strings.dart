@@ -383,8 +383,6 @@ class AppStrings {
   static String get leafDetails => isSinhala ? 'තේ දළු විස්තර' : 'Tea Leaf Details';
   static String get normalLeafWeight => isSinhala ? 'සාමාන්‍ය දළු ප්‍රමාණය' : 'Normal Leaf Weight';
   static String get superLeafWeight => isSinhala ? 'සුපිරි දළු ප්‍රමාණය' : 'Super Leaf Weight';
-  static String get normalLeaf => isSinhala ? 'සාමාන්‍ය දළු' : 'Normal Leaf';
-  static String get superLeaf => isSinhala ? 'සුපිරි දළු' : 'Super Leaf';
   static String get additionalNotesAndDeductions => isSinhala ? 'අමතර සටහන් සහ අඩු කිරීම්' : 'Additional Notes & Deductions';
   static String get advanceAmount => isSinhala ? 'අත්තිකාරම් මුදල' : 'Advance Amount';
   static String get extraItems => isSinhala ? 'අමතර භාණ්ඩ' : 'Extra Items';
@@ -625,6 +623,26 @@ class AppStrings {
   static String get overAllocated => isSinhala ? 'එකතුවට වඩා වැඩියි' : 'Over Allocated';
   static String get otherFactoriesBreakdown => isSinhala ? 'වෙනත් කර්මාන්තශාලා විස්තර' : 'Other Factories Breakdown';
   static String get applyAvailable => isSinhala ? 'ඉතිරි ප්‍රමාණය යොදන්න' : 'Apply Available';
+
+  // ---------------------------------------------------------------------------
+  // Executive Dashboard & Income Analytics
+  // ---------------------------------------------------------------------------
+  static String get netDealerIncome => isSinhala ? 'නෙට් ආයතනික ආදායම' : 'Net Dealer Income';
+  static String get dealerGrossMargin => isSinhala ? 'දළ ලාභය' : 'Gross Margin';
+  static String get factoryRevenue => isSinhala ? 'කර්මාන්තශාලා ආදායම' : 'Factory Revenue';
+  static String get supplierPayout => isSinhala ? 'සැපයුම්කරුවන්ගේ දළු වියදම' : 'Supplier Leaf Cost';
+  static String get marginPerKg => isSinhala ? 'කිලෝවක දළ ලාභය' : 'Margin / Kg';
+  static String get superLeafRatio => isSinhala ? 'සුපිරි දළු අනුපාතය' : 'Super Leaf Ratio';
+  static String get normalLeaf => isSinhala ? 'සාමාන්‍ය දළු' : 'Normal Leaf';
+  static String get superLeaf => isSinhala ? 'සුපිරි දළු' : 'Super Leaf';
+  static String get capitalExposure => isSinhala ? 'හිඟ මුදල් / ණය' : 'Capital in Field';
+  static String get dailyAverageIntake => isSinhala ? 'දෛනික සාමාන්‍ය දළු' : 'Daily Average Intake';
+  static String get activeSuppliers => isSinhala ? 'සක්‍රිය සැපයුම්කරුවන්' : 'Active Suppliers';
+  static String get financialOverview => isSinhala ? 'මූල්‍ය හා ආදායම් දළ විශ්ලේෂණය' : 'Financial & Income Overview';
+  static String get leafHarvestAnalytics => isSinhala ? 'දළු අස්වනු විශ්ලේෂණය' : 'Leaf Harvest Analytics';
+  static String get qualityBreakdown => isSinhala ? 'ගුණාත්මක අනුපාතය' : 'Quality Breakdown';
+  static String get factoryRevenueVsCost => isSinhala ? 'කර්මාන්තශාලා ආදායම හා සැපයුම්කරුවන්ගේ වියදම' : 'Factory Inflow vs Supplier Cost';
+
 
 
 

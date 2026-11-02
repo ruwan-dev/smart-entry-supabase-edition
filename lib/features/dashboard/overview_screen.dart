@@ -47,6 +47,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   double _overallOutstandingAdvances = 0.0;
 
+  // Organization Financial & Yield Analytics
+  double _totalFactoryRevenue = 0.0;
+  double _totalSupplierPayout = 0.0;
+  double _netDealerIncome = 0.0;
+  double _dealerMarginPerKg = 0.0;
+  double _normalLeafWeight = 0.0;
+  double _superLeafWeight = 0.0;
+  double _superLeafPercentage = 0.0;
+  int _activeSuppliersCount = 0;
+
   Map<String, dynamic>? _latestSummaryData;
   String? _latestSummaryId;
   Map<String, dynamic>? _previousSummaryData;
@@ -121,7 +131,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('daily_entries')
-            .select('timestamp, netWeight').eq('organization_id', AppState.currentOrganizationId.value ?? '')
+            .select('timestamp, netWeight, netWeight2').eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .gte('timestamp', start.toIso8601String())
             .lte('timestamp', end.toIso8601String())
             .range(offset, offset + limit - 1);
@@ -137,7 +147,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         if (doc['timestamp'] != null) {
           DateTime ts = DateTime.parse(doc['timestamp'].toString());
           int d = ts.day;
-          double w = (doc['netWeight'] ?? 0.0).toDouble();
+          double w = (doc['netWeight'] ?? 0.0).toDouble() + (doc['netWeight2'] ?? 0.0).toDouble();
 
           data[d] = (data[d] ?? 0) + w;
           if (data[d]! > maxW) maxW = data[d]!;
@@ -164,6 +174,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       if (_isInitialLoad) _isLoading = true;
     });
 
+    final orgId = AppState.currentOrganizationId.value ?? '';
     DateTime now = DateTime.now();
     DateTime start;
     DateTime end = DateTime(now.year, now.month, now.day, 23, 59, 59);
@@ -184,7 +195,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
     try {
       var latestSummaries = await Supabase.instance.client
           .from('monthly_summaries')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
+          .select()
+          .eq('organization_id', orgId)
           .order('finalizedAt', ascending: false)
           .limit(2);
 
@@ -204,19 +216,30 @@ class _OverviewScreenState extends State<OverviewScreen> {
       }
 
       final orgItems = await ItemService.getItems(
-        organizationId: AppState.currentOrganizationId.value ?? '',
+        organizationId: orgId,
       );
       fert1Price = orgItems.where((it) => it.slotIndex == 1).firstOrNull?.unitPrice ?? 15500.0;
       fert2Price = orgItems.where((it) => it.slotIndex == 2).firstOrNull?.unitPrice ?? 18000.0;
       teaPkt1Price = orgItems.where((it) => it.slotIndex == 3).firstOrNull?.unitPrice ?? 650.0;
       teaPkt2Price = orgItems.where((it) => it.slotIndex == 4).firstOrNull?.unitPrice ?? 0.0;
 
+      // Supplier rates
       var ratesSnap = await Supabase.instance.client
           .from('monthly_rates')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '');
+          .select()
+          .eq('organization_id', orgId);
       Map<String, double> ratesMap = {};
+      Map<String, double> superRatesMap = {};
+      double fallbackNormalRate = 0.0;
+      double fallbackSuperRate = 0.0;
       for (var doc in ratesSnap) {
-        ratesMap[doc['id']] = (doc['teaRate'] ?? 0.0).toDouble();
+        String rId = doc['id'].toString();
+        double r1 = (doc['teaRate'] ?? 0.0).toDouble();
+        double r2 = (doc['teaRate2'] ?? doc['teaRate'] ?? 0.0).toDouble();
+        ratesMap[rId] = r1;
+        superRatesMap[rId] = r2;
+        if (r1 > 0) fallbackNormalRate = r1;
+        if (r2 > 0) fallbackSuperRate = r2;
       }
 
       List<dynamic> customersSnapshot = [];
@@ -225,7 +248,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('customers')
-            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
+            .select()
+            .eq('organization_id', orgId)
             .range(offset, offset + limit - 1);
         customersSnapshot.addAll(chunk);
         if (chunk.length < limit) break;
@@ -242,7 +266,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       while (true) {
         var chunk = await Supabase.instance.client
             .from('daily_entries')
-            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
+            .select()
+            .eq('organization_id', orgId)
             .gte('timestamp', start.toIso8601String())
             .lte('timestamp', end.toIso8601String())
             .range(offset, offset + limit - 1);
@@ -251,12 +276,18 @@ class _OverviewScreenState extends State<OverviewScreen> {
         offset += limit;
       }
 
-      double tw = 0.0, ta = 0.0, f1 = 0, f2 = 0, t1 = 0, t2 = 0;
+      double tw = 0.0, nw = 0.0, sw = 0.0, ta = 0.0, f1 = 0, f2 = 0, t1 = 0, t2 = 0;
+      double calcSupplierPayout = 0.0;
+      Set<String> activeSupplierIds = {};
       Map<String, double> supplierWeightMap = {};
 
       for (var d in filteredEntries) {
-        double w = (d['netWeight'] ?? 0.0).toDouble();
-        tw += w;
+        double w1 = (d['netWeight'] ?? 0.0).toDouble();
+        double w2 = (d['netWeight2'] ?? 0.0).toDouble();
+        double entryWeight = w1 + w2;
+        nw += w1;
+        sw += w2;
+        tw += entryWeight;
         ta += (d['advanceAmount'] ?? 0.0).toDouble();
 
         final parsed = ItemService.parseDailyEntryItems(d);
@@ -266,8 +297,20 @@ class _OverviewScreenState extends State<OverviewScreen> {
         t2 += parsed.t2Qty;
 
         String cId = d['customerId'] ?? '';
-        if (cId.isNotEmpty)
-          supplierWeightMap[cId] = (supplierWeightMap[cId] ?? 0.0) + w;
+        if (cId.isNotEmpty) {
+          if (entryWeight > 0) activeSupplierIds.add(cId);
+          supplierWeightMap[cId] = (supplierWeightMap[cId] ?? 0.0) + entryWeight;
+        }
+
+        // Calculate supplier payout
+        String mKey = '';
+        if (d['timestamp'] != null) {
+          DateTime dt = DateTime.tryParse(d['timestamp'].toString()) ?? DateTime.now();
+          mKey = "${dt.year}-${DateFormat('MMMM').format(dt)}";
+        }
+        double sR1 = ratesMap[mKey] ?? fallbackNormalRate;
+        double sR2 = superRatesMap[mKey] ?? (fallbackSuperRate > 0 ? fallbackSuperRate : sR1);
+        calcSupplierPayout += (w1 * sR1) + (w2 * sR2);
       }
 
       var sortedSuppliers = supplierWeightMap.entries.toList()
@@ -282,21 +325,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
           .toList();
       _topSuppliers = _allSuppliers.take(5).toList();
 
-      // ✅ CORRECT: Read from finalized_bills — these are official locked bills
-      // that already include: transport cost, item prices, previous month arrears rollover
-      // For each customer, get their LATEST finalized bill.
-      // If netPayable < 0, that is the true outstanding amount.
+      // Read from finalized_bills for true arrears
       var allFinalizedBills = await Supabase.instance.client
           .from('finalized_bills')
-          .select('customerId, customerName, refNumber, billData, finalizedAt').eq('organization_id', AppState.currentOrganizationId.value ?? '')
+          .select('customerId, customerName, refNumber, billData, finalizedAt')
+          .eq('organization_id', orgId)
           .order('finalizedAt', ascending: false);
 
-      // Group by customerId — keep only the LATEST bill per customer
       Map<String, Map<String, dynamic>> latestBillPerCustomer = {};
       for (var bill in allFinalizedBills) {
         String cId = bill['customerId'] ?? '';
         if (cId.isEmpty) continue;
-        // Since sorted by finalizedAt desc, first occurrence = latest
         if (!latestBillPerCustomer.containsKey(cId)) {
           latestBillPerCustomer[cId] = bill;
         }
@@ -315,7 +354,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ? (billData['netPayable'] ?? 0.0).toDouble()
             : double.tryParse(billData['netPayable'].toString()) ?? 0.0;
 
-        // If latest bill netPayable is negative → customer owes that amount
         if (netPayable < 0) {
           double outstanding = netPayable.abs();
           arrearsMap[cId] = outstanding;
@@ -348,21 +386,123 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   (b['amount'] as double).compareTo(a['amount'] as double),
             );
 
+      // --- Factory Revenue Calculations ---
+      String startDateStr = DateFormat('yyyy-MM-dd').format(start);
+      String endDateStr = DateFormat('yyyy-MM-dd').format(end);
+
+      List<dynamic> factoryEntries = [];
+      offset = 0;
+      while (true) {
+        var chunk = await Supabase.instance.client
+            .from('factory_entries')
+            .select()
+            .eq('organization_id', orgId)
+            .gte('date', startDateStr)
+            .lte('date', endDateStr)
+            .range(offset, offset + limit - 1);
+        factoryEntries.addAll(chunk);
+        if (chunk.length < limit) break;
+        offset += limit;
+      }
+
+      var factoryRatesSnap = await Supabase.instance.client
+          .from('factory_monthly_rates')
+          .select()
+          .eq('organization_id', orgId);
+      Map<String, Map<String, double>> factoryRatesMap = {};
+      Map<String, Map<String, double>> latestFactoryRates = {};
+      for (var r in factoryRatesSnap) {
+        String fId = r['factoryId'].toString();
+        String m = r['month'].toString();
+        double nRate = (r['normalRate'] ?? 0.0).toDouble();
+        double sRate = (r['superRate'] ?? 0.0).toDouble();
+        factoryRatesMap["${fId}_$m"] = {'normal': nRate, 'super': sRate};
+        latestFactoryRates[fId] = {'normal': nRate, 'super': sRate};
+      }
+
+      var factoryFinalizedBills = await Supabase.instance.client
+          .from('factory_finalized_bills')
+          .select()
+          .eq('organization_id', orgId);
+      Map<String, double> factoryBillsGrossMap = {};
+      for (var fb in factoryFinalizedBills) {
+        String fId = fb['factoryId'].toString();
+        String m = fb['month'].toString();
+        factoryBillsGrossMap["${fId}_$m"] = ((fb['grossIncome'] ?? 0) as num).toDouble();
+      }
+
+      double totalFactoryIncome = 0.0;
+      Map<String, List<dynamic>> entriesByFactoryMonth = {};
+      for (var fe in factoryEntries) {
+        String fId = (fe['factoryId'] ?? '').toString();
+        String dStr = (fe['date'] ?? '').toString();
+        if (fId.isEmpty || dStr.length < 7) continue;
+        String mKey = dStr.substring(0, 7);
+        String groupKey = "${fId}_$mKey";
+        entriesByFactoryMonth.putIfAbsent(groupKey, () => []).add(fe);
+      }
+
+      for (var entry in entriesByFactoryMonth.entries) {
+        String groupKey = entry.key;
+        if (_selectedFilter == 'This Month' && factoryBillsGrossMap.containsKey(groupKey)) {
+          totalFactoryIncome += factoryBillsGrossMap[groupKey]!;
+        } else {
+          List<String> parts = groupKey.split('_');
+          String fId = parts[0];
+          var rates = factoryRatesMap[groupKey] ?? latestFactoryRates[fId];
+          double nRate = rates?['normal'] ?? 0.0;
+          double sRate = rates?['super'] ?? 0.0;
+          double fGross = 0.0;
+          for (var fe in entry.value) {
+            double fnw = ((fe['netWeight'] ?? 0) as num).toDouble();
+            double fsw = ((fe['netWeight2'] ?? 0) as num).toDouble();
+            fGross += (fnw * nRate) + (fsw * sRate);
+          }
+          totalFactoryIncome += fGross;
+        }
+      }
+
+      // Check if current month summary provides supplier leaf gross
+      double finalSupplierCost = calcSupplierPayout;
+      if (_selectedFilter == 'This Month' && _latestSummaryData != null) {
+        String curMonthName = DateFormat('MMMM').format(now);
+        String expectedSummaryId = "${now.year}-$curMonthName";
+        if (_latestSummaryId == expectedSummaryId) {
+          double sGross = (_latestSummaryData!['totalGross'] ?? 0).toDouble();
+          if (sGross > 0) finalSupplierCost = sGross;
+        }
+      }
+
+      // Net dealer income & margin per Kg
+      double netIncome = totalFactoryIncome - finalSupplierCost;
+      double marginPerKg = tw > 0 ? (netIncome / tw) : 0.0;
+      double superRatio = tw > 0 ? (sw / tw * 100.0) : 0.0;
+
       setState(() {
         _totalCustomers = customersSnapshot.length;
         _totalWeight = tw;
+        _normalLeafWeight = nw;
+        _superLeafWeight = sw;
+        _superLeafPercentage = superRatio;
+        _activeSuppliersCount = activeSupplierIds.length;
         _totalAdvance = ta;
         _totalFertilizer1 = f1;
         _totalFertilizer2 = f2;
         _totalTeaPacket1 = t1;
         _totalTeaPacket2 = t2;
         _overallOutstandingAdvances = totalOverallOutstanding;
+
+        _totalFactoryRevenue = totalFactoryIncome;
+        _totalSupplierPayout = finalSupplierCost;
+        _netDealerIncome = netIncome;
+        _dealerMarginPerKg = marginPerKg;
+
         _isLoading = false;
         _isInitialLoad = false;
         _isSummaryLoading = false;
       });
     } catch (e) {
-      print(e);
+      debugPrint('Error fetching dashboard data: $e');
       setState(() {
         _isLoading = false;
         _isSummaryLoading = false;
@@ -375,12 +515,19 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Future<void> _fetchChartData() async {
     if (_isInitialChartLoad) setState(() => _isChartLoading = true);
     DateTime now = DateTime.now();
+    final orgId = AppState.currentOrganizationId.value ?? '';
 
     try {
       var summarySnapshot = await Supabase.instance.client
           .from('monthly_summaries')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '');
+          .select()
+          .eq('organization_id', orgId);
       _allMonthlySummaries = List<Map<String, dynamic>>.from(summarySnapshot);
+
+      var factoryBillsSnapshot = await Supabase.instance.client
+          .from('factory_finalized_bills')
+          .select()
+          .eq('organization_id', orgId);
 
       List<double> incVals = [];
       List<double> expVals = [];
@@ -396,32 +543,24 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
           String fullMonth = DateFormat('MMMM').format(mDate);
           String expectedId = "${mDate.year}-$fullMonth";
-          var match;
-          try {
-            match = summarySnapshot.firstWhere((s) => s['id'] == expectedId);
-          } catch (e) {
-            match = null;
+          String monthKey = "${mDate.year}-${mDate.month.toString().padLeft(2, '0')}";
+
+          // Supplier leaf cost from monthly_summaries
+          var matchSummary = summarySnapshot.where((s) => s['id'] == expectedId).firstOrNull;
+          double supplierCost = matchSummary != null
+              ? ((matchSummary['totalGross'] ?? 0) as num).toDouble()
+              : 0.0;
+
+          // Factory revenue from factory_finalized_bills
+          double factoryRev = 0.0;
+          for (var fb in factoryBillsSnapshot) {
+            if (fb['month'] == monthKey) {
+              factoryRev += ((fb['grossIncome'] ?? 0) as num).toDouble();
+            }
           }
 
-          if (match != null) {
-            double inc = (match['totalGross'] ?? 0).toDouble();
-            double fert =
-                (match['totalF1Amt'] ?? 0).toDouble() +
-                (match['totalF2Amt'] ?? 0).toDouble();
-            if (fert == 0) fert = (match['totalFertilizer'] ?? 0).toDouble();
-            double tea =
-                (match['totalT1Amt'] ?? 0).toDouble() +
-                (match['totalT2Amt'] ?? 0).toDouble();
-            if (tea == 0) tea = (match['totalTeaPacket'] ?? 0).toDouble();
-            double exp =
-                (match['totalAdvance'] ?? 0).toDouble() +
-                (match['totalTransport'] ?? 0).toDouble() +
-                fert +
-                tea;
-
-            incVals[11 - i] = inc;
-            expVals[11 - i] = exp;
-          }
+          incVals[11 - i] = factoryRev;
+          expVals[11 - i] = supplierCost;
         }
       } else if (_chartFilter == 'Yearly') {
         incVals = List.filled(5, 0.0);
@@ -434,20 +573,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
           double yExp = 0;
           for (var doc in summarySnapshot) {
             if (doc['id'].toString().startsWith("$yearStr-")) {
-              yInc += (doc['totalGross'] ?? 0).toDouble();
-              double fert =
-                  (doc['totalF1Amt'] ?? 0).toDouble() +
-                  (doc['totalF2Amt'] ?? 0).toDouble();
-              if (fert == 0) fert = (doc['totalFertilizer'] ?? 0).toDouble();
-              double tea =
-                  (doc['totalT1Amt'] ?? 0).toDouble() +
-                  (doc['totalT2Amt'] ?? 0).toDouble();
-              if (tea == 0) tea = (doc['totalTeaPacket'] ?? 0).toDouble();
-              yExp +=
-                  (doc['totalAdvance'] ?? 0).toDouble() +
-                  (doc['totalTransport'] ?? 0).toDouble() +
-                  fert +
-                  tea;
+              yExp += ((doc['totalGross'] ?? 0) as num).toDouble();
+            }
+          }
+          for (var fb in factoryBillsSnapshot) {
+            if (fb['month'].toString().startsWith(yearStr)) {
+              yInc += ((fb['grossIncome'] ?? 0) as num).toDouble();
             }
           }
           incVals[4 - i] = yInc;
@@ -455,7 +586,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
       }
 
-      if (mounted)
+      if (mounted) {
         setState(() {
           _chartIncomeValues = incVals;
           _chartExpenseValues = expVals;
@@ -463,6 +594,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           _isChartLoading = false;
           _isInitialChartLoad = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _isChartLoading = false);
     }
@@ -1127,88 +1259,104 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   Widget _buildFullSkeletonDashboard() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final bool isDesktop = w >= 960;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: SkeletonBox(
-                  height: 130,
-                  width: double.infinity,
-                  borderRadius: 24,
+              // 4 Executive KPI Skeleton cards
+              if (isDesktop)
+                Row(
+                  children: List.generate(
+                    4,
+                    (i) => Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(right: i < 3 ? 14.0 : 0.0),
+                        child: const SkeletonBox(
+                          height: 120,
+                          width: double.infinity,
+                          borderRadius: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Column(
+                  children: List.generate(
+                    4,
+                    (i) => const Padding(
+                      padding: EdgeInsets.only(bottom: 12.0),
+                      child: SkeletonBox(
+                        height: 110,
+                        width: double.infinity,
+                        borderRadius: 20,
+                      ),
+                    ),
+                  ),
                 ),
+              const SizedBox(height: 24),
+              // Heatmap + Quality Section Skeleton
+              if (isDesktop)
+                const Row(
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: SkeletonBox(
+                        height: 362,
+                        width: double.infinity,
+                        borderRadius: 24,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      flex: 4,
+                      child: SkeletonBox(
+                        height: 362,
+                        width: double.infinity,
+                        borderRadius: 24,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                const Column(
+                  children: [
+                    SkeletonBox(
+                      height: 362,
+                      width: double.infinity,
+                      borderRadius: 24,
+                    ),
+                    SizedBox(height: 16),
+                    SkeletonBox(
+                      height: 362,
+                      width: double.infinity,
+                      borderRadius: 24,
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 28),
+              const SkeletonBox(height: 30, width: 150, borderRadius: 8),
+              const SizedBox(height: 16),
+              const SkeletonBox(
+                height: 280,
+                width: double.infinity,
+                borderRadius: 24,
               ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: SkeletonBox(
-                  height: 130,
-                  width: double.infinity,
-                  borderRadius: 24,
-                ),
+              const SizedBox(height: 32),
+              const SkeletonBox(
+                height: 340,
+                width: double.infinity,
+                borderRadius: 24,
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          const SkeletonBox(
-            height: 280,
-            width: double.infinity,
-            borderRadius: 24,
-          ),
-          const SizedBox(height: 24),
-          const SkeletonBox(height: 30, width: 150, borderRadius: 8),
-          const SizedBox(height: 16),
-          const SkeletonBox(
-            height: 340,
-            width: double.infinity,
-            borderRadius: 24,
-          ),
-          const SizedBox(height: 32),
-          const SkeletonBox(height: 30, width: 120, borderRadius: 8),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Expanded(
-                child: SkeletonBox(
-                  height: 140,
-                  width: double.infinity,
-                  borderRadius: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: SkeletonBox(
-                  height: 140,
-                  width: double.infinity,
-                  borderRadius: 20,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Expanded(
-                child: SkeletonBox(
-                  height: 140,
-                  width: double.infinity,
-                  borderRadius: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: SkeletonBox(
-                  height: 140,
-                  width: double.infinity,
-                  borderRadius: 20,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1276,7 +1424,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildCriticalAlertBanner(context, currencyF),
-                    _buildCombinedHeader(context, currencyF),
+                    _buildExecutiveKpiStrip(context, currencyF, weightF),
+                    const SizedBox(height: 24),
+                    _buildHarvestAndQualitySection(context, weightF),
                     const SizedBox(height: 24),
 
                     _buildIconToggleHeader(
@@ -1303,7 +1453,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     const SizedBox(height: 32),
 
                     _buildIconToggleHeader(
-                      AppStrings.incomeAndExpense,
+                      AppStrings.factoryRevenueVsCost,
                       _chartFilter,
                       _chartFilterOptions,
                       chartIconMap,
@@ -1332,12 +1482,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
                                     _buildLegendItem(
-                                      AppStrings.incomeRs,
+                                      AppStrings.factoryRevenue,
                                       const Color(0xFF20C997),
                                     ),
                                     const SizedBox(width: 16),
                                     _buildLegendItem(
-                                      AppStrings.expenseRs,
+                                      AppStrings.supplierPayout,
                                       const Color(0xFFFF6B6B),
                                     ),
                                   ],
@@ -1404,32 +1554,73 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildCombinedHeader(BuildContext context, NumberFormat currencyF) {
+  Widget _buildExecutiveKpiStrip(
+    BuildContext context,
+    NumberFormat currencyF,
+    NumberFormat weightF,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        double w = constraints.maxWidth;
-        bool isMobile = w < 800;
+        final w = constraints.maxWidth;
+        final bool isDesktop = w >= 960;
+        final bool isTablet = w >= 600 && w < 960;
 
-        Widget customerCard = _statHeaderCard(
-          title: AppStrings.customers,
-          value: '$_totalCustomers',
-          icon: Icons.people_alt_rounded,
-          color: primaryAppColor,
-          bgColor: Colors.white,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CustomerAnalysisScreen(),
-            ),
-          ),
+        final card1 = _buildKpiCard(
+          title: AppStrings.netDealerIncome,
+          value: 'Rs. ${currencyF.format(_netDealerIncome)}',
+          badgeText: _totalWeight > 0 ? 'Rs. ${_dealerMarginPerKg.toStringAsFixed(2)} / Kg' : null,
+          badgeColor: const Color(0xFF059669),
+          subtitle: AppStrings.dealerGrossMargin,
+          icon: Icons.payments_rounded,
+          gradientColors: [
+            const Color(0xFFECFDF5),
+            const Color(0xFFD1FAE5).withValues(alpha: 0.6),
+          ],
+          accentColor: const Color(0xFF059669),
+          borderColor: const Color(0xFF10B981).withValues(alpha: 0.25),
         );
 
-        Widget arrearsCard = _statHeaderCard(
-          title: AppStrings.totalOutstandingAmount,
+        final card2 = _buildKpiCard(
+          title: AppStrings.factoryRevenue,
+          value: 'Rs. ${currencyF.format(_totalFactoryRevenue)}',
+          badgeText: null,
+          subtitle: AppStrings.allocatedToOtherFactories,
+          icon: Icons.factory_rounded,
+          gradientColors: [
+            const Color(0xFFEFF6FF),
+            const Color(0xFFDBEAFE).withValues(alpha: 0.6),
+          ],
+          accentColor: const Color(0xFF2563EB),
+          borderColor: const Color(0xFF3B82F6).withValues(alpha: 0.25),
+        );
+
+        final card3 = _buildKpiCard(
+          title: AppStrings.supplierPayout,
+          value: 'Rs. ${currencyF.format(_totalSupplierPayout)}',
+          badgeText: null,
+          subtitle: '${weightF.format(_totalWeight)} Kg intake',
+          icon: Icons.energy_savings_leaf_rounded,
+          gradientColors: [
+            const Color(0xFFF5F3FF),
+            const Color(0xFFEDE9FE).withValues(alpha: 0.6),
+          ],
+          accentColor: const Color(0xFF7C3AED),
+          borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+        );
+
+        final card4 = _buildKpiCard(
+          title: AppStrings.capitalExposure,
           value: 'Rs. ${currencyF.format(_overallOutstandingAdvances)}',
+          badgeText: _allArrears.isNotEmpty ? '${_allArrears.length} ${AppStrings.customers}' : null,
+          badgeColor: const Color(0xFFDC2626),
+          subtitle: AppStrings.debtOutstanding,
           icon: Icons.account_balance_wallet_rounded,
-          color: const Color(0xFFD32F2F),
-          bgColor: Colors.white,
+          gradientColors: [
+            const Color(0xFFFEF2F2),
+            const Color(0xFFFEE2E2).withValues(alpha: 0.6),
+          ],
+          accentColor: const Color(0xFFDC2626),
+          borderColor: const Color(0xFFEF4444).withValues(alpha: 0.25),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -1439,15 +1630,200 @@ class _OverviewScreenState extends State<OverviewScreen> {
           ),
         );
 
+        if (isDesktop) {
+          return Row(
+            children: [
+              Expanded(child: card1),
+              const SizedBox(width: 14),
+              Expanded(child: card2),
+              const SizedBox(width: 14),
+              Expanded(child: card3),
+              const SizedBox(width: 14),
+              Expanded(child: card4),
+            ],
+          );
+        } else if (isTablet) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: card1),
+                  const SizedBox(width: 14),
+                  Expanded(child: card2),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: card3),
+                  const SizedBox(width: 14),
+                  Expanded(child: card4),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              card1,
+              const SizedBox(height: 12),
+              card2,
+              const SizedBox(height: 12),
+              card3,
+              const SizedBox(height: 12),
+              card4,
+            ],
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildKpiCard({
+    required String title,
+    required String value,
+    String? badgeText,
+    Color? badgeColor,
+    required String subtitle,
+    required IconData icon,
+    required List<Color> gradientColors,
+    required Color accentColor,
+    required Color borderColor,
+    VoidCallback? onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.06),
+            blurRadius: 16,
+            spreadRadius: 0,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: gradientColors,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor, width: 1.5),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(icon, color: accentColor, size: 20),
+                        ),
+                        if (badgeText != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (badgeColor ?? accentColor).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: badgeColor ?? accentColor,
+                              ),
+                            ),
+                          )
+                        else if (onTap != null)
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: accentColor.withValues(alpha: 0.6),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blueGrey.shade800,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF111827),
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blueGrey.shade600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHarvestAndQualitySection(BuildContext context, NumberFormat weightF) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 880;
+        final heatmapWidget = _buildHeatMapContainer(isMobile: isMobile);
+        final qualityWidget = _buildQualityAndIntakeMatrixCard(context, weightF, isMobile: isMobile);
+
         if (isMobile) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildHeatMapContainer(),
+              heatmapWidget,
               const SizedBox(height: 16),
-              customerCard,
-              const SizedBox(height: 16),
-              arrearsCard,
+              qualityWidget,
             ],
           );
         }
@@ -1455,40 +1831,32 @@ class _OverviewScreenState extends State<OverviewScreen> {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _buildHeatMapContainer()),
+            Expanded(flex: 6, child: heatmapWidget),
             const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                children: [
-                  customerCard,
-                  const SizedBox(height: 16),
-                  arrearsCard,
-                ],
-              ),
-            ),
+            Expanded(flex: 4, child: qualityWidget),
           ],
         );
       },
     );
   }
 
-  Widget _statHeaderCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    required Color bgColor,
-    required VoidCallback onTap,
+  Widget _buildQualityAndIntakeMatrixCard(
+    BuildContext context,
+    NumberFormat weightF, {
+    bool isMobile = false,
   }) {
+    final int activeDays = _heatmapData.values.where((w) => w > 0).length;
+    final double dailyAvg = activeDays > 0 ? (_totalWeight / activeDays) : 0.0;
+
     return Container(
-      height: 173, // Fixed height to ensure both tiles match exactly
+      height: isMobile ? null : 362,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 20,
-            spreadRadius: 0,
+            spreadRadius: 2,
             offset: const Offset(0, 4),
           ),
         ],
@@ -1498,105 +1866,314 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.white.withOpacity(0.7),
-                  Colors.white.withOpacity(0.35),
+                  Colors.white.withValues(alpha: 0.7),
+                  Colors.white.withValues(alpha: 0.35),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.white.withValues(alpha: 0.7),
                 width: 1.5,
               ),
             ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(24),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 20,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: primaryAppColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.insights_rounded, color: primaryAppColor, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              AppStrings.leafHarvestAnalytics,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            Text(
+                              AppStrings.qualityBreakdown,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blueGrey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    InkWell(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CustomerAnalysisScreen(),
+                        ),
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: primaryAppColor.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: primaryAppColor.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              AppStrings.customerAnalysis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: primaryAppColor,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.arrow_forward_ios_rounded, size: 10, color: primaryAppColor),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Super Leaf Progress & Yield Ratio
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: color.withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(icon, color: color, size: 20),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: TextStyle(
-                                color: Colors.blueGrey.shade600,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                          Row(
+                            children: [
+                              const Icon(Icons.eco_rounded, size: 16, color: Color(0xFF059669)),
+                              const SizedBox(width: 6),
+                              Text(
+                                AppStrings.superLeafRatio,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1E293B),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: color.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'See',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: color,
-                                  ),
-                                ),
-                                const SizedBox(width: 2),
-                                Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  size: 10,
-                                  color: color,
-                                ),
-                              ],
+                            child: Text(
+                              '${_superLeafPercentage.toStringAsFixed(1)}%',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF047857),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            value,
-                            style: TextStyle(
-                              color: const Color(0xFF1F2937),
-                              fontSize: color == const Color(0xFFD32F2F)
-                                  ? 18
-                                  : 26,
-                              fontWeight: FontWeight.w800,
-                            ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          height: 10,
+                          child: LinearProgressIndicator(
+                            value: _totalWeight > 0 ? (_superLeafWeight / _totalWeight).clamp(0.0, 1.0) : 0.0,
+                            backgroundColor: const Color(0xFF93C5FD).withValues(alpha: 0.5),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF3B82F6),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${AppStrings.normalLeaf}: ${weightF.format(_normalLeafWeight)} Kg',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blueGrey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF10B981),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${AppStrings.superLeaf}: ${weightF.format(_superLeafWeight)} Kg',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF047857),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(height: 12),
+
+                // Dual Operational Matrix Blocks (Active Suppliers + Daily Intake)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.people_alt_rounded, size: 16, color: primaryAppColor),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    AppStrings.activeSuppliers,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blueGrey.shade700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '$_activeSuppliersCount / $_totalCustomers',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            Text(
+                              '${_totalCustomers > 0 ? ((_activeSuppliersCount / _totalCustomers) * 100).toStringAsFixed(0) : '0'}% active rate',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blueGrey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.speed_rounded, size: 16, color: Color(0xFFD97706)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    AppStrings.dailyAverageIntake,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blueGrey.shade700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${weightF.format(dailyAvg)} Kg',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            Text(
+                              '$activeDays active days',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blueGrey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
