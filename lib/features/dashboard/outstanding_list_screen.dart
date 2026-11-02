@@ -1,9 +1,12 @@
+import 'package:smart_entry/core/localization/app_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/billing/monthly_bill_screen.dart';
 import 'customer_timeline_screen.dart';
 import '../../core/widgets/skeleton_box.dart';
+import '../../core/widgets/max_number_input_formatter.dart';
 import 'package:smart_entry/core/app_state.dart';
 
 class OutstandingListScreen extends StatefulWidget {
@@ -89,7 +92,7 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('දත්ත ලබාගැනීමේ දෝෂයක්: $e'),
+            content: Text('${AppStrings.errorPrefix}$e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -152,19 +155,16 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
     return _displayList.sublist(start, end);
   }
 
-  // සංශෝධනය කරන ලද Recovery Time Function එක
   String _getRecoveryTime(double loan, double monthlyDeduction) {
-    if (monthlyDeduction <= 0) return "අයකරගත නොහැක";
+    if (monthlyDeduction <= 0) return AppStrings.cannotRecover;
 
-    // ආසන්නතම අගයට රවුම් කිරීම (round)
     int totalMonths = (loan / monthlyDeduction).round();
 
-    // මාස 1කට වඩා අඩු නම් අවම වශයෙන් මාස 1ක් ලෙස පෙන්වීම
     if (totalMonths < 1) {
       totalMonths = 1;
     }
 
-    return "මාස $totalMonths";
+    return AppStrings.isSinhala ? 'මාස $totalMonths' : '$totalMonths Months';
   }
 
   @override
@@ -311,10 +311,10 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
               children: [
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       flex: 3,
                       child: Text(
-                        'මාසික කපාගැනීමේ %',
+                        AppStrings.monthlyDeductionPct,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
@@ -353,9 +353,9 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'සාමාන්‍ය දළු කිලෝ 1 ක මිල: Rs.',
+                        AppStrings.isSinhala ? 'සාමාන්‍ය දළු කිලෝ 1 ක මිල: Rs.' : 'Average Leaf Rate (1kg): Rs.',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
@@ -369,6 +369,7 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
                           height: 36,
                           child: TextField(
                             controller: _rateController,
+                            inputFormatters: [MaxNumberInputFormatter.currency],
                             keyboardType: TextInputType.number,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
@@ -395,10 +396,10 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       flex: 4,
                       child: Text(
-                        'සාමාන්‍යය සඳහා මාස ගණන:',
+                        AppStrings.isSinhala ? 'සාමාන්‍යය සඳහා මාස ගණන:' : 'Months for Average:',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
@@ -463,9 +464,9 @@ class _OutstandingListScreenState extends State<OutstandingListScreen> {
           // List View Area
           Expanded(
             child: _displayList.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'කිසිදු හිඟ මුදලක් නොමැත 🎉',
+                      AppStrings.noOutstandingBalances,
                       style: TextStyle(
                         fontSize: 16,
                         color: Color(0xFF10B981),

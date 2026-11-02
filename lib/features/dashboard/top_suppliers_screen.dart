@@ -1,3 +1,4 @@
+import 'package:smart_entry/core/localization/app_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -14,7 +15,7 @@ class TopSuppliersScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text('සියලුම සැපයුම්කරුවන්', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+        title: Text(AppStrings.allSuppliers, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1F2937),
         elevation: 0,
@@ -25,7 +26,7 @@ class TopSuppliersScreen extends StatelessWidget {
         ),
       ),
       body: allSuppliers.isEmpty
-          ? const Center(child: Text('දත්ත නොමැත', style: TextStyle(color: Colors.grey)))
+          ? Center(child: Text(AppStrings.noDataFound, style: const TextStyle(color: Colors.grey)))
           : ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               itemCount: allSuppliers.length,

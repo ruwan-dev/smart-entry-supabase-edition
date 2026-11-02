@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Status bar වර්ණය වෙනස් කිරීමට
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; 
 import 'package:smart_entry/core/customer/customer_form_screen.dart';
+import 'package:smart_entry/core/factory/factory_form_screen.dart';
 import 'package:smart_entry/core/entries/daily_entries_screen.dart';
 
 import '../settings/settings_screen.dart';
@@ -11,6 +12,9 @@ import '../../core/network_service.dart';
 import '../../core/app_state.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/login_screen.dart';
+import '../../core/localization/app_strings.dart';
+import '../../core/localization/app_language.dart';
+import '../../services/update_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,12 +32,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _fetchOrgName();
     AppState.refreshTrigger.addListener(_fetchOrgName);
+    // Check for app updates on Windows after the first frame renders
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateService.checkForUpdate(context);
+    });
+    AppLanguageService.currentLanguage.addListener(_onLanguageChanged);
   }
 
   @override
   void dispose() {
     AppState.refreshTrigger.removeListener(_fetchOrgName);
+    AppLanguageService.currentLanguage.removeListener(_onLanguageChanged);
     super.dispose();
+  }
+
+  void _onLanguageChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _fetchOrgName() async {
@@ -57,17 +71,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to log out of the system?'),
+        title: Text(AppStrings.logout),
+        content: Text(AppStrings.logoutConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
+            child: Text(AppStrings.no),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Yes'),
+            child: Text(AppStrings.yes),
           ),
         ],
       ),
@@ -85,183 +99,210 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // All 5 screens always alive in IndexedStack
-  final List<Widget> _screens = [
-    const OverviewScreen(), // 0. Overview
-    const CustomerFormScreen(), // 1. Customers
-    const DailyEntriesScreen(), // 2. Daily Entries
-    const ReportsScreen(), // 3. Reports (PDF)
-    const SettingsScreen(), // 4. Settings
-  ];
-
   final Color primaryAppColor = const Color(0xFF1976D2);
 
-  void _onItemTapped(int index) {
+  void _onItemTapped(int visualIndex, bool isMobile) {
     setState(() {
-      _selectedIndex = index;
+      if (isMobile) {
+        // Map visual mobile index (0, 1, 2) to actual screens index (0, 1, 3)
+        if (visualIndex == 0) _selectedIndex = 0;
+        else if (visualIndex == 1) _selectedIndex = 1;
+        else if (visualIndex == 2) _selectedIndex = 3;
+      } else {
+        _selectedIndex = visualIndex;
+      }
     });
+  }
+
+  int _getVisualIndex(bool isMobile) {
+    if (!isMobile) return _selectedIndex;
+    
+    // Map actual screens index (0, 1, 3) to visual mobile index (0, 1, 2)
+    if (_selectedIndex == 0) return 0;
+    if (_selectedIndex == 1) return 1;
+    if (_selectedIndex == 3) return 2;
+    return 0; // Default if somehow on an unsupported tab
   }
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: AppLanguageService.currentLanguage,
+      builder: (context, currentLang, _) {
+        final double screenWidth = MediaQuery.of(context).size.width;
+        final bool isMobile = screenWidth < 600;
 
-    // On mobile: only tabs 0, 1, 2 (Overview, Customers, Entries) are shown.
-    // Reports (3) and Settings (4) are hidden from the nav bar.
-    // If the current index is 3 or 4 and we switch to mobile, clamp to 0.
-    if (isMobile && _selectedIndex > 2) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() => _selectedIndex = 0);
-      });
-    }
+        // On mobile: only tabs 0, 1, 3 (Overview, Customers, Entries) are supported.
+        if (isMobile && (_selectedIndex == 2 || _selectedIndex > 3)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            setState(() => _selectedIndex = 0);
+          });
+        }
 
-    // Mobile nav items (3)
-    const mobileItems = [
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.dashboard_rounded, size: 28),
-        icon: Icon(Icons.dashboard_outlined, size: 24),
-        label: 'Overview',
-      ),
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.people_alt_rounded, size: 28),
-        icon: Icon(Icons.people_alt_outlined, size: 24),
-        label: 'Customers',
-      ),
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.edit_document, size: 28),
-        icon: Icon(Icons.edit_document, size: 24),
-        label: 'Entries',
-      ),
-    ];
+        // Mobile nav items (3)
+        const mobileItems = [
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.dashboard_rounded, size: 28),
+            icon: Icon(Icons.dashboard_outlined, size: 24),
+            label: 'Overview',
+          ),
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.people_alt_rounded, size: 28),
+            icon: Icon(Icons.people_alt_outlined, size: 24),
+            label: 'Customers',
+          ),
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.edit_document, size: 28),
+            icon: Icon(Icons.edit_document, size: 24),
+            label: 'Entries',
+          ),
+        ];
 
-    // Desktop nav items (5)
-    const desktopItems = [
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.dashboard_rounded, size: 28),
-        icon: Icon(Icons.dashboard_outlined, size: 24),
-        label: 'Overview',
-      ),
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.people_alt_rounded, size: 28),
-        icon: Icon(Icons.people_alt_outlined, size: 24),
-        label: 'Customers',
-      ),
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.edit_document, size: 28),
-        icon: Icon(Icons.edit_document, size: 24),
-        label: 'Entries',
-      ),
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.analytics_rounded, size: 28),
-        icon: Icon(Icons.analytics_outlined, size: 24),
-        label: 'Reports',
-      ),
-      BottomNavigationBarItem(
-        activeIcon: Icon(Icons.settings_rounded, size: 28),
-        icon: Icon(Icons.settings_outlined, size: 24),
-        label: 'Settings',
-      ),
-    ];
+        // Desktop nav items (6)
+        const desktopItems = [
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.dashboard_rounded, size: 28),
+            icon: Icon(Icons.dashboard_outlined, size: 24),
+            label: 'Overview',
+          ),
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.people_alt_rounded, size: 28),
+            icon: Icon(Icons.people_alt_outlined, size: 24),
+            label: 'Customers',
+          ),
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.business_rounded, size: 28),
+            icon: Icon(Icons.business_outlined, size: 24),
+            label: 'Factories',
+          ),
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.edit_document, size: 28),
+            icon: Icon(Icons.edit_document, size: 24),
+            label: 'Entries',
+          ),
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.analytics_rounded, size: 28),
+            icon: Icon(Icons.analytics_outlined, size: 24),
+            label: 'Reports',
+          ),
+          BottomNavigationBarItem(
+            activeIcon: Icon(Icons.settings_rounded, size: 28),
+            icon: Icon(Icons.settings_outlined, size: 24),
+            label: 'Settings',
+          ),
+        ];
 
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        toolbarHeight: 40,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: primaryAppColor,
-          statusBarIconBrightness: Brightness.light,
-        ),
-        elevation: 0,
-        centerTitle: false,
-        backgroundColor: primaryAppColor,
-        foregroundColor: Colors.white,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Welcome, ${_orgName.toUpperCase()}',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+        return Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            toolbarHeight: 40,
+            systemOverlayStyle: SystemUiOverlayStyle(
+              statusBarColor: primaryAppColor,
+              statusBarIconBrightness: Brightness.light,
+            ),
+            elevation: 0,
+            centerTitle: false,
+            backgroundColor: primaryAppColor,
+            foregroundColor: Colors.white,
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${AppStrings.welcome}, ${_orgName.toUpperCase()}',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: NetworkService().connectionStatus,
+                    builder: (context, isOnline, child) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _StatusDot(isOnline: isOnline),
+                          const SizedBox(width: 8),
+                          Text(
+                            isOnline ? AppStrings.online : AppStrings.offline,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isOnline
+                                  ? const Color(0xFFA7F3D0)
+                                  : const Color(0xFFFECACA),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(20),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout_rounded),
+                tooltip: AppStrings.logout,
+                onPressed: _logout,
               ),
-              child: ValueListenableBuilder<bool>(
-                valueListenable: NetworkService().connectionStatus,
-                builder: (context, isOnline, child) {
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _StatusDot(isOnline: isOnline),
-                      const SizedBox(width: 8),
-                      Text(
-                        isOnline ? 'Online' : 'Offline',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: isOnline
-                              ? const Color(0xFFA7F3D0)
-                              : const Color(0xFFFECACA),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              const SizedBox(width: 8),
+            ],
+          ),
+          body: IndexedStack(
+            key: ValueKey('main_screens_stack_${currentLang.code}'),
+            index: _selectedIndex,
+            children: [
+              OverviewScreen(key: ValueKey('overview_${currentLang.code}')),
+              CustomerFormScreen(key: ValueKey('customers_${currentLang.code}')),
+              FactoryFormScreen(key: ValueKey('factories_${currentLang.code}')),
+              DailyEntriesScreen(key: ValueKey('entries_${currentLang.code}')),
+              ReportsScreen(key: ValueKey('reports_${currentLang.code}')),
+              SettingsScreen(key: ValueKey('settings_${currentLang.code}')),
+            ],
+          ),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: _getVisualIndex(isMobile),
+              onTap: (index) => _onItemTapped(index, isMobile),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              selectedItemColor: primaryAppColor,
+              unselectedItemColor: Colors.blueGrey.shade300,
+              selectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
               ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 10,
+              ),
+              showUnselectedLabels: true,
+              items: isMobile ? mobileItems : desktopItems,
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: _logout,
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: IndexedStack(index: _selectedIndex, children: _screens),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          currentIndex: isMobile ? _selectedIndex.clamp(0, 2) : _selectedIndex,
-          onTap: _onItemTapped,
-          backgroundColor: Colors.white,
-          elevation: 0,
-          selectedItemColor: primaryAppColor,
-          unselectedItemColor: Colors.blueGrey.shade300,
-          selectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 11,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 10,
-          ),
-          showUnselectedLabels: true,
-          items: isMobile ? mobileItems : desktopItems,
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -314,7 +355,7 @@ class _StatusDotState extends State<_StatusDot>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: statusColor.withOpacity(1 - _controller.value),
+                    color: statusColor.withValues(alpha: (1 - _controller.value).clamp(0.0, 1.0)),
                     width: 1.5,
                   ),
                 ),
@@ -327,7 +368,7 @@ class _StatusDotState extends State<_StatusDot>
                   color: statusColor,
                   boxShadow: [
                     BoxShadow(
-                      color: statusColor.withOpacity(0.4),
+                      color: statusColor.withValues(alpha: 0.4),
                       blurRadius: 3,
                     ),
                   ],

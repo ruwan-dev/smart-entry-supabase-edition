@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_entry/core/app_state.dart';
+import 'package:smart_entry/core/whatsapp/whatsapp_service.dart';
 
 class WhatsAppBatchDialog extends StatefulWidget {
   final List<Map<String, dynamic>> bills;
@@ -38,11 +39,12 @@ class _WhatsAppBatchDialogState extends State<WhatsAppBatchDialog> {
   void initState() {
     super.initState();
     total = widget.bills.length;
+    WhatsAppService.instance.initialize();
     _initSocket();
   }
 
   void _initSocket() {
-    socket = io.io('http://localhost:3000', <String, dynamic>{
+    socket = io.io('http://localhost:3333', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });
@@ -166,7 +168,7 @@ class _WhatsAppBatchDialogState extends State<WhatsAppBatchDialog> {
   Future<void> _startBatchRequest() async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/batch-send'),
+        Uri.parse('http://localhost:3333/api/batch-send'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'bills': widget.bills}),
       );
@@ -198,17 +200,60 @@ class _WhatsAppBatchDialogState extends State<WhatsAppBatchDialog> {
     super.dispose();
   }
 
+  void _handleClose(BuildContext context) {
+    if (batchStarted && !isCompleted && !isError) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cancel Batch?'),
+          content: const Text('Messages are currently being sent. Are you sure you want to cancel and exit?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('No'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Yes, Cancel', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     double progress = total == 0 ? 0 : (current / total);
 
     return PopScope(
-      canPop: isCompleted || isError,
+      canPop: isCompleted || isError || qrCodeData != null,
       child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          isCompleted && !isError ? 'Completed!' : 'WhatsApp Automation',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                isCompleted && !isError ? 'Completed!' : 'WhatsApp Automation',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              splashRadius: 20,
+              onPressed: () => _handleClose(context),
+              tooltip: 'Close',
+            ),
+          ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -233,7 +278,7 @@ class _WhatsAppBatchDialogState extends State<WhatsAppBatchDialog> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 10,
                     ),
                   ],
@@ -286,6 +331,27 @@ class _WhatsAppBatchDialogState extends State<WhatsAppBatchDialog> {
           ],
         ),
         actions: [
+          if (qrCodeData != null && !batchStarted)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+          if (isError) ...[
+            OutlinedButton.icon(
+              onPressed: () async {
+                setState(() {
+                  isError = false;
+                  isCompleted = false;
+                  status = "Starting service & reconnecting...";
+                });
+                await WhatsAppService.instance.restartService();
+                _initSocket();
+              },
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Start Service & Retry'),
+            ),
+            const SizedBox(width: 8),
+          ],
           if (isCompleted || isError)
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),

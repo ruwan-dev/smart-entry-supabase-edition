@@ -7,6 +7,9 @@ import 'package:smart_entry/core/widgets/blinking_logo_loader.dart';
 import 'widgets/monthly_closing_widget.dart';
 import 'widgets/whatsapp_management_widget.dart';
 import 'package:smart_entry/core/app_state.dart';
+import '../../core/items/item_service.dart';
+import 'package:smart_entry/core/localization/app_strings.dart';
+import 'package:smart_entry/core/localization/app_language.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -51,7 +54,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    AppLanguageService.currentLanguage.addListener(_onLanguageChanged);
     _fetchCustomers();
+  }
+
+  void _onLanguageChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppLanguageService.currentLanguage.removeListener(_onLanguageChanged);
+    super.dispose();
   }
 
   Future<void> _fetchCustomers() async {
@@ -100,7 +114,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _analyzeData() async {
     if (_selectedReportType == 'Customer Wise' && _selectedCustomerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('කරුණාකර පාරිභෝගිකයෙකු තෝරන්න')),
+        SnackBar(content: Text(AppStrings.pleaseSelectCustomer)),
       );
       return;
     }
@@ -108,17 +122,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
     setState(() => _isLoading = true);
 
     try {
-      var priceDoc = await Supabase.instance.client
-          .from('global_settings')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
-          .eq('id', 'prices')
-          .maybeSingle();
-      if (priceDoc != null) {
-        _fert1Price = (priceDoc['fertilizer1Price'] ?? 0.0).toDouble();
-        _fert2Price = (priceDoc['fertilizer2Price'] ?? 0.0).toDouble();
-        _teaPkt1Price = (priceDoc['teaPacket1Price'] ?? 0.0).toDouble();
-        _teaPkt2Price = (priceDoc['teaPacket2Price'] ?? 0.0).toDouble();
-      }
+      final orgItems = await ItemService.getItems(
+        organizationId: AppState.currentOrganizationId.value ?? '',
+      );
+      _fert1Price = orgItems.where((it) => it.slotIndex == 1).firstOrNull?.unitPrice ?? 15500.0;
+      _fert2Price = orgItems.where((it) => it.slotIndex == 2).firstOrNull?.unitPrice ?? 18000.0;
+      _teaPkt1Price = orgItems.where((it) => it.slotIndex == 3).firstOrNull?.unitPrice ?? 650.0;
+      _teaPkt2Price = orgItems.where((it) => it.slotIndex == 4).firstOrNull?.unitPrice ?? 0.0;
 
       DateTime endOfDay = DateTime(
         _endDate.year,
@@ -154,30 +164,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
         entries = entries.where((doc) => (doc['netWeight'] ?? 0) > 0).toList();
       } else if (_selectedReportType == 'Fertilizer Wise') {
         entries = entries
-            .where(
-              (doc) =>
-                  (doc['fertilizer1Qty'] ?? 0) > 0 ||
-                  (doc['fertilizer2Qty'] ?? 0) > 0,
-            )
+            .where((doc) {
+              final parsed = ItemService.parseDailyEntryItems(doc);
+              return parsed.hasFertilizer || parsed.otherDynamicQty > 0;
+            })
             .toList();
       } else if (_selectedReportType == 'Tea Packet Wise') {
         entries = entries
-            .where(
-              (doc) =>
-                  (doc['teaPacket1Qty'] ?? 0) > 0 ||
-                  (doc['teaPacket2Qty'] ?? 0) > 0,
-            )
+            .where((doc) {
+              final parsed = ItemService.parseDailyEntryItems(doc);
+              return parsed.hasTeaPacket;
+            })
             .toList();
       } else if (_selectedReportType == 'Advances & Items') {
         entries = entries
-            .where(
-              (doc) =>
-                  (doc['advanceAmount'] ?? 0) > 0 ||
-                  (doc['fertilizer1Qty'] ?? 0) > 0 ||
-                  (doc['fertilizer2Qty'] ?? 0) > 0 ||
-                  (doc['teaPacket1Qty'] ?? 0) > 0 ||
-                  (doc['teaPacket2Qty'] ?? 0) > 0,
-            )
+            .where((doc) {
+              if ((doc['advanceAmount'] ?? 0) > 0) return true;
+              final parsed = ItemService.parseDailyEntryItems(doc);
+              return parsed.hasAnyItems;
+            })
             .toList();
       }
 
@@ -193,23 +198,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
       for (var data in entries) {
         double w = (data['netWeight'] ?? 0).toDouble();
         double adv = (data['advanceAmount'] ?? 0).toDouble();
-        double f1 = (data['fertilizer1Qty'] ?? 0).toDouble();
-        double f2 = (data['fertilizer2Qty'] ?? 0).toDouble();
-        double t1 = (data['teaPacket1Qty'] ?? 0).toDouble();
-        double t2 = (data['teaPacket2Qty'] ?? 0).toDouble();
-        double rowTotal =
-            adv +
-            (f1 * _fert1Price) +
-            (f2 * _fert2Price) +
-            (t1 * _teaPkt1Price) +
-            (t2 * _teaPkt2Price);
+        
+        final parsed = ItemService.parseDailyEntryItems(
+          data,
+          f1Price: _fert1Price,
+          f2Price: _fert2Price,
+          t1Price: _teaPkt1Price,
+          t2Price: _teaPkt2Price,
+        );
+
+        double rowTotal = adv + parsed.totalItemsAmt;
 
         tWeight += w;
         tAdvance += adv;
-        tF1 += f1;
-        tF2 += f2;
-        tT1 += t1;
-        tT2 += t2;
+        tF1 += parsed.f1Qty;
+        tF2 += parsed.f2Qty;
+        tT1 += parsed.t1Qty;
+        tT2 += parsed.t2Qty;
         tDed += rowTotal;
       }
 
@@ -236,11 +241,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. DefaultTabController මගින් පිටුව කොටස් 3කට වෙන් කිරීම
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF4F6F8), // ආකර්ෂණීය ලා අළු පසුබිම
+        backgroundColor: const Color(0xFFF4F6F8),
         appBar: AppBar(
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF1F2937),
@@ -259,22 +263,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
               fontWeight: FontWeight.w600,
               fontSize: 13,
             ),
-            tabs: const [
-              Tab(text: 'ගිණුම් පියවීම (Closing)'),
-              Tab(text: 'දත්ත විශ්ලේෂණය (Analysis)'),
-              Tab(text: 'WhatsApp (වට්ස්ඇප්)'),
+            tabs: [
+              Tab(text: AppStrings.accountClosing),
+              Tab(text: AppStrings.dataAnalysis),
+              Tab(text: AppStrings.whatsapp),
             ],
           ),
         ),
         body: TabBarView(
           children: [
-            // 1 වැනි Tab එක: මාසික ගිණුම් පියවීම
             _buildClosingTab(),
 
-            // 2 වැනි Tab එක: දත්ත විශ්ලේෂණය
             _buildAnalysisTab(),
 
-            // 3 වැනි Tab එක: WhatsApp
             const WhatsappManagementWidget(),
           ],
         ),
@@ -282,55 +283,51 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // --- Tab 1: ගිණුම් පියවීම ---
   Widget _buildClosingTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'මාසික ගිණුම් අවසන් කිරීම',
-            style: TextStyle(
+          Text(
+            AppStrings.monthlyClosingTitle,
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
               color: Color(0xFF1F2937),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'මෙහිදී අදාළ මාසයේ සියලුම දත්ත පරීක්ෂා කර ස්ථිර කිරීම සිදු කෙරේ.',
-            style: TextStyle(fontSize: 13, color: Colors.blueGrey),
+          Text(
+            AppStrings.monthlyClosingSubtitle,
+            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
           ),
           const SizedBox(height: 24),
 
-          // Original widget එක අලංකාර Container එකකට ඇතුළත් කර ඇත
-          // Original widget එක අලංකාර Container එකකට ඇතුළත් කර ඇත
           const MonthlyClosingWidget(),
         ],
       ),
     );
   }
 
-  // --- Tab 2: දත්ත විශ්ලේෂණය ---
   Widget _buildAnalysisTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'දත්ත විශ්ලේෂණය',
-            style: TextStyle(
+          Text(
+            AppStrings.dataAnalysis,
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
               color: Color(0xFF1F2937),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'ඔබට අවශ්‍ය දින පරාසය සහ වර්ගය තෝරා දත්ත තිරය මත විශ්ලේෂණය කරන්න.',
-            style: TextStyle(fontSize: 13, color: Colors.blueGrey),
+          Text(
+            AppStrings.dataAnalysisSubtitle,
+            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
           ),
           const SizedBox(height: 24),
 
@@ -353,20 +350,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              Colors.white.withOpacity(0.6),
-                              Colors.white.withOpacity(0.2),
+                              Colors.white.withValues(alpha: 0.6),
+                              Colors.white.withValues(alpha: 0.2),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.8),
+                            color: Colors.white.withValues(alpha: 0.8),
                             width: 1.5,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
+                              color: Colors.black.withValues(alpha: 0.05),
                               blurRadius: 15,
                               spreadRadius: 1,
                             ),
@@ -378,9 +375,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text(
-                                  'දින පරාසය',
-                                  style: TextStyle(
+                                Text(
+                                  AppStrings.dateRange,
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF374151),
@@ -389,9 +386,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 const SizedBox(height: 8),
                                 _buildDatePickerSection(),
                                 const SizedBox(height: 16),
-                                const Text(
-                                  'වාර්තා වර්ගය',
-                                  style: TextStyle(
+                                Text(
+                                  AppStrings.reportType,
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF374151),
@@ -411,9 +408,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 ),
                                 if (_selectedReportType == 'Customer Wise') ...[
                                   const SizedBox(height: 16),
-                                  const Text(
-                                    'පාරිභෝගිකයා තෝරන්න',
-                                    style: TextStyle(
+                                  Text(
+                                    AppStrings.selectCustomer,
+                                    style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
                                       color: Color(0xFF374151),
@@ -452,7 +449,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    '${DateFormat('yyyy-MM-dd').format(_startDate)} සිට ${DateFormat('yyyy-MM-dd').format(_endDate)} දක්වා • $_selectedReportType',
+                    '${DateFormat('yyyy-MM-dd').format(_startDate)} ${AppStrings.isSinhala ? 'සිට' : 'to'} ${DateFormat('yyyy-MM-dd').format(_endDate)} ${AppStrings.isSinhala ? 'දක්වා' : ''} • $_selectedReportType',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.blueGrey,
@@ -463,7 +460,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 TextButton.icon(
                   onPressed: () => setState(() => _hasAnalyzed = false),
                   icon: const Icon(Icons.edit, size: 16),
-                  label: const Text('වෙනස් කරන්න'),
+                  label: Text(AppStrings.change),
                 ),
               ],
             ),
@@ -482,14 +479,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildDatePickerSection() {
     return Row(
       children: [
-        Expanded(child: _dateTile('මුල දින', _startDate, true)),
+        Expanded(child: _dateTile(AppStrings.startDay, _startDate, true)),
         const SizedBox(width: 16),
-        Expanded(child: _dateTile('අවසාන දින', _endDate, false)),
+        Expanded(child: _dateTile(AppStrings.endDay, _endDate, false)),
       ],
     );
   }
 
-  // නවීන පෙනුමකින් යුත් Date Picker Tile
   Widget _dateTile(String label, DateTime date, bool isStart) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -548,7 +544,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  // නවීන පෙනුමකින් යුත් Dropdown Component
   Widget _buildDropdown(
     String value,
     List<String> items,
@@ -604,9 +599,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _selectedCustomerId,
-              hint: const Text(
-                'පාරිභෝගිකයෙකු තෝරන්න',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              hint: Text(
+                AppStrings.selectCustomer,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
               isExpanded: true,
               icon: const Icon(
@@ -645,9 +640,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           height: 48,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: actionColor.withOpacity(0.15),
+            color: actionColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: actionColor.withOpacity(0.5), width: 1.5),
+            border: Border.all(color: actionColor.withValues(alpha: 0.5), width: 1.5),
           ),
           child: Material(
             color: Colors.transparent,
@@ -666,7 +661,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            'සොයන්න',
+                            AppStrings.search,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
@@ -732,9 +727,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'විශ්ලේෂණ ප්‍රතිඵල',
-          style: TextStyle(
+        Text(
+          AppStrings.analysisResults,
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             color: Color(0xFF1F2937),
@@ -749,7 +744,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             children: [
               if (showWeight)
                 _buildSummaryCard(
-                  'මුළු දළු',
+                  AppStrings.isSinhala ? 'මුළු දළු' : 'Total Leaf',
                   '${weightF.format(_totalWeight)} Kg',
                   Icons.eco_rounded,
                   Colors.green,
@@ -757,7 +752,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               if (showAdvance) const SizedBox(width: 12),
               if (showAdvance)
                 _buildSummaryCard(
-                  'මුළු අත්තිකාරම්',
+                  AppStrings.totalAdvance,
                   'Rs. ${currencyF.format(_totalAdvance)}',
                   Icons.payments_rounded,
                   Colors.blue,
@@ -765,7 +760,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               if (showTotalDed) const SizedBox(width: 12),
               if (showTotalDed)
                 _buildSummaryCard(
-                  'මුළු අඩු කිරීම්',
+                  AppStrings.totalDeductions,
                   'Rs. ${currencyF.format(_totalDed)}',
                   Icons.remove_circle_outline_rounded,
                   Colors.redAccent,
@@ -773,7 +768,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               if (showFertilizer) const SizedBox(width: 12),
               if (showFertilizer)
                 _buildSummaryCard(
-                  'පොහොර (මිටි)',
+                  AppStrings.isSinhala ? 'භාණ්ඩ (මිටි)' : 'Fertilizer (Bags)',
                   '${weightF.format(_totalF1 + _totalF2)}',
                   Icons.compost_rounded,
                   Colors.teal,
@@ -781,7 +776,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               if (showTeaPkt) const SizedBox(width: 12),
               if (showTeaPkt)
                 _buildSummaryCard(
-                  'තේ පැකට්',
+                  AppStrings.teaPackets,
                   '${weightF.format(_totalT1 + _totalT2)}',
                   Icons.local_cafe_rounded,
                   Colors.purple,
@@ -800,7 +795,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             border: Border.all(color: Colors.grey.shade200),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
+                color: Colors.black.withValues(alpha: 0.02),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -836,38 +831,38 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                           columnSpacing: 24,
                           columns: [
-                            const DataColumn(label: Text('දිනය (Date)')),
-                            const DataColumn(
-                              label: Text('පාරිභෝගිකයා (Customer)'),
+                            DataColumn(label: Text(AppStrings.date)),
+                            DataColumn(
+                              label: Text(AppStrings.customers),
                             ),
                             if (showWeight)
-                              const DataColumn(
-                                label: Text('දළු (Weight)'),
+                              DataColumn(
+                                label: Text(AppStrings.isSinhala ? 'දළු' : 'Weight'),
                                 numeric: true,
                               ),
                             if (showAdvance)
-                              const DataColumn(
-                                label: Text('අත්තිකාරම් (Advance)'),
+                              DataColumn(
+                                label: Text(AppStrings.advance),
                                 numeric: true,
                               ),
                             if (showFertilizer)
-                              const DataColumn(
-                                label: Text('පොහොර 1'),
+                              DataColumn(
+                                label: Text(AppStrings.fertilizer1),
                                 numeric: true,
                               ),
                             if (showFertilizer)
-                              const DataColumn(
-                                label: Text('පොහොර 2'),
+                              DataColumn(
+                                label: Text(AppStrings.fertilizer2),
                                 numeric: true,
                               ),
                             if (showTeaPkt)
-                              const DataColumn(
-                                label: Text('තේ පැකට්'),
+                              DataColumn(
+                                label: Text(AppStrings.teaPackets),
                                 numeric: true,
                               ),
                             if (showTotalDed)
-                              const DataColumn(
-                                label: Text('මුළු මුදල (Total Ded.)'),
+                              DataColumn(
+                                label: Text(AppStrings.totalDeductions),
                                 numeric: true,
                               ),
                           ],
@@ -881,18 +876,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             double w = (data['netWeight'] ?? 0).toDouble();
                             double adv = (data['advanceAmount'] ?? 0)
                                 .toDouble();
-                            double f1 = (data['fertilizer1Qty'] ?? 0)
-                                .toDouble();
-                            double f2 = (data['fertilizer2Qty'] ?? 0)
-                                .toDouble();
-                            double t1 = (data['teaPacket1Qty'] ?? 0).toDouble();
-                            double t2 = (data['teaPacket2Qty'] ?? 0).toDouble();
-                            double rowTotal =
-                                adv +
-                                (f1 * _fert1Price) +
-                                (f2 * _fert2Price) +
-                                (t1 * _teaPkt1Price) +
-                                (t2 * _teaPkt2Price);
+                            final parsed = ItemService.parseDailyEntryItems(
+                              data,
+                              f1Price: _fert1Price,
+                              f2Price: _fert2Price,
+                              t1Price: _teaPkt1Price,
+                              t2Price: _teaPkt2Price,
+                            );
+                            double f1 = parsed.f1Qty;
+                            double f2 = parsed.f2Qty;
+                            double t1 = parsed.t1Qty;
+                            double t2 = parsed.t2Qty;
+                            double rowTotal = adv + parsed.totalItemsAmt;
 
                             return DataRow(
                               cells: [

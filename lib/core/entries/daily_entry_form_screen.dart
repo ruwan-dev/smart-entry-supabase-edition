@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:smart_entry/core/app_state.dart';
+import '../items/item_model.dart';
+import '../items/item_service.dart';
+import '../localization/app_strings.dart';
+import '../../services/billing_lock_service.dart';
+import '../widgets/max_number_input_formatter.dart';
 
 class DailyEntryFormScreen extends StatefulWidget {
   final DateTime selectedDate;
   final String customerId;
   final String customerName;
   final String refNumber;
+  final bool isReadOnly;
 
   const DailyEntryFormScreen({
     super.key, 
@@ -15,6 +23,7 @@ class DailyEntryFormScreen extends StatefulWidget {
     required this.customerId,
     required this.customerName,
     required this.refNumber,
+    this.isReadOnly = false,
   });
 
   @override
@@ -25,6 +34,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
   final _formKey = GlobalKey<FormState>();
   
   String? _existingEntryId;
+  bool _isLocked = false;
   
   final TextEditingController _grossWeightController = TextEditingController();
   final TextEditingController _netWeight2Controller = TextEditingController();
@@ -35,6 +45,10 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
   final TextEditingController _teaPacket1Controller = TextEditingController();
   final TextEditingController _teaPacket2Controller = TextEditingController();
   
+  // Custom items support (Slots 1 to 8)
+  List<CustomItem> _customItems = [];
+  final Map<int, TextEditingController> _itemControllers = {};
+
   bool _isLoading = false;
 
   double _fert1Price = 0.0;
@@ -42,42 +56,186 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
   double _teaPkt1Price = 0.0;
   double _teaPkt2Price = 0.0;
 
+  Map<String, dynamic>? _existingEntryDoc;
+
+  TextEditingController _getOrCreateController(int slotIndex) {
+    if (!_itemControllers.containsKey(slotIndex)) {
+      _itemControllers[slotIndex] = TextEditingController();
+    }
+    return _itemControllers[slotIndex]!;
+  }
+
   @override
   void initState() {
+    _isLocked = widget.isReadOnly || BillingLockService().isDateLocked(widget.selectedDate);
     super.initState();
-    _fetchGlobalPrices(); 
-    _fetchExistingEntry(); 
+    _itemControllers[1] = _fertilizer1Controller;
+    _itemControllers[2] = _fertilizer2Controller;
+    _itemControllers[3] = _teaPacket1Controller;
+    _itemControllers[4] = _teaPacket2Controller;
+
+    _initializeScreen();
+  }
+
+  Future<void> _initializeScreen() async {
+    await _fetchGlobalPricesAndItems();
+    await _fetchExistingEntry();
+  }
+
+  Future<void> _fetchGlobalPricesAndItems() async {
+    try {
+      final items = await ItemService.getItems();
+      if (mounted) {
+        setState(() {
+          _customItems = items;
+          for (var item in items) {
+            _getOrCreateController(item.slotIndex);
+            if (item.slotIndex == 1) _fert1Price = item.unitPrice;
+            if (item.slotIndex == 2) _fert2Price = item.unitPrice;
+            if (item.slotIndex == 3) _teaPkt1Price = item.unitPrice;
+            if (item.slotIndex == 4) _teaPkt2Price = item.unitPrice;
+          }
+          if (_existingEntryDoc != null) {
+            _populateFromDoc(_existingEntryDoc!);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching items: $e");
+    }
   }
 
   Future<void> _fetchExistingEntry() async {
     try {
       String formattedDate = DateFormat('yyyy-MM-dd').format(widget.selectedDate);
-      
+
       var response = await Supabase.instance.client
           .from('daily_entries')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
+          .select()
+          .eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .eq('customerId', widget.customerId)
           .eq('date', formattedDate)
           .limit(1);
 
       if (response.isNotEmpty && mounted) {
-        var doc = response.first;
-        
+        final doc = response.first;
         setState(() {
-          _existingEntryId = doc['id']; 
-          
-          _grossWeightController.text = _formatValue(doc['grossWeight']);
-          _netWeight2Controller.text = _formatValue(doc['netWeight2']);
-          _deductionController.text = _formatValue(doc['deductions'], isDeduction: true);
-          _advanceController.text = _formatValue(doc['advanceAmount']);
-          _fertilizer1Controller.text = _formatValue(doc['fertilizer1Qty']);
-          _fertilizer2Controller.text = _formatValue(doc['fertilizer2Qty']);
-          _teaPacket1Controller.text = _formatValue(doc['teaPacket1Qty']);
-          _teaPacket2Controller.text = _formatValue(doc['teaPacket2Qty']);
+          _existingEntryDoc = doc;
+          _populateFromDoc(doc);
         });
       }
     } catch (e) {
-      debugPrint("දත්ත ලබාගැනීමේදී දෝෂයක්: $e");
+      debugPrint("Error fetching data: $e");
+    }
+  }
+
+  void _populateFromDoc(Map<String, dynamic> doc) {
+    _existingEntryId = doc['id'];
+
+    _grossWeightController.text = _formatValue(doc['grossWeight']);
+    _netWeight2Controller.text = _formatValue(doc['netWeight2']);
+    _deductionController.text = _formatValue(doc['deductions'], isDeduction: true);
+    _advanceController.text = _formatValue(doc['advanceAmount']);
+
+    // 1. Parse items using ItemService parser (handles Map, JSON String, dynamic_items, and legacy columns)
+    final parsed = ItemService.parseDailyEntryItems(doc);
+
+    // Populate legacy slot quantities from parsed / direct columns
+    if (parsed.f1Qty > 0) {
+      _getOrCreateController(1).text = _formatValue(parsed.f1Qty);
+    } else if (doc['fertilizer1Qty'] != null) {
+      _getOrCreateController(1).text = _formatValue(doc['fertilizer1Qty']);
+    }
+
+    if (parsed.f2Qty > 0) {
+      _getOrCreateController(2).text = _formatValue(parsed.f2Qty);
+    } else if (doc['fertilizer2Qty'] != null) {
+      _getOrCreateController(2).text = _formatValue(doc['fertilizer2Qty']);
+    }
+
+    if (parsed.t1Qty > 0) {
+      _getOrCreateController(3).text = _formatValue(parsed.t1Qty);
+    } else if (doc['teaPacket1Qty'] != null) {
+      _getOrCreateController(3).text = _formatValue(doc['teaPacket1Qty']);
+    }
+
+    if (parsed.t2Qty > 0) {
+      _getOrCreateController(4).text = _formatValue(parsed.t2Qty);
+    } else if (doc['teaPacket2Qty'] != null) {
+      _getOrCreateController(4).text = _formatValue(doc['teaPacket2Qty']);
+    }
+
+    // 2. Populate dynamic items from parsed.itemsList
+    for (var parsedItem in parsed.itemsList) {
+      int slot = (parsedItem['slot'] as num?)?.toInt() ?? 0;
+      double qty = (parsedItem['qty'] as num?)?.toDouble() ?? 0.0;
+      String code = (parsedItem['code'] ?? '').toString();
+      String id = (parsedItem['id'] ?? '').toString();
+      String desc = (parsedItem['desc'] ?? '').toString().toLowerCase();
+
+      if (qty <= 0) continue;
+
+      if (slot == 0 && _customItems.isNotEmpty) {
+        for (var ci in _customItems) {
+          if (ci.id == id || ci.code == code || ci.name.toLowerCase() == desc) {
+            slot = ci.slotIndex;
+            break;
+          }
+        }
+      }
+
+      if (slot > 0) {
+        _getOrCreateController(slot).text = _formatValue(qty);
+      }
+    }
+
+    // 3. Fallback direct inspection of dynamic_items (Map or JSON string)
+    dynamic rawDyn = doc['dynamic_items'];
+    Map<dynamic, dynamic>? dyn;
+    if (rawDyn is Map) {
+      dyn = rawDyn;
+    } else if (rawDyn is String && rawDyn.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawDyn);
+        if (decoded is Map) dyn = decoded;
+      } catch (_) {}
+    }
+
+    if (dyn != null) {
+      dyn.forEach((key, val) {
+        double qty = 0.0;
+        int slot = 0;
+        String id = '';
+        String code = '';
+        String name = '';
+
+        if (val is Map) {
+          qty = (val['qty'] as num?)?.toDouble() ?? (double.tryParse(val['qty']?.toString() ?? '') ?? 0.0);
+          slot = (val['slot'] as num?)?.toInt() ?? 0;
+          id = (val['id'] ?? '').toString();
+          code = (val['code'] ?? '').toString();
+          name = (val['name'] ?? '').toString().toLowerCase();
+        } else if (val is num) {
+          qty = val.toDouble();
+        } else if (val is String) {
+          qty = double.tryParse(val.trim()) ?? 0.0;
+        }
+
+        if (qty > 0) {
+          if (slot == 0) {
+            String k = key.toString();
+            for (var ci in _customItems) {
+              if (k == 'item_${ci.id}' || k == 'slot_${ci.slotIndex}' || k == ci.code || k == ci.id || ci.name.toLowerCase() == name) {
+                slot = ci.slotIndex;
+                break;
+              }
+            }
+          }
+          if (slot > 0) {
+            _getOrCreateController(slot).text = _formatValue(qty);
+          }
+        }
+      });
     }
   }
 
@@ -100,56 +258,40 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
     return parsedValue.toString();
   }
 
-  Future<void> _fetchGlobalPrices() async {
-    try {
-      var response = await Supabase.instance.client.from('global_settings').select().eq('organization_id', AppState.currentOrganizationId.value ?? '').eq('id', 'prices').maybeSingle();
-      if (response != null && mounted) {
-        setState(() {
-          _fert1Price = (response['fertilizer1Price'] ?? 0.0).toDouble();
-          _fert2Price = (response['fertilizer2Price'] ?? 0.0).toDouble();
-          _teaPkt1Price = (response['teaPacket1Price'] ?? 0.0).toDouble();
-          _teaPkt2Price = (response['teaPacket2Price'] ?? 0.0).toDouble();
-        });
-      }
-    } catch (e) {
-      debugPrint("මිල ගණන් ලබාගැනීමේදී දෝෂයක්: $e");
-    }
-  }
-
   String? _validateInput(String? value) {
     bool isAllEmpty = _grossWeightController.text.trim().isEmpty &&
         _netWeight2Controller.text.trim().isEmpty &&
         (_deductionController.text.trim().isEmpty || _deductionController.text.trim() == '0') &&
         _advanceController.text.trim().isEmpty &&
-        _fertilizer1Controller.text.trim().isEmpty &&
-        _fertilizer2Controller.text.trim().isEmpty &&
-        _teaPacket1Controller.text.trim().isEmpty &&
-        _teaPacket2Controller.text.trim().isEmpty;
+        _itemControllers.values.every((c) => c.text.trim().isEmpty);
 
     if (isAllEmpty) {
-      return 'අවශ්‍ය වේ';
+      return AppStrings.requiredField;
     }
 
     if (value != null && value.trim().isNotEmpty && value.trim() != '0') {
+      final maxErr = MaxNumberInputFormatter.validate(value);
+      if (maxErr != null) return maxErr;
       if (double.tryParse(value.trim()) == null) {
-        return 'නිවැරදි අගයක් ඇතුළත් කරන්න';
+        return AppStrings.isSinhala ? 'නිවැරදි අගයක් ඇතුළත් කරන්න' : 'Enter a valid number';
       }
     }
     return null;
   }
 
   void _confirmAndSave() {
+    if (_isLocked) return;
     if (_formKey.currentState!.validate()) {
       if (_existingEntryId != null) {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('තහවුරු කිරීම'),
-            content: const Text('ඔබට මෙම දත්ත යාවත්කාලීන (Update) කිරීමට අවශ්‍යද?'),
+            title: Text(AppStrings.confirm),
+            content: Text(AppStrings.isSinhala ? 'ඔබට මෙම දත්ත යාවත්කාලීන කිරීමට අවශ්‍යද?' : 'Do you want to update this entry?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('නැත', style: TextStyle(color: Colors.grey)),
+                child: Text(AppStrings.no, style: const TextStyle(color: Colors.grey)),
               ),
               ElevatedButton(
                 onPressed: () {
@@ -157,7 +299,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
                   _saveEntry(isUpdate: true);
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor),
-                child: const Text('ඔව්', style: TextStyle(color: Colors.white)),
+                child: Text(AppStrings.yes, style: const TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -169,6 +311,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
   }
 
   Future<void> _saveEntry({required bool isUpdate}) async {
+    if (_isLocked) return;
     setState(() { _isLoading = true; });
 
     try {
@@ -178,10 +321,28 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
       double netWeight2 = double.tryParse(_netWeight2Controller.text.trim()) ?? 0.0;
 
       double advance = double.tryParse(_advanceController.text.trim()) ?? 0.0;
-      double fertilizer1Qty = double.tryParse(_fertilizer1Controller.text.trim()) ?? 0.0;
-      double fertilizer2Qty = double.tryParse(_fertilizer2Controller.text.trim()) ?? 0.0;
-      double teaPacket1Qty = double.tryParse(_teaPacket1Controller.text.trim()) ?? 0.0;
-      double teaPacket2Qty = double.tryParse(_teaPacket2Controller.text.trim()) ?? 0.0;
+      Map<String, dynamic> dynamicItems = {};
+      for (var item in _customItems) {
+        double qty = double.tryParse(_itemControllers[item.slotIndex]?.text.trim() ?? '') ?? 0.0;
+        if (qty > 0) {
+          dynamicItems[item.code] = qty;
+          dynamicItems['item_${item.id}'] = {
+            'id': item.id,
+            'slot': item.slotIndex,
+            'code': item.code,
+            'name': item.name,
+            'unitPrice': item.unitPrice,
+            'qty': qty,
+            'amt': qty * item.unitPrice,
+          };
+        }
+      }
+
+      // Legacy shadow copy for slots 1-4 for database column compatibility
+      double fertilizer1Qty = double.tryParse(_itemControllers[1]?.text.trim() ?? '') ?? 0.0;
+      double fertilizer2Qty = double.tryParse(_itemControllers[2]?.text.trim() ?? '') ?? 0.0;
+      double teaPacket1Qty = double.tryParse(_itemControllers[3]?.text.trim() ?? '') ?? 0.0;
+      double teaPacket2Qty = double.tryParse(_itemControllers[4]?.text.trim() ?? '') ?? 0.0;
 
       Map<String, dynamic> entryData = {
         'grossWeight': grossWeight,
@@ -195,30 +356,56 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
         'teaPacket2Qty': teaPacket2Qty,
       };
 
-      if (isUpdate && _existingEntryId != null) {
-        entryData['updatedAt'] = DateTime.now().toIso8601String();
-        await Supabase.instance.client.from('daily_entries').update(entryData).eq('organization_id', AppState.currentOrganizationId.value ?? '').eq('id', _existingEntryId!);
-      } else {
-        entryData['customerId'] = widget.customerId;
-        entryData['customerName'] = widget.customerName;
-        entryData['date'] = DateFormat('yyyy-MM-dd').format(widget.selectedDate);
-        entryData['timestamp'] = widget.selectedDate.toIso8601String();
-        entryData['createdAt'] = DateTime.now().toIso8601String();
-        entryData['organization_id'] = AppState.currentOrganizationId.value;
-        
-        await Supabase.instance.client.from('daily_entries').insert(entryData);
+      if (dynamicItems.isNotEmpty) {
+        entryData['dynamic_items'] = dynamicItems;
+      }
+
+      try {
+        if (isUpdate && _existingEntryId != null) {
+          entryData['updatedAt'] = DateTime.now().toIso8601String();
+          await Supabase.instance.client
+              .from('daily_entries')
+              .update(entryData)
+              .eq('organization_id', AppState.currentOrganizationId.value ?? '')
+              .eq('id', _existingEntryId!);
+        } else {
+          entryData['customerId'] = widget.customerId;
+          entryData['customerName'] = widget.customerName;
+          entryData['date'] = DateFormat('yyyy-MM-dd').format(widget.selectedDate);
+          entryData['timestamp'] = widget.selectedDate.toIso8601String();
+          entryData['createdAt'] = DateTime.now().toIso8601String();
+          entryData['organization_id'] = AppState.currentOrganizationId.value;
+
+          await Supabase.instance.client.from('daily_entries').insert(entryData);
+        }
+      } on PostgrestException catch (pe) {
+        // Fallback if dynamic_items column has not yet been added to the daily_entries table
+        if (pe.code == 'PGRST204' && entryData.containsKey('dynamic_items')) {
+          entryData.remove('dynamic_items');
+          if (isUpdate && _existingEntryId != null) {
+            await Supabase.instance.client
+                .from('daily_entries')
+                .update(entryData)
+                .eq('organization_id', AppState.currentOrganizationId.value ?? '')
+                .eq('id', _existingEntryId!);
+          } else {
+            await Supabase.instance.client.from('daily_entries').insert(entryData);
+          }
+        } else {
+          rethrow;
+        }
       }
 
       if (mounted) {
         AppState.triggerRefresh();
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isUpdate ? 'දෛනික සටහන සාර්ථකව යාවත්කාලීන කරන ලදි!' : 'දෛනික සටහන සාර්ථකව සුරකින ලදි!')),
+          SnackBar(content: Text(isUpdate ? AppStrings.entryUpdated : AppStrings.entrySaved)),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${AppStrings.errorPrefix}$e')));
       }
     } finally {
       if (mounted) { setState(() { _isLoading = false; }); }
@@ -235,6 +422,11 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
     _fertilizer2Controller.dispose();
     _teaPacket1Controller.dispose();
     _teaPacket2Controller.dispose();
+    for (var entry in _itemControllers.entries) {
+      if (entry.key > 4) {
+        entry.value.dispose();
+      }
+    }
     super.dispose();
   }
 
@@ -246,7 +438,7 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: Text('$formattedDate දින සටහන', style: const TextStyle(fontSize: 18)),
+        title: Text(AppStrings.isSinhala ? '$formattedDate දින සටහන' : 'Entry for $formattedDate', style: const TextStyle(fontSize: 18)),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
       ),
@@ -270,9 +462,9 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.08),
+                      color: Theme.of(context).primaryColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12.0),
-                      border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.2)),
+                      border: Border.all(color: Theme.of(context).primaryColor.withValues(alpha: 0.2)),
                     ),
                     child: Text(
                       'No: ${widget.refNumber} - ${widget.customerName}',
@@ -285,160 +477,98 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  
-                  const Text('තේ දළු විස්තර', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(AppStrings.isSinhala ? 'තේ දළු විස්තර' : 'Tea Leaf Details', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
 
                   TextFormField(
                     controller: _grossWeightController,
+                    enabled: !_isLocked,
+                    style: TextStyle(color: _isLocked ? Colors.grey.shade700 : Colors.black87, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
-                      labelText: 'සාමාන්‍ය දළු ප්‍රමාණය (Normal Leaf Weight)',
+                      labelText: AppStrings.isSinhala ? 'සාමාන්‍ය දළු ප්‍රමාණය' : 'Normal Leaf Weight',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      filled: _isLocked,
+                      fillColor: _isLocked ? const Color(0xFFF3F4F6) : null,
                       prefixIcon: const Icon(Icons.scale),
                       suffixText: 'Kg',
                     ),
+                    inputFormatters: [MaxNumberInputFormatter.currency],
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: _validateInput, 
                   ),
                   const SizedBox(height: 20),
                   TextFormField(
                     controller: _netWeight2Controller,
+                    enabled: !_isLocked,
+                    style: TextStyle(color: _isLocked ? Colors.grey.shade700 : Colors.black87, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
-                      labelText: 'සුපිරි දළු ප්‍රමාණය (Super Leaf - Optional)',
+                      labelText: AppStrings.isSinhala ? 'සුපිරි දළු ප්‍රමාණය (විකල්ප)' : 'Super Leaf Weight (Optional)',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      filled: _isLocked,
+                      fillColor: _isLocked ? const Color(0xFFF3F4F6) : null,
                       prefixIcon: const Icon(Icons.star_border),
                       suffixText: 'Kg',
                     ),
+                    inputFormatters: [MaxNumberInputFormatter.currency],
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: _validateInput, 
                   ),
-                  
-                  // අඩු කිරීම් (Deductions) Field එක Hide කර ඇත
-                  /*
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: _deductionController,
-                    decoration: InputDecoration(
-                      labelText: 'අඩු කිරීම් (වතුර/මළු බර)',
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Icon(Icons.remove_circle_outline),
-                      suffixText: 'Kg',
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    validator: _validateInput, 
-                  ),
-                  */
                   
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16.0),
                     child: Divider(),
                   ),
 
-                  const Text('අමතර සටහන් සහ අඩු කිරීම්', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(AppStrings.isSinhala ? 'අමතර සටහන් සහ අඩු කිරීම්' : 'Extra Items & Deductions', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
 
                   TextFormField(
                     controller: _advanceController,
+                    enabled: !_isLocked,
+                    style: TextStyle(color: _isLocked ? Colors.grey.shade700 : Colors.black87, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
-                      labelText: 'අත්තිකාරම් මුදල (Advance)',
+                      labelText: AppStrings.isSinhala ? 'අත්තිකාරම් මුදල' : 'Advance Amount',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      filled: _isLocked,
+                      fillColor: _isLocked ? const Color(0xFFF3F4F6) : null,
                       prefixIcon: const Icon(Icons.money),
                       prefixText: 'Rs. ',
                     ),
+                    inputFormatters: [MaxNumberInputFormatter.currency],
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: _validateInput, 
                   ),
                   const SizedBox(height: 20),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _fertilizer1Controller,
-                          decoration: InputDecoration(
-                            labelText: 'පොහොර 01 (Rs. $_fert1Price)',
-                            floatingLabelBehavior: FloatingLabelBehavior.always,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.shopping_bag),
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          validator: _validateInput, 
+                  ..._buildItemInputFields(),
+                  if (!_isLocked) ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _confirmAndSave, 
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+                          elevation: 2,
                         ),
+                        child: _isLoading 
+                            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(
+                                _existingEntryId != null ? AppStrings.update : AppStrings.save, 
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+                              ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _fertilizer2Controller,
-                          decoration: InputDecoration(
-                            labelText: 'පොහොර 02 (Rs. $_fert2Price)',
-                            floatingLabelBehavior: FloatingLabelBehavior.always,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.shopping_bag),
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          validator: _validateInput, 
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _teaPacket1Controller,
-                          decoration: InputDecoration(
-                            labelText: 'තේ පැකට් 01 (Rs. $_teaPkt1Price)',
-                            floatingLabelBehavior: FloatingLabelBehavior.always,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.local_cafe),
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          validator: _validateInput, 
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _teaPacket2Controller,
-                          decoration: InputDecoration(
-                            labelText: 'තේ පැකට් 02 (Rs. $_teaPkt2Price)',
-                            floatingLabelBehavior: FloatingLabelBehavior.always,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.local_cafe),
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          validator: _validateInput, 
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _confirmAndSave, 
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-                        elevation: 2,
-                      ),
-                      child: _isLoading 
-                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(
-                              _existingEntryId != null ? 'යාවත්කාලීන කරන්න' : 'දත්ත සුරකින්න', 
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
-                            ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -446,5 +576,106 @@ class _DailyEntryFormScreenState extends State<DailyEntryFormScreen> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildItemInputFields() {
+    final itemsToDisplay = _customItems.isNotEmpty
+        ? _customItems
+        : [
+            CustomItem(
+              id: 'slot_1',
+              organizationId: AppState.currentOrganizationId.value ?? '',
+              slotIndex: 1,
+              code: 'F1',
+              name: AppStrings.fertilizer1,
+              unitPrice: _fert1Price,
+            ),
+            CustomItem(
+              id: 'slot_2',
+              organizationId: AppState.currentOrganizationId.value ?? '',
+              slotIndex: 2,
+              code: 'F2',
+              name: AppStrings.fertilizer2,
+              unitPrice: _fert2Price,
+            ),
+            CustomItem(
+              id: 'slot_3',
+              organizationId: AppState.currentOrganizationId.value ?? '',
+              slotIndex: 3,
+              code: 'T1',
+              name: AppStrings.teaPacket1,
+              unitPrice: _teaPkt1Price,
+            ),
+            CustomItem(
+              id: 'slot_4',
+              organizationId: AppState.currentOrganizationId.value ?? '',
+              slotIndex: 4,
+              code: 'T2',
+              name: AppStrings.teaPacket2,
+              unitPrice: _teaPkt2Price,
+            ),
+          ];
+
+    List<Widget> widgets = [];
+    for (int i = 0; i < itemsToDisplay.length; i += 2) {
+      final item1 = itemsToDisplay[i];
+      final item2 = (i + 1 < itemsToDisplay.length) ? itemsToDisplay[i + 1] : null;
+
+      widgets.add(
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _itemControllers[item1.slotIndex],
+                enabled: !_isLocked,
+                    style: TextStyle(color: _isLocked ? Colors.grey.shade700 : Colors.black87, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  labelText: '${item1.name} (Rs. ${item1.unitPrice.toStringAsFixed(0)})',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      filled: _isLocked,
+                      fillColor: _isLocked ? const Color(0xFFF3F4F6) : null,
+                  prefixIcon: Icon(
+                    item1.code.toUpperCase().startsWith('T') ? Icons.local_cafe : Icons.shopping_bag,
+                  ),
+                ),
+                inputFormatters: [MaxNumberInputFormatter.currency],
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: _validateInput,
+              ),
+            ),
+            const SizedBox(width: 12),
+            if (item2 != null)
+              Expanded(
+                child: TextFormField(
+                  controller: _itemControllers[item2.slotIndex],
+                  enabled: !_isLocked,
+                    style: TextStyle(color: _isLocked ? Colors.grey.shade700 : Colors.black87, fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    labelText: '${item2.name} (Rs. ${item2.unitPrice.toStringAsFixed(0)})',
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      filled: _isLocked,
+                      fillColor: _isLocked ? const Color(0xFFF3F4F6) : null,
+                    prefixIcon: Icon(
+                      item2.code.toUpperCase().startsWith('T') ? Icons.local_cafe : Icons.shopping_bag,
+                    ),
+                  ),
+                  inputFormatters: [MaxNumberInputFormatter.currency],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  validator: _validateInput,
+                ),
+              )
+            else
+              const Expanded(child: SizedBox()),
+          ],
+        ),
+      );
+      widgets.add(const SizedBox(height: 16));
+    }
+
+    return widgets;
   }
 }

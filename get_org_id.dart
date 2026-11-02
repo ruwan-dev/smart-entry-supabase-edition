@@ -8,14 +8,14 @@ Future<void> main() async {
   );
 
   try {
-    final res = await client.from('customers').select('organization_id').notNull('organization_id').limit(1);
+    final res = await client.from('customers').select('organization_id').not('organization_id', 'is', null).limit(1);
     if (res.isNotEmpty) {
       print('Found organization_id: ${res.first['organization_id']}');
     } else {
       print('No organization_id found in customers table.');
       
       // Let's check daily_entries just in case
-      final entriesRes = await client.from('daily_entries').select('organization_id').notNull('organization_id').limit(1);
+      final entriesRes = await client.from('daily_entries').select('organization_id').not('organization_id', 'is', null).limit(1);
       if (entriesRes.isNotEmpty) {
          print('Found organization_id in daily_entries: ${entriesRes.first['organization_id']}');
       } else {

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_entry/core/entries/daily_entries_screen.dart';
+import 'package:smart_entry/core/app_state.dart';
 import '../billing/monthly_bill_screen.dart';
 import 'add_customer_screen.dart';
 import 'package:smart_entry/core/widgets/skeleton_box.dart';
+import '../localization/app_strings.dart';
+import '../localization/app_language.dart';
 
 class CustomerFormScreen extends StatefulWidget {
   const CustomerFormScreen({super.key});
@@ -14,23 +16,12 @@ class CustomerFormScreen extends StatefulWidget {
 }
 
 class _CustomerFormScreenState extends State<CustomerFormScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  final TextEditingController _refNumberController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _pinController = TextEditingController();
-
-  bool _isLoading = false;
   String _searchQuery = '';
 
-  // Pagination සඳහා අවශ්‍ය විචල්‍යයන් (Variables)
   int _currentPage = 0;
-  final int _itemsPerPage = 5; // එක පිටුවකට පෙන්වන ප්‍රමාණය
+  final int _itemsPerPage = 5;
 
   // ----------------------------------------------------------------------
-  // UI වර්ණ රටාව
   // ----------------------------------------------------------------------
   final Color _primaryColor = const Color(0xFF4A4ECA);
   final Color _backgroundColor = const Color(0xFFF9FAFC);
@@ -44,83 +35,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   final Color _tagPurpleBg = const Color(0xFFFAF5FF); // Purple 50
   final Color _tagPurpleText = const Color(0xFFC084FC); // Purple 400 (Soft)
 
-  Future<void> _saveCustomer() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        String refNumber = _refNumberController.text.trim();
-        String name = _nameController.text.trim();
-
-        var querySnapshot = await Supabase.instance.client
-            .from('customers')
-            .select()
-            .eq('refNumber', refNumber);
-
-        if (querySnapshot.isNotEmpty) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('මෙම යොමු අංකය දැනටමත් භාවිතයේ පවතී'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            setState(() {
-              _isLoading = false;
-            });
-          }
-          return;
-        }
-
-        var response = await Supabase.instance.client.from('customers').insert({
-          'refNumber': refNumber,
-          'name': name,
-          'address': _addressController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'pin': _pinController.text.trim(),
-        }).select();
-
-        String docId = response.first['id'];
-
-        _refNumberController.clear();
-        _nameController.clear();
-        _addressController.clear();
-        _phoneController.clear();
-        _pinController.clear();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('පාරිභෝගිකයා සාර්ථකව සුරකින ලදී')),
-          );
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DailyEntriesScreen(
-                initialCustomerId: docId,
-                initialRefNumber: refNumber,
-              ),
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('දෝෂයකි: $e')));
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      }
-    }
-  }
-
   Future<void> _deleteCustomer(
     BuildContext context,
     String docId,
@@ -133,15 +47,15 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            title: const Text('පාරිභෝගිකයා ඉවත් කරන්නද?'),
+            title: Text(AppStrings.deleteCustomerConfirm),
             content: Text(
-              'ඔබ ස්ථිරවම $name සහ ඔහුට/ඇයට අදාළ සියලුම තේ දළු හා අත්තිකාරම් සටහන් පද්ධතියෙන් ඉවත් කිරීමට අවශ්‍යද?',
+              AppStrings.deleteCustomerPrompt(name),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: Text(
-                  'නැත',
+                  AppStrings.no,
                   style: TextStyle(color: _textColorSecondary),
                 ),
               ),
@@ -155,7 +69,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text('ඔව්, ඉවත් කරන්න'),
+                child: Text(AppStrings.yesDelete),
               ),
             ],
           ),
@@ -163,6 +77,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         false;
 
     if (confirm) {
+      if (!context.mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -173,19 +88,22 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         await Supabase.instance.client
             .from('daily_entries')
             .delete()
+            .eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .eq('customerId', docId);
 
         await Supabase.instance.client
             .from('customers')
             .delete()
+            .eq('organization_id', AppState.currentOrganizationId.value ?? '')
             .eq('id', docId);
 
         if (context.mounted) {
           Navigator.pop(context);
+          AppState.triggerRefresh();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'පාරිභෝගිකයා සහ අදාළ සියලුම සටහන් සාර්ථකව ඉවත් කරන ලදී',
+                AppStrings.customerDeleted,
               ),
               backgroundColor: Colors.green,
             ),
@@ -195,7 +113,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         if (context.mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('දෝෂයකි: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('${AppStrings.errorPrefix}$e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -204,19 +122,40 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
   List<Map<String, dynamic>>? _cachedCustomers;
   String? _errorMessage;
+  bool _isFetching = false;
+  bool _pendingFetch = false;
 
   Map<String, DateTime> _latestDates = {};
   Map<String, double> _latestMonthWeights = {};
   Set<String> _debtors = {};
+  Set<String> _customersWithBillChanges = {};
   double _highVolumeThreshold = 150.0;
+
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
 
   @override
   void initState() {
     super.initState();
+    AppLanguageService.currentLanguage.addListener(_onLanguageChanged);
+    AppState.refreshTrigger.addListener(_fetchCustomers);
     _fetchCustomers();
   }
 
+  void _onLanguageChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _fetchCustomers() async {
+    if (_isFetching) {
+      _pendingFetch = true;
+      return;
+    }
+    _isFetching = true;
     try {
       try {
         var settingDoc = await Supabase.instance.client
@@ -233,6 +172,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       var allFinalizedBills = await Supabase.instance.client
           .from('finalized_bills')
           .select('customerId, billData')
+          .eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .order('finalizedAt', ascending: false);
 
       Set<String> debtors = {};
@@ -254,6 +194,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       final response = await Supabase.instance.client
           .from('customers')
           .select()
+          .eq('organization_id', AppState.currentOrganizationId.value ?? '')
           .order('name');
       List<Map<String, dynamic>> customers = List<Map<String, dynamic>>.from(
         response,
@@ -264,6 +205,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           .toList();
       Map<String, DateTime> latestDates = {};
       Map<String, Map<String, double>> monthlyWeights = {};
+      Map<String, Map<String, double>> monthlyWeights1 = {};
+      Map<String, Map<String, double>> monthlyWeights2 = {};
+      Map<String, Map<String, double>> monthlyAdvances = {};
 
       for (int i = 0; i < customerIds.length; i += 100) {
         int end = (i + 100 < customerIds.length) ? i + 100 : customerIds.length;
@@ -274,7 +218,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         while (true) {
           var res = await Supabase.instance.client
               .from('daily_entries')
-              .select('customerId, timestamp, netWeight')
+              .select('customerId, timestamp, netWeight, netWeight2, advanceAmount')
+              .eq('organization_id', AppState.currentOrganizationId.value ?? '')
               .filter('customerId', 'in', chunk)
               .range(offset, offset + limit - 1);
           allEntries.addAll(res);
@@ -285,7 +230,10 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         for (var e in allEntries) {
           String cId = e['customerId'].toString();
           DateTime ts = DateTime.parse(e['timestamp'].toString());
-          double weight = (e['netWeight'] ?? 0.0).toDouble();
+          double w1 = _parseDouble(e['netWeight']);
+          double w2 = _parseDouble(e['netWeight2']);
+          double adv = _parseDouble(e['advanceAmount']);
+          double weight = w1 + w2;
 
           if (weight > 0) {
             if (!latestDates.containsKey(cId) ||
@@ -298,6 +246,18 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           monthlyWeights.putIfAbsent(cId, () => {});
           monthlyWeights[cId]![monthKey] =
               (monthlyWeights[cId]![monthKey] ?? 0.0) + weight;
+
+          monthlyWeights1.putIfAbsent(cId, () => {});
+          monthlyWeights1[cId]![monthKey] =
+              (monthlyWeights1[cId]![monthKey] ?? 0.0) + w1;
+
+          monthlyWeights2.putIfAbsent(cId, () => {});
+          monthlyWeights2[cId]![monthKey] =
+              (monthlyWeights2[cId]![monthKey] ?? 0.0) + w2;
+
+          monthlyAdvances.putIfAbsent(cId, () => {});
+          monthlyAdvances[cId]![monthKey] =
+              (monthlyAdvances[cId]![monthKey] ?? 0.0) + adv;
         }
       }
 
@@ -311,11 +271,52 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         }
       }
 
+      Set<String> customersWithBillChanges = {};
+      Set<String> checkedBillCids = {};
+      for (var bill in allFinalizedBills) {
+        String cId = bill['customerId'] ?? '';
+        if (cId.isEmpty || checkedBillCids.contains(cId)) continue;
+        checkedBillCids.add(cId);
+
+        var billData = bill['billData'];
+        if (billData is Map) {
+          String dm = billData['displayMonth'] ?? '';
+          final parts = dm.trim().split(RegExp(r'\s+'));
+          if (parts.length >= 2) {
+            int y = int.tryParse(parts[0]) ?? 0;
+            const monthNames = [
+              'january', 'february', 'march', 'april', 'may', 'june',
+              'july', 'august', 'september', 'october', 'november', 'december'
+            ];
+            int m = monthNames.indexOf(parts[1].toLowerCase()) + 1;
+            if (y > 0 && m > 0) {
+              String monthKey = "$y-${m.toString().padLeft(2, '0')}";
+              double recordedW1 = _parseDouble(billData['totalWeight']);
+              double recordedW2 = _parseDouble(billData['totalWeight2']);
+              double recordedAdv = _parseDouble(billData['advTotal']);
+
+              double actualW1 = monthlyWeights1[cId]?[monthKey] ?? 0.0;
+              double actualW2 = monthlyWeights2[cId]?[monthKey] ?? 0.0;
+              double actualAdv = monthlyAdvances[cId]?[monthKey] ?? 0.0;
+
+              bool hasChanges = (recordedW1 - actualW1).abs() > 0.01 ||
+                                (recordedW2 - actualW2).abs() > 0.01 ||
+                                (recordedAdv - actualAdv).abs() > 0.01;
+
+              if (hasChanges) {
+                customersWithBillChanges.add(cId);
+              }
+            }
+          }
+        }
+      }
+
       if (mounted) {
         setState(() {
           _latestDates = latestDates;
           _latestMonthWeights = latestMonthWeights;
           _debtors = debtors;
+          _customersWithBillChanges = customersWithBillChanges;
           _cachedCustomers = customers;
           _errorMessage = null;
         });
@@ -326,16 +327,19 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           _errorMessage = e.toString();
         });
       }
+    } finally {
+      _isFetching = false;
+      if (_pendingFetch && mounted) {
+        _pendingFetch = false;
+        _fetchCustomers();
+      }
     }
   }
 
   @override
   void dispose() {
-    _refNumberController.dispose();
-    _nameController.dispose();
-    _addressController.dispose();
-    _phoneController.dispose();
-    _pinController.dispose();
+    AppLanguageService.currentLanguage.removeListener(_onLanguageChanged);
+    AppState.refreshTrigger.removeListener(_fetchCustomers);
     super.dispose();
   }
 
@@ -392,9 +396,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       backgroundColor: _backgroundColor,
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: const Text(
-          'පාරිභෝගික ලැයිස්තුව',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+        title: Text(
+          AppStrings.isSinhala ? 'පාරිභෝගික ලැයිස්තුව' : 'Customer List',
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -406,6 +410,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       ),
       floatingActionButton: MediaQuery.of(context).size.width >= 600
           ? FloatingActionButton.extended(
+              heroTag: 'customer_form_add_fab',
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -415,9 +420,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
               },
               backgroundColor: _primaryColor,
               icon: const Icon(Icons.person_add, color: Colors.white),
-              label: const Text(
-                'නව පාරිභෝගිකයෙකු',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              label: Text(
+                AppStrings.addCustomer,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             )
           : null,
@@ -426,12 +431,11 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- සෙවීම් තීරුව ---
             SizedBox(
               height: 48,
               child: TextField(
                 decoration: InputDecoration(
-                  labelText: 'නම හෝ අංකය මගින් සොයන්න',
+                  labelText: AppStrings.isSinhala ? 'නම හෝ අංකය මගින් සොයන්න' : 'Search by name or number',
                   labelStyle: TextStyle(
                     color: _textColorSecondary,
                     fontSize: 13,
@@ -456,14 +460,13 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                 onChanged: (value) {
                   setState(() {
                     _searchQuery = value.toLowerCase();
-                    _currentPage = 0; // Search කරන විට මුල් පිටුවට යාමට
+                    _currentPage = 0;
                   });
                 },
               ),
             ),
             const SizedBox(height: 16),
 
-            // --- පාරිභෝගික ලැයිස්තුව සහ Pagination ---
             if (_errorMessage != null)
               Center(
                 child: Padding(
@@ -479,7 +482,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
             else ...[
               Builder(
                 builder: (context) {
-                  // 1. Search කිරීම (Filter)
                   var filteredDocs = _cachedCustomers!.where((data) {
                     String name = (data['name'] ?? '').toString().toLowerCase();
                     String ref = (data['refNumber'] ?? '')
@@ -489,7 +491,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                         ref.contains(_searchQuery);
                   }).toList();
 
-                  // 2. Ref Number අනුව පිළිවෙළට සැකසීම (Sort)
                   filteredDocs.sort((a, b) {
                     String refA = (a['refNumber'] ?? '').toString();
                     String refB = (b['refNumber'] ?? '').toString();
@@ -504,10 +505,10 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   });
 
                   if (filteredDocs.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text("පාරිභෝගිකයින් කිසිවෙකු හමුවුණේ නැත."),
+                        padding: const EdgeInsets.all(20),
+                        child: Text(AppStrings.noCustomersFound),
                       ),
                     );
                   }
@@ -515,7 +516,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   // 2. Pagination Logic
                   int totalPages = (filteredDocs.length / _itemsPerPage).ceil();
 
-                  // (ආරක්ෂිත පියවරක්: currentPage එක totalPages වලට වඩා වැඩි නම්)
                   if (_currentPage >= totalPages && totalPages > 0) {
                     _currentPage = totalPages - 1;
                   }
@@ -528,7 +528,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // List එක පෙන්වීම
                       ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -544,7 +543,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
                       const SizedBox(height: 24),
 
-                      // --- Pagination Controls පෙන්වීම ---
                       if (totalPages > 1)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -569,7 +567,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                                 border: Border.all(color: _borderColor),
                               ),
                               child: Text(
-                                'පිටුව ${_currentPage + 1} / $totalPages',
+                                '${AppStrings.page} ${_currentPage + 1} / $totalPages',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
@@ -601,42 +599,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
     );
   }
 
-  // --- Input Field Component ---
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool isNumber = false,
-  }) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: _textColorSecondary, fontSize: 14),
-        prefixIcon: Icon(icon, color: _textColorSecondary, size: 20),
-        filled: true,
-        fillColor: _backgroundColor,
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: _borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: _primaryColor),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 16,
-          horizontal: 12,
-        ),
-      ),
-      style: TextStyle(color: _textColorPrimary, fontSize: 14),
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly] : [],
-      validator: (value) => value == null || value.isEmpty ? 'අවශ්‍ය වේ' : null,
-    );
-  }
 
-  // --- Responsive Customer Item (RenderFlex Overflow එක විසඳීම සඳහා) ---
   Widget _buildResponsiveCustomerItem(String docId, Map<String, dynamic> data) {
     return Container(
       decoration: BoxDecoration(
@@ -644,24 +607,22 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: _borderColor),
       ),
-      padding: const EdgeInsets.all(16), // Padding එක
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. උඩ පේළිය: යොමු අංකය සහ දුරකථන අංකය
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             runSpacing: 8,
             children: [
-              // යොමු අංකය
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: _statusGreenBg,
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: _statusGreenText.withOpacity(0.2)),
+                  border: Border.all(color: _statusGreenText.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -676,7 +637,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'යොමුව: ${data['refNumber'] ?? ''}',
+                      '${AppStrings.refPrefix}${data['refNumber'] ?? ''}',
                       style: TextStyle(
                         color: _statusGreenText,
                         fontWeight: FontWeight.bold,
@@ -686,7 +647,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   ],
                 ),
               ),
-              // දුරකථන අංකය සහ PIN
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -739,7 +699,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
           const SizedBox(height: 12),
 
-          // 2. මැද කොටස: නම සහ ලිපිනය
           Row(
             children: [
               Expanded(
@@ -761,37 +720,19 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                       lastDate != null &&
                       DateTime.now().difference(lastDate).inDays <= 45;
 
-                  String label;
-                  Color bgColor;
-                  Color textColor;
                   String imagePath;
 
                   if (hasDebt && !isActive) {
-                    label = "Risk";
-                    bgColor = Colors.red.shade50;
-                    textColor = Colors.red.shade700;
                     imagePath = "assets/badges/badge_ruby.png";
                   } else if (volume >= _highVolumeThreshold &&
                       !hasDebt &&
                       isActive) {
-                    label = "Platinum";
-                    bgColor = Colors.amber.shade100;
-                    textColor = Colors.amber.shade900;
                     imagePath = "assets/badges/badge_diamond.png";
                   } else if (volume >= 50.0 && !hasDebt) {
-                    label = "Gold";
-                    bgColor = Colors.orange.shade50;
-                    textColor = Colors.orange.shade800;
                     imagePath = "assets/badges/badge_gold.png";
                   } else if (hasDebt) {
-                    label = "Risk";
-                    bgColor = Colors.red.shade50;
-                    textColor = Colors.red.shade700;
                     imagePath = "assets/badges/badge_ruby.png";
                   } else {
-                    label = "Silver";
-                    bgColor = Colors.grey.shade100;
-                    textColor = Colors.grey.shade800;
                     imagePath = "assets/badges/badge_platinum.png";
                   }
 
@@ -813,7 +754,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
           const SizedBox(height: 12),
 
-          // 2.5 මෑත දත්ත
           Builder(
             builder: (context) {
               DateTime? lastDate = _latestDates[docId];
@@ -821,7 +761,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
               String lastDateStr = lastDate != null
                   ? "${lastDate.year}-${lastDate.month.toString().padLeft(2, '0')}-${lastDate.day.toString().padLeft(2, '0')}"
-                  : "දත්ත නොමැත";
+                  : (AppStrings.isSinhala ? "දත්ත නොමැත" : "No Data");
               String weightStr = lastDate != null
                   ? "${lastMonthWeight.toStringAsFixed(1)} Kg"
                   : "-";
@@ -832,9 +772,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "අවසන් දළු දුන් දිනය",
-                          style: TextStyle(
+                        Text(
+                          AppStrings.isSinhala ? "අවසන් දළු දුන් දිනය" : "Last Supply Date",
+                          style: const TextStyle(
                             fontSize: 10,
                             color: Colors.blueGrey,
                             fontWeight: FontWeight.w600,
@@ -856,9 +796,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "එම මාසයේ මුළු දළු",
-                          style: TextStyle(
+                        Text(
+                          AppStrings.isSinhala ? "එම මාසයේ මුළු දළු" : "Monthly Total Leaf",
+                          style: const TextStyle(
                             fontSize: 10,
                             color: Colors.blueGrey,
                             fontWeight: FontWeight.w600,
@@ -883,14 +823,13 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
           const SizedBox(height: 16),
 
-          // 3. යට පේළිය: ක්‍රියාකාරකම් බොත්තම් (Wrap භාවිතා කර ඇත, එබැවින් ඉඩ මදි නම් ඊළඟ පේළියට යයි)
           Wrap(
-            spacing: 8, // බොත්තම් අතර තිරස් පරතරය
-            runSpacing: 8, // පේළි අතර සිරස් පරතරය
+            spacing: 8,
+            runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _buildActionButton(
-                label: 'සටහන්',
+                label: AppStrings.isSinhala ? 'සටහන්' : 'Entries',
                 icon: Icons.add_chart,
                 color: Colors.teal.shade400,
                 onTap: () {
@@ -902,13 +841,16 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                         initialRefNumber: data['refNumber'] ?? '',
                       ),
                     ),
-                  );
+                  ).then((_) => _fetchCustomers());
                 },
               ),
               _buildActionButton(
-                label: 'බිල්පත',
+                label: AppStrings.isSinhala ? 'බිල්පත' : 'Bill',
                 icon: Icons.receipt_long,
                 color: Colors.lightBlue.shade400,
+                badgeText: _customersWithBillChanges.contains(docId)
+                    ? AppStrings.billChangesDetected
+                    : null,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -919,7 +861,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                         refNumber: data['refNumber'] ?? '',
                       ),
                     ),
-                  );
+                  ).then((_) => _fetchCustomers());
                 },
               ),
               if (MediaQuery.of(context).size.width >= 600) ...[
@@ -929,7 +871,6 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                   color: Colors.orange.shade400,
                   onTap: () => _showEditPinDialog(context, docId, data['name'] ?? ''),
                 ),
-              // Delete බොත්තම
                 InkWell(
                   onTap: () =>
                       _deleteCustomer(context, docId, data['name'] ?? ''),
@@ -940,7 +881,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.red.shade300.withOpacity(0.5)),
+                      border: Border.all(color: Colors.red.shade300.withValues(alpha: 0.5)),
                       borderRadius: BorderRadius.circular(6),
                       color: Colors.red.shade50,
                     ),
@@ -966,22 +907,22 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('$customerName - PIN වෙනස් කරන්න'),
+        title: Text('$customerName - ${AppStrings.isSinhala ? 'PIN වෙනස් කරන්න' : 'Change PIN'}'),
         content: TextField(
           controller: pinController,
           keyboardType: TextInputType.number,
           maxLength: 6,
           obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'අලුත් 6-digit PIN',
-            prefixIcon: Icon(Icons.lock),
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: AppStrings.isSinhala ? 'අලුත් 6-digit PIN' : 'New 6-digit PIN',
+            prefixIcon: const Icon(Icons.lock),
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('අවලංගු'),
+            child: Text(AppStrings.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
@@ -989,22 +930,29 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
               String newPin = pinController.text.trim();
               if (newPin.length != 6) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('PIN 6 ඉලක්කම් විය යුතුය.'), backgroundColor: Colors.red),
+                  SnackBar(
+                    content: Text(AppStrings.isSinhala ? 'PIN 6 ඉලක්කම් විය යුතුය.' : 'PIN must be 6 digits.'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
                 return;
               }
               await Supabase.instance.client
                   .from('customers')
                   .update({'pin': newPin})
+                  .eq('organization_id', AppState.currentOrganizationId.value ?? '')
                   .eq('id', docId);
               if (ctx.mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('PIN සාර්ථකව වෙනස් විය!'), backgroundColor: Colors.green),
+                  SnackBar(
+                    content: Text(AppStrings.isSinhala ? 'PIN සාර්ථකව වෙනස් විය!' : 'PIN changed successfully!'),
+                    backgroundColor: Colors.green,
+                  ),
                 );
               }
             },
-            child: const Text('සුරකින්න', style: TextStyle(color: Colors.white)),
+            child: Text(AppStrings.save, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1017,30 +965,53 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    String? badgeText,
   }) {
+    final effectiveColor = badgeText != null ? Colors.amber.shade800 : color;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(
+            color: badgeText != null ? Colors.amber.shade700 : color.withValues(alpha: 0.3),
+            width: badgeText != null ? 1.5 : 1.0,
+          ),
           borderRadius: BorderRadius.circular(6),
-          color: color.withOpacity(0.05),
+          color: badgeText != null ? Colors.amber.shade50 : color.withValues(alpha: 0.05),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: color),
+            Icon(icon, size: 16, color: effectiveColor),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
-                color: color,
+                color: effectiveColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (badgeText != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade700,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  badgeText,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

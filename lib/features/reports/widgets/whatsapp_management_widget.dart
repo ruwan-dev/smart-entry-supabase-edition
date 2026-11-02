@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'dart:ui';
+import 'dart:convert';
 import 'package:smart_entry/features/reports/widgets/whatsapp_batch_dialog.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../shared_report_state.dart';
 import 'package:smart_entry/core/app_state.dart';
+import 'package:smart_entry/core/localization/app_strings.dart';
 
 class WhatsappManagementWidget extends StatefulWidget {
   const WhatsappManagementWidget({super.key});
@@ -16,16 +17,19 @@ class WhatsappManagementWidget extends StatefulWidget {
 }
 
 class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
-  final int _currentYear = DateTime.now().year;
+  late int _selectedYear;
+  int get _currentYear => _selectedYear;
   late int _selectedMonth;
 
   bool _isLoading = false;
   bool _hasFinalizedBills = false;
   List<Map<String, dynamic>> _billingList = [];
-  String _companyLine1 = 'SmartEntry';
-  String _companyLine2 = '';
-  String _companyLine3 = '';
+  String _orgName = '';
+  String _companyLine1 = 'Authorized Green Dealer';
+  String _companyLine2 = 'Gangoda';
+  String _companyLine3 = 'Rakwana';
   String _companyLine4 = '';
+  String _contactNumbers = 'Tel: 0713444934 / 0758258544';
 
   final List<String> _monthLabels = [
     "January",
@@ -42,35 +46,26 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
     "December",
   ];
 
-  final List<String> _sinhalaMonths = [
-    "ජනවාරි",
-    "පෙබරවාරි",
-    "මාර්තු",
-    "අප්‍රේල්",
-    "මැයි",
-    "ජූනි",
-    "ජූලි",
-    "අගෝස්තු",
-    "සැප්තැම්බර්",
-    "ඔක්තෝබර්",
-    "නොවැම්බර්",
-    "දෙසැම්බර්",
-  ];
+  List<String> get _sinhalaMonths => AppStrings.monthNames;
 
   @override
   void initState() {
     super.initState();
     _selectedMonth = SharedReportState.selectedMonth.value;
-    SharedReportState.selectedMonth.addListener(_onSharedMonthChanged);
+    _selectedYear = SharedReportState.selectedYear.value;
+    SharedReportState.selectedMonth.addListener(_onSharedDateChanged);
+    SharedReportState.selectedYear.addListener(_onSharedDateChanged);
     _loadCompanyName();
     _fetchFinalizedBills();
   }
 
-  void _onSharedMonthChanged() {
-    if (_selectedMonth != SharedReportState.selectedMonth.value) {
+  void _onSharedDateChanged() {
+    if (_selectedMonth != SharedReportState.selectedMonth.value ||
+        _selectedYear != SharedReportState.selectedYear.value) {
       if (mounted) {
         setState(() {
           _selectedMonth = SharedReportState.selectedMonth.value;
+          _selectedYear = SharedReportState.selectedYear.value;
         });
         _fetchFinalizedBills();
       }
@@ -79,7 +74,8 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
 
   @override
   void dispose() {
-    SharedReportState.selectedMonth.removeListener(_onSharedMonthChanged);
+    SharedReportState.selectedMonth.removeListener(_onSharedDateChanged);
+    SharedReportState.selectedYear.removeListener(_onSharedDateChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -87,20 +83,33 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
   Future<void> _loadCompanyName() async {
     final orgRes = await Supabase.instance.client
         .from('organizations')
-        .select('company_line_1, company_line_2, company_line_3, company_line_4')
+        .select('name, company_line_1, company_line_2, company_line_3, company_line_4, company_line_5')
         .eq('id', AppState.currentOrganizationId.value ?? '')
         .maybeSingle();
     setState(() {
       if (orgRes != null) {
-        _companyLine1 = orgRes['company_line_1'] ?? 'SmartEntry';
-        _companyLine2 = orgRes['company_line_2'] ?? '';
-        _companyLine3 = orgRes['company_line_3'] ?? '';
-        _companyLine4 = orgRes['company_line_4'] ?? '';
+        _orgName = (orgRes['name'] ?? '').toString().trim();
+        _companyLine1 = (orgRes['company_line_1'] ?? '').toString().trim();
+        _companyLine2 = (orgRes['company_line_2'] ?? '').toString().trim();
+        _companyLine3 = (orgRes['company_line_3'] ?? '').toString().trim();
+        _companyLine4 = (orgRes['company_line_4'] ?? '').toString().trim();
+
+        String rawLine5 = (orgRes['company_line_5'] ?? '').toString().trim();
+        if (rawLine5.startsWith('{')) {
+          try {
+            final map = jsonDecode(rawLine5) as Map<String, dynamic>;
+            _contactNumbers = (map['contact'] ?? '').toString().trim();
+          } catch (_) {}
+        } else if (rawLine5.toLowerCase().contains('tel') || rawLine5.toLowerCase().contains('07')) {
+          _contactNumbers = rawLine5;
+        }
       } else {
-        _companyLine1 = 'SmartEntry';
+        _orgName = '';
+        _companyLine1 = '';
         _companyLine2 = '';
         _companyLine3 = '';
         _companyLine4 = '';
+        _contactNumbers = '';
       }
     });
   }
@@ -240,58 +249,132 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
     double arrears = (bill['arrears'] ?? 0).toDouble();
     double otherCosts = (bill['otherCosts'] ?? 0).toDouble();
 
-    String msg =
-        "ආයුබෝවන් *$name*,\n\n"
-        "ඔබගේ ${_sinhalaMonths[_selectedMonth - 1]} මාසයේ බිල්පත:\n\n";
+    String displayMonth = _sinhalaMonths[_selectedMonth - 1];
+    String msg;
 
-    if (totalWeight > 0 || totalWeight2 == 0) {
-      double normalAmount = totalWeight * teaRate;
-      msg += "සාමාන්‍ය දළු: *${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} kg*\n"
-             "සාමාන්‍ය දළු මිල: *Rs ${currencyF.format(teaRate)}*\n"
-             "සාමාන්‍ය දළු වටිනාකම: *Rs ${currencyF.format(normalAmount)}*\n";
+    if (AppStrings.isSinhala) {
+      msg =
+          "ආයුබෝවන් *$name*,\n\n"
+          "ඔබගේ $displayMonth මාසයේ බිල්පත:\n\n";
+
+      if (totalWeight > 0 || totalWeight2 == 0) {
+        double normalAmount = totalWeight * teaRate;
+        msg += "සාමාන්‍ය දළු: *${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} kg*\n"
+               "සාමාන්‍ය දළු මිල: *Rs ${currencyF.format(teaRate)}*\n"
+               "සාමාන්‍ය දළු වටිනාකම: *Rs ${currencyF.format(normalAmount)}*\n";
+      }
+      if (totalWeight2 > 0) {
+        double superAmount = totalWeight2 * teaRate2;
+        msg += "සුපිරි දළු: *${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} kg*\n"
+               "සුපිරි දළු මිල: *Rs ${currencyF.format(teaRate2)}*\n"
+               "සුපිරි දළු වටිනාකම: *Rs ${currencyF.format(superAmount)}*\n";
+      }
+
+      msg += "\nමුළු දළු ආදායම: *Rs ${currencyF.format(grossIncome)}*\n\n";
+
+      if (totalDeductions > 0) {
+        msg += "අඩුකිරීම්:\n";
+        if (advTotal > 0) {
+          msg += "• අත්තිකාරම්: *Rs ${currencyF.format(advTotal)}*\n";
+        }
+        if (f1Total > 0) msg += "• භාණ්ඩ 01: *Rs ${currencyF.format(f1Total)}*\n";
+        if (f2Total > 0) msg += "• භාණ්ඩ 02: *Rs ${currencyF.format(f2Total)}*\n";
+        if (t1Total > 0) {
+          msg += "• තේ කොළ 01: *Rs ${currencyF.format(t1Total)}*\n";
+        }
+        if (t2Total > 0) {
+          msg += "• තේ කොළ 02: *Rs ${currencyF.format(t2Total)}*\n";
+        }
+        if (transportCost > 0) {
+          msg += "• ප්‍රවාහනය: *Rs ${currencyF.format(transportCost)}*\n";
+        }
+        if (otherCosts > 0) {
+          msg += "• වෙනත් අඩු කිරීම්: *Rs ${currencyF.format(otherCosts)}*\n";
+        }
+        if (arrears > 0) {
+          msg += "• හිඟ මුදල්: *Rs ${currencyF.format(arrears)}*\n";
+        }
+        msg += "\nමුළු අඩුකිරීම්: *Rs ${currencyF.format(totalDeductions)}*\n\n";
+      }
+
+      List<String> companyLines = [
+        _orgName,
+        _companyLine1,
+        _companyLine2,
+        _companyLine3,
+        _companyLine4,
+        _contactNumbers,
+      ];
+      String companySignature = companyLines
+          .where((l) => l.trim().isNotEmpty)
+          .join('\n');
+
+      msg +=
+          "ලබා දිය යුතු මුදල: *Rs ${currencyF.format(netPayable)}*\n\n"
+          "Thank you!\n$companySignature\n"
+          "_powered by OrbitView Innovations_";
+    } else {
+      msg =
+          "Hello *$name*,\n\n"
+          "Your bill for $displayMonth:\n\n";
+
+      if (totalWeight > 0 || totalWeight2 == 0) {
+        double normalAmount = totalWeight * teaRate;
+        msg += "Normal Leaf: *${totalWeight % 1 == 0 ? totalWeight.toInt() : totalWeight.toStringAsFixed(1)} kg*\n"
+               "Normal Leaf Rate: *Rs ${currencyF.format(teaRate)}*\n"
+               "Normal Leaf Value: *Rs ${currencyF.format(normalAmount)}*\n";
+      }
+      if (totalWeight2 > 0) {
+        double superAmount = totalWeight2 * teaRate2;
+        msg += "Super Leaf: *${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} kg*\n"
+               "Super Leaf Rate: *Rs ${currencyF.format(teaRate2)}*\n"
+               "Super Leaf Value: *Rs ${currencyF.format(superAmount)}*\n";
+      }
+
+      msg += "\nTotal Leaf Income: *Rs ${currencyF.format(grossIncome)}*\n\n";
+
+      if (totalDeductions > 0) {
+        msg += "Deductions:\n";
+        if (advTotal > 0) {
+          msg += "• Advance: *Rs ${currencyF.format(advTotal)}*\n";
+        }
+        if (f1Total > 0) msg += "• Item 01: *Rs ${currencyF.format(f1Total)}*\n";
+        if (f2Total > 0) msg += "• Item 02: *Rs ${currencyF.format(f2Total)}*\n";
+        if (t1Total > 0) {
+          msg += "• Tea Packet 01: *Rs ${currencyF.format(t1Total)}*\n";
+        }
+        if (t2Total > 0) {
+          msg += "• Tea Packet 02: *Rs ${currencyF.format(t2Total)}*\n";
+        }
+        if (transportCost > 0) {
+          msg += "• Transport: *Rs ${currencyF.format(transportCost)}*\n";
+        }
+        if (otherCosts > 0) {
+          msg += "• Other Deductions: *Rs ${currencyF.format(otherCosts)}*\n";
+        }
+        if (arrears > 0) {
+          msg += "• Arrears: *Rs ${currencyF.format(arrears)}*\n";
+        }
+        msg += "\nTotal Deductions: *Rs ${currencyF.format(totalDeductions)}*\n\n";
+      }
+
+      List<String> companyLines = [
+        _orgName,
+        _companyLine1,
+        _companyLine2,
+        _companyLine3,
+        _companyLine4,
+        _contactNumbers,
+      ];
+      String companySignature = companyLines
+          .where((l) => l.trim().isNotEmpty)
+          .join('\n');
+
+      msg +=
+          "Net Payable: *Rs ${currencyF.format(netPayable)}*\n\n"
+          "Thank you!\n$companySignature\n"
+          "_powered by OrbitView Innovations_";
     }
-    if (totalWeight2 > 0) {
-      double superAmount = totalWeight2 * teaRate2;
-      msg += "සුපිරි දළු: *${totalWeight2 % 1 == 0 ? totalWeight2.toInt() : totalWeight2.toStringAsFixed(1)} kg*\n"
-             "සුපිරි දළු මිල: *Rs ${currencyF.format(teaRate2)}*\n"
-             "සුපිරි දළු වටිනාකම: *Rs ${currencyF.format(superAmount)}*\n";
-    }
-
-    msg += "\nමුළු දළු ආදායම: *Rs ${currencyF.format(grossIncome)}*\n\n";
-
-    if (totalDeductions > 0) {
-      msg += "අඩුකිරීම්:\n";
-      if (advTotal > 0)
-        msg += "• අත්තිකාරම්: *Rs ${currencyF.format(advTotal)}*\n";
-      if (f1Total > 0) msg += "• පොහොර 01: *Rs ${currencyF.format(f1Total)}*\n";
-      if (f2Total > 0) msg += "• පොහොර 02: *Rs ${currencyF.format(f2Total)}*\n";
-      if (t1Total > 0)
-        msg += "• තේ කොළ 01: *Rs ${currencyF.format(t1Total)}*\n";
-      if (t2Total > 0)
-        msg += "• තේ කොළ 02: *Rs ${currencyF.format(t2Total)}*\n";
-      if (transportCost > 0)
-        msg += "• ප්‍රවාහනය: *Rs ${currencyF.format(transportCost)}*\n";
-      if (otherCosts > 0)
-        msg += "• වෙනත් අඩු කිරීම්: *Rs ${currencyF.format(otherCosts)}*\n";
-      if (arrears > 0)
-        msg += "• හිඟ මුදල්: *Rs ${currencyF.format(arrears)}*\n";
-      msg += "\nමුළු අඩුකිරීම්: *Rs ${currencyF.format(totalDeductions)}*\n\n";
-    }
-
-    List<String> companyLines = [
-      _companyLine1,
-      _companyLine2,
-      _companyLine3,
-      _companyLine4,
-    ];
-    String companySignature = companyLines
-        .where((l) => l.trim().isNotEmpty)
-        .join('\n');
-
-    msg +=
-        "ලබා දිය යුතු මුදල: *Rs ${currencyF.format(netPayable)}*\n\n"
-        "ස්තූතියි!\n$companySignature\n"
-        "_powered by OrbitView Innovations_";
 
     return msg;
   }
@@ -317,10 +400,8 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
 
     if (billsToSend.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'යැවීමට අලුත් බිල්පත් හෝ දුරකථන අංක නොමැත! (No matching bills/phones found)',
-          ),
+        SnackBar(
+          content: Text(AppStrings.noBillsOrPhonesToSend),
           backgroundColor: Colors.orange,
         ),
       );
@@ -371,20 +452,20 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          const Color(0xFF8B9CB2).withOpacity(0.3),
-                          const Color(0xFF8B9CB2).withOpacity(0.1),
+                          const Color(0xFF8B9CB2).withValues(alpha: 0.3),
+                          const Color(0xFF8B9CB2).withValues(alpha: 0.1),
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.5),
+                        color: Colors.white.withValues(alpha: 0.5),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF8B9CB2).withOpacity(0.1),
+                          color: const Color(0xFF8B9CB2).withValues(alpha: 0.1),
                           blurRadius: 20,
                         ),
                       ],
@@ -403,15 +484,15 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
-                                      Colors.white.withOpacity(0.6),
-                                      Colors.white.withOpacity(0.2),
+                                      Colors.white.withValues(alpha: 0.6),
+                                      Colors.white.withValues(alpha: 0.2),
                                     ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.white.withValues(alpha: 0.6),
                                     width: 1.5,
                                   ),
                                 ),
@@ -496,15 +577,15 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
-                                        Colors.white.withOpacity(0.5),
-                                        Colors.white.withOpacity(0.1),
+                                        Colors.white.withValues(alpha: 0.5),
+                                        Colors.white.withValues(alpha: 0.1),
                                       ],
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                     ),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: Colors.white.withOpacity(0.6),
+                                      color: Colors.white.withValues(alpha: 0.6),
                                       width: 1.5,
                                     ),
                                   ),
@@ -519,7 +600,7 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
                                             color: Colors.orange.shade600
-                                                .withOpacity(0.15),
+                                                .withValues(alpha: 0.15),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -545,8 +626,8 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
-                                              const Text(
-                                                "මෙම මාසයේ ගිණුම් පියවීම අවසන් කර නැත.",
+                                              Text(
+                                                AppStrings.monthNotClosedYet,
                                                 style: TextStyle(
                                                   color: Colors.black87,
                                                   fontSize: 13,
@@ -575,10 +656,10 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                     child: Container(
                                       height: 48,
                                       decoration: BoxDecoration(
-                                        color: Colors.green.withOpacity(0.15),
+                                        color: Colors.green.withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: Colors.green.withOpacity(0.5),
+                                          color: Colors.green.withValues(alpha: 0.5),
                                           width: 1.5,
                                         ),
                                       ),
@@ -600,7 +681,7 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                                 ),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  "SEND TO UNSENT ONLY (යැවීමට ඉතිරි)",
+                                                  AppStrings.sendToUnsentOnly,
                                                   style: TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 13,
@@ -629,10 +710,10 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                     child: Container(
                                       height: 48,
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.withOpacity(0.15),
+                                        color: Colors.blue.withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: Colors.blue.withOpacity(0.5),
+                                          color: Colors.blue.withValues(alpha: 0.5),
                                           width: 1.5,
                                         ),
                                       ),
@@ -654,7 +735,7 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                                 ),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  "RESEND TO ALL (සියල්ලන්ටම නැවත යවන්න)",
+                                                  AppStrings.resendToAll,
                                                   style: TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 13,
@@ -715,8 +796,8 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
               spacing: 16,
               runSpacing: 16,
               children: [
-                const Text(
-                  "තනි බිල්පත් (Individual Bills)",
+                Text(
+                  AppStrings.individualBills,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -802,7 +883,7 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                       border: Border.all(color: Colors.grey.shade200),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.02),
+                          color: Colors.black.withValues(alpha: 0.02),
                           blurRadius: 4,
                         ),
                       ],
@@ -839,7 +920,7 @@ class _WhatsappManagementWidgetState extends State<WhatsappManagementWidget> {
                                 ),
                               if (phone.isEmpty)
                                 Text(
-                                  "දුරකථන අංකයක් නොමැත",
+                                  AppStrings.noPhoneNumber,
                                   style: TextStyle(
                                     color: Colors.red.shade400,
                                     fontSize: 12,

@@ -8,7 +8,9 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'dart:ui';
 import 'package:smart_entry/features/reports/widgets/whatsapp_batch_dialog.dart';
 import '../shared_report_state.dart';
+import 'package:smart_entry/core/localization/app_strings.dart';
 import 'package:smart_entry/core/app_state.dart';
+import '../../../services/billing_lock_service.dart';
 
 class MonthlyClosingWidget extends StatefulWidget {
   const MonthlyClosingWidget({super.key});
@@ -18,7 +20,7 @@ class MonthlyClosingWidget extends StatefulWidget {
 }
 
 class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
-  final int _currentYear = DateTime.now().year;
+  int get _currentYear => DateTime.now().year;
   late int _selectedMonth;
 
   bool _isCalculating = false;
@@ -30,20 +32,25 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
   String _progressMessage = '';
   double? _progressValue;
 
+  final GlobalKey _monthSelectorKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     _selectedMonth = SharedReportState.selectedMonth.value;
+    SharedReportState.selectedYear.value = DateTime.now().year;
     SharedReportState.selectedMonth.addListener(_onSharedMonthChanged);
     _checkStatusAndCalculate();
   }
 
   void _onSharedMonthChanged() {
     if (_selectedMonth != SharedReportState.selectedMonth.value) {
-      setState(() {
-        _selectedMonth = SharedReportState.selectedMonth.value;
-      });
-      _checkStatusAndCalculate();
+      if (mounted) {
+        setState(() {
+          _selectedMonth = SharedReportState.selectedMonth.value;
+        });
+        _checkStatusAndCalculate();
+      }
     }
   }
 
@@ -431,6 +438,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
       });
 
       // 💡 නව PDF ගොනු නාමයේ ආකෘතිය: year_month_currenttime.pdf
+      await BillingLockService().fetchLatestFinalizedMonth(forceRefresh: true);
       String currentTime = DateFormat('hh_mm_ss_a').format(DateTime.now());
       String customFileName = "${_currentYear}_${monthName}_$currentTime.pdf";
 
@@ -482,20 +490,20 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            const Color(0xFF8B9CB2).withOpacity(0.3),
-                            const Color(0xFF8B9CB2).withOpacity(0.1),
+                            const Color(0xFF8B9CB2).withValues(alpha: 0.3),
+                            const Color(0xFF8B9CB2).withValues(alpha: 0.1),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.white.withValues(alpha: 0.5),
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF8B9CB2).withOpacity(0.1),
+                            color: const Color(0xFF8B9CB2).withValues(alpha: 0.1),
                             blurRadius: 20,
                           ),
                         ],
@@ -527,7 +535,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                   child: Image.asset(
                     'assets/closing_bg.jpg',
                     fit: BoxFit.cover,
-                    height: 360, // Increased height to match left tile
+                    height: 360,
                   ),
                 ),
               ),
@@ -542,92 +550,227 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
     );
   }
 
+  List<String> get _fullMonthNames => AppStrings.isSinhala
+      ? const ['ජනවාරි', 'පෙබරවාරි', 'මාර්තු', 'අප්‍රේල්', 'මැයි', 'ජූනි', 'ජූලි', 'අගෝස්තු', 'සැප්තැම්බර්', 'ඔක්තෝබර්', 'නොවැම්බර්', 'දෙසැම්බර්']
+      : const ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  void _onMonthChanged(int newMonth) {
+    if (_selectedMonth != newMonth && newMonth >= 1 && newMonth <= 12) {
+      SharedReportState.selectedMonth.value = newMonth;
+    }
+  }
+
   Widget _buildMonthSelector() {
-    List<String> months = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
+          key: _monthSelectorKey,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Colors.white.withOpacity(0.5),
-                Colors.white.withOpacity(0.1),
+                Colors.white.withValues(alpha: 0.5),
+                Colors.white.withValues(alpha: 0.1),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.white.withOpacity(0.6),
+              color: Colors.white.withValues(alpha: 0.6),
               width: 1.5,
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.calendar_today_outlined,
-                  size: 20,
-                  color: Colors.black54,
-                ),
-                const SizedBox(width: 15),
-                Text(
-                  "$_currentYear",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(width: 15),
-                Container(width: 1, height: 20, color: Colors.grey.shade300),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int>(
-                      value: _selectedMonth,
-                      isExpanded: true,
-                      icon: const Icon(
-                        Icons.keyboard_arrow_down,
-                        color: Colors.black54,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _showMonthDropdown,
+              borderRadius: BorderRadius.circular(12),
+              hoverColor: Colors.white.withValues(alpha: 0.2),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_month_rounded,
+                      size: 20,
+                      color: Color(0xFF0096C7),
+                    ),
+                    const SizedBox(width: 14),
+                    Text(
+                      "$_currentYear",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Color(0xFF1E293B),
                       ),
-                      items: List.generate(
-                        12,
-                        (i) => DropdownMenuItem(
-                          value: i + 1,
-                          child: Text(
-                            months[i],
-                            style: const TextStyle(
-                              fontSize: 15,
-                              color: Colors.black87,
-                            ),
-                          ),
+                    ),
+                    const SizedBox(width: 14),
+                    Container(width: 1, height: 20, color: Colors.grey.shade300),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        _fullMonthNames[(_selectedMonth - 1).clamp(0, 11)],
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
                         ),
                       ),
-                      onChanged: (val) {
-                        SharedReportState.selectedMonth.value = val!;
-                      },
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Color(0xFF0096C7),
+                      size: 24,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMonthDropdown() {
+    final RenderBox? renderBox =
+        _monthSelectorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+    final screenSize = MediaQuery.of(context).size;
+
+    const double popupHeight = 210;
+    double top = offset.dy + size.height + 6;
+    if (top + popupHeight > screenSize.height - 16) {
+      top = offset.dy - popupHeight - 6;
+    }
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withValues(alpha: 0.12),
+      transitionDuration: const Duration(milliseconds: 150),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Stack(
+          children: [
+            Positioned(
+              left: offset.dx,
+              top: top,
+              width: size.width,
+              child: Material(
+                color: Colors.transparent,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.98),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFE2E8F0),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (int row = 0; row < 4; row++) ...[
+                            if (row > 0) const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                for (int col = 0; col < 3; col++) ...[
+                                  if (col > 0) const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildDropdownMonthTile(
+                                      monthNum: row * 3 + col + 1,
+                                      monthName: _fullMonthNames[row * 3 + col],
+                                      isSelected: _selectedMonth == (row * 3 + col + 1),
+                                      onTap: () {
+                                        Navigator.of(dialogContext).pop();
+                                        _onMonthChanged(row * 3 + col + 1);
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
+          ],
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          ),
+          child: child,
+        );
+      },
+    );
+  }
+
+  Widget _buildDropdownMonthTile({
+    required int monthNum,
+    required String monthName,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    const selectedColor = Color(0xFF0096C7);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      hoverColor: selectedColor.withValues(alpha: 0.08),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? selectedColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: selectedColor.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          monthName,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : const Color(0xFF334155),
+            letterSpacing: 0.2,
           ),
         ),
       ),
@@ -896,7 +1039,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Colors.white.withOpacity(0.5),
+                Colors.white.withValues(alpha: 0.5),
                 Colors.white.withOpacity(0.1),
               ],
               begin: Alignment.topLeft,

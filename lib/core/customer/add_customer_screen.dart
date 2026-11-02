@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_state.dart';
+import '../localization/app_strings.dart';
 import 'dart:math';
 
 class AddCustomerScreen extends StatefulWidget {
@@ -56,8 +57,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
         if (querySnapshot.isNotEmpty) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('මෙම යොමු අංකය භාවිතා කර ඇත!'),
+              SnackBar(
+                content: Text(AppStrings.refNumberExists),
                 backgroundColor: Colors.red,
               ),
             );
@@ -78,14 +79,14 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
         if (mounted) {
           AppState.triggerRefresh();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('පාරිභෝගිකයා සාර්ථකව සුරකින ලදී'), backgroundColor: Colors.green),
+            SnackBar(content: Text(AppStrings.customerSaved), backgroundColor: Colors.green),
           );
           Navigator.pop(context);
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('දෝෂයකි: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('${AppStrings.errorPrefix}$e'), backgroundColor: Colors.red),
           );
         }
       } finally {
@@ -131,7 +132,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
       style: TextStyle(color: _textColorPrimary, fontSize: 14),
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
       inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly] : [],
-      validator: (value) => value == null || value.isEmpty ? 'අවශ්‍ය වේ' : null,
+      validator: (value) => value == null || value.isEmpty ? AppStrings.requiredField : null,
     );
   }
 
@@ -147,7 +148,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: InputDecoration(
-            labelText: 'රහස්‍ය අංකය (6-digit PIN)',
+            labelText: AppStrings.pin,
             labelStyle: TextStyle(color: _textColorSecondary, fontSize: 14),
             prefixIcon: Icon(Icons.lock, color: _textColorSecondary, size: 20),
             filled: true,
@@ -168,8 +169,10 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
           ),
           style: TextStyle(color: _textColorPrimary, fontSize: 14, letterSpacing: 4),
           validator: (value) {
-            if (value == null || value.isEmpty) return 'PIN අවශ්‍ය වේ';
-            if (value.length != 6) return 'PIN ඉලක්කම් 6ක් විය යුතුය';
+            if (value == null || value.isEmpty) return AppStrings.requiredField;
+            if (value.length != 6) {
+              return AppStrings.isSinhala ? 'PIN ඉලක්කම් 6ක් විය යුතුය' : 'PIN must be 6 digits';
+            }
             return null;
           },
         ),
@@ -181,7 +184,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             OutlinedButton.icon(
               onPressed: _generatePin,
               icon: const Icon(Icons.auto_awesome, size: 16),
-              label: const Text('ස්වයංක්‍රීයව ජනනය කරන්න'),
+              label: Text(AppStrings.isSinhala ? 'ස්වයංක්‍රීයව ජනනය කරන්න' : 'Auto Generate'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _primaryColor,
                 side: BorderSide(color: _primaryColor),
@@ -198,9 +201,9 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                   : () {
                       Clipboard.setData(ClipboardData(text: _pinController.text));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('PIN clipboard එකට copy විය!'),
-                          duration: Duration(seconds: 2),
+                        SnackBar(
+                          content: Text(AppStrings.isSinhala ? 'PIN පිටපත් කරන ලදී!' : 'PIN copied to clipboard!'),
+                          duration: const Duration(seconds: 2),
                           backgroundColor: Colors.teal,
                         ),
                       );
@@ -226,9 +229,9 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(
-        title: const Text(
-          'නව පාරිභෝගිකයෙකු එකතු කරන්න',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+        title: Text(
+          AppStrings.addCustomer,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -251,7 +254,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'අලුත් පාරිභෝගිකයෙකු ලියාපදිංචි කිරීම',
+                AppStrings.isSinhala ? 'අලුත් පාරිභෝගිකයෙකු ලියාපදිංචි කිරීම' : 'Register New Customer',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _textColorPrimary),
               ),
               const SizedBox(height: 20),
@@ -261,26 +264,26 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                   children: [
                     _buildTextField(
                       controller: _refNumberController,
-                      label: 'යොමු අංකය (Ref Number)',
+                      label: AppStrings.refNumber,
                       icon: Icons.numbers,
                       isNumber: true,
                     ),
                     const SizedBox(height: 12),
                     _buildTextField(
                       controller: _nameController,
-                      label: 'නම',
+                      label: AppStrings.name,
                       icon: Icons.person,
                     ),
                     const SizedBox(height: 12),
                     _buildTextField(
                       controller: _addressController,
-                      label: 'ලිපිනය',
+                      label: AppStrings.address,
                       icon: Icons.location_on,
                     ),
                     const SizedBox(height: 12),
                     _buildTextField(
                       controller: _phoneController,
-                      label: 'දුරකථන අංකය',
+                      label: AppStrings.phone,
                       icon: Icons.phone,
                       isNumber: true,
                     ),
@@ -307,7 +310,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                           height: 24,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Text('පාරිභෝගිකයා සුරකින්න', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      : Text(AppStrings.isSinhala ? 'පාරිභෝගිකයා සුරකින්න' : 'Save Customer', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

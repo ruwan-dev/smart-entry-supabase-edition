@@ -1,6 +1,6 @@
+import 'package:smart_entry/core/localization/app_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../core/billing/monthly_bill_screen.dart';
 import 'customer_timeline_screen.dart';
 
 class TotalOutstandingBalancesScreen extends StatefulWidget {
@@ -100,7 +100,7 @@ class _TotalOutstandingBalancesScreenState extends State<TotalOutstandingBalance
           // List View Area 
           Expanded(
             child: _displayList.isEmpty
-                ? const Center(child: Text('කිසිදු හිඟ මුදලක් නොමැත 🎉', style: TextStyle(fontSize: 16, color: Color(0xFF10B981), fontWeight: FontWeight.w600)))
+                ? Center(child: Text(AppStrings.noOutstandingBalances, style: const TextStyle(fontSize: 16, color: Color(0xFF10B981), fontWeight: FontWeight.w600)))
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     itemCount: _paginatedList.length,

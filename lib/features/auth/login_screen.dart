@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_entry/features/dashboard/dashboard_screen.dart';
 import 'package:smart_entry/core/widgets/blinking_logo_loader.dart';
 import 'package:smart_entry/core/app_state.dart';
-// (හෝ DashboardScreen එක තියෙන නිවැරදි path එක)
+import 'package:smart_entry/core/localization/app_strings.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (inputUsername.isEmpty || inputPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('කරුණාකර පරිශීලක නාමය සහ මුරපදය ඇතුළත් කරන්න.')),
+        SnackBar(content: Text(AppStrings.enterUsernameAndPasswordPrompt)),
       );
       return;
     }
@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
           .maybeSingle();
 
       if (userDoc == null) {
-        throw Exception("පරිශීලක නාමය වැරදියි.");
+        throw Exception(AppStrings.invalidUsername);
       }
 
       String dbPassword = userDoc['password'].toString();
@@ -81,19 +81,19 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('මුරපදය වැරදියි! කරුණාකර නැවත උත්සාහ කරන්න.'),
+            SnackBar(
+              content: Text(AppStrings.invalidPassword),
               backgroundColor: Colors.red,
             ),
           );
-          _passwordController.clear(); // input එක clear කිරීම
+          _passwordController.clear();
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('දෝෂයක් ඇති විය: $e'),
+            content: Text('${AppStrings.errorPrefix}$e'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -103,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() {
           _isLoading = false;
         });
-      } // Loading අවසන්
+      }
     }
   }
 
@@ -124,8 +124,8 @@ class _LoginScreenState extends State<LoginScreen> {
           color: Theme.of(context).primaryColor.withOpacity(0.8),
         ),
         const SizedBox(height: 16),
-        const Text(
-          "\"දෛනික තේ දළු කළමනාකරණය\nවඩාත් පහසුවෙන් සහ නිවැරදිව.\"",
+        Text(
+          AppStrings.loginTagline,
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 22,
@@ -210,7 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // If saved username, show Welcome, else show Username Field
                 if (_savedUsername != null) ...[
                   Text(
-                    'Welcome back, $_savedUsername!',
+                    AppStrings.isSinhala ? 'නැවත සාදරයෙන් පිළිගනිමු, $_savedUsername!' : 'Welcome back, $_savedUsername!',
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey),
                   ),
                   const SizedBox(height: 24),
@@ -219,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _usernameController,
                   decoration: InputDecoration(
-                    hintText: 'Username',
+                    hintText: AppStrings.username,
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -246,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
                   decoration: InputDecoration(
-                    hintText: 'Password',
+                    hintText: AppStrings.password,
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -294,8 +294,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(30.0),
                       ),
                     ),
-                    child: const Text(
-                      'LOGIN',
+                    child: Text(
+                      AppStrings.loginButton,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -314,7 +314,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         _passwordController.clear();
                       });
                     },
-                    child: const Text('Log in with another account', style: TextStyle(color: Colors.blueGrey)),
+                    child: Text(AppStrings.logInWithAnotherAccount, style: const TextStyle(color: Colors.blueGrey)),
                   ),
                 ],
               ],
@@ -330,15 +330,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: Colors.blue.shade50,
-        body: const Center(
+        body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              BlinkingLogoLoader(size: 60),
-              SizedBox(height: 16),
+              const BlinkingLogoLoader(size: 60),
+              const SizedBox(height: 16),
               Text(
-                "මුරපදය පරීක්ෂා කරමින්...",
-                style: TextStyle(color: Colors.grey),
+                AppStrings.verifyingPassword,
+                style: const TextStyle(color: Colors.grey),
               ),
             ],
           ),

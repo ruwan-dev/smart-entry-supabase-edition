@@ -4,6 +4,7 @@ import '../../core/entries/daily_entry_form_screen.dart';
 import '../billing/monthly_bill_screen.dart';
 import 'customer_form_screen.dart'; 
 import '../app_state.dart';
+import 'package:smart_entry/core/localization/app_strings.dart';
 
 class CustomerListScreen extends StatelessWidget {
   const CustomerListScreen({super.key});
@@ -12,17 +13,17 @@ class CustomerListScreen extends StatelessWidget {
     bool confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('පාරිභෝගිකයා ඉවත් කරන්නද?'),
-        content: Text('ඔබ ස්ථිරවම $name සහ ඔහුට/ඇයට අදාළ සියලුම තේ දළු හා අත්තිකාරම් සටහන් පද්ධතියෙන් ඉවත් කිරීමට අවශ්‍යද?'),
+        title: Text(AppStrings.deleteCustomerConfirm),
+        content: Text(AppStrings.deleteCustomerPrompt(name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('නැත'),
+            child: Text(AppStrings.no),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('ඔව්', style: TextStyle(color: Colors.white)),
+            child: Text(AppStrings.yes, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -52,9 +53,10 @@ class CustomerListScreen extends StatelessWidget {
 
         if (context.mounted) {
           Navigator.pop(context); // Close loading dialog
+          AppState.triggerRefresh();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('පාරිභෝගිකයා සාර්ථකව ඉවත් කරන ලදී!'),
+            SnackBar(
+              content: Text(AppStrings.customerDeleted),
               backgroundColor: Colors.red,
             ),
           );
@@ -63,7 +65,7 @@ class CustomerListScreen extends StatelessWidget {
         if (context.mounted) {
           Navigator.pop(context); // Close loading dialog
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('දෝෂයකි: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('${AppStrings.errorPrefix}$e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -74,12 +76,13 @@ class CustomerListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('පාරිභෝගික ලැයිස්තුව', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        title: Text(AppStrings.customers, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
         centerTitle: true,
       ),
       
       floatingActionButton: MediaQuery.of(context).size.width >= 600
           ? FloatingActionButton(
+              heroTag: 'customer_list_add_fab',
               onPressed: () {
                 Navigator.push(
                   context,
@@ -159,33 +162,33 @@ class CustomerListScreen extends StatelessWidget {
                       }
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 0,
                         child: Row(
                           children: [
-                            Icon(Icons.add_chart, color: Colors.green),
-                            SizedBox(width: 8),
-                            Text('දෛනික සටහන'),
+                            const Icon(Icons.add_chart, color: Colors.green),
+                            const SizedBox(width: 8),
+                            Text(AppStrings.dailyEntries),
                           ],
                         ),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 1,
                         child: Row(
                           children: [
-                            Icon(Icons.receipt_long, color: Colors.blue),
-                            SizedBox(width: 8),
-                            Text('මාසික බිල්පත'),
+                            const Icon(Icons.receipt_long, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Text(AppStrings.monthlyBill),
                           ],
                         ),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 2,
                         child: Row(
                           children: [
-                            Icon(Icons.delete_outline, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('මකා දමන්න'),
+                            const Icon(Icons.delete_outline, color: Colors.red),
+                            const SizedBox(width: 8),
+                            Text(AppStrings.delete),
                           ],
                         ),
                       ),

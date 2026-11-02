@@ -1,4 +1,4 @@
-﻿# Miscellaneous
+# Miscellaneous
 *.class
 *.log
 *.pyc
@@ -48,3 +48,11 @@ whatsapp_server/node_modules/
 whatsapp_server/.wwebjs_auth/
 whatsapp_server/
 
+
+.wwebjs_cache/
+backup_org_*.json
+backup_org_*.dart
+check_entries.dart
+get_org_id.dart
+test_db.dart
+Installer/SmartEntry_Setup_v*.exe

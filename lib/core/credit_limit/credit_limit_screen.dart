@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/skeleton_box.dart';
 import '../../services/credit_limit_service.dart';
+import 'package:smart_entry/core/localization/app_strings.dart';
 
 class CreditLimitScreen extends StatefulWidget {
   final String customerId;
@@ -23,10 +24,8 @@ class _CreditLimitScreenState extends State<CreditLimitScreen> {
   bool _isLoading = true;
   double _averageLeaves = 0.0;
   
-  // සාමාන්‍ය තේ දළු කිලෝවක මිල (මෙහි ඔබගේ වර්තමාන දළු මිල යොදන්න)
   final double _currentTeaRate = 200.0; 
   
-  // Default Deduction Percentage එක 40%
   double _deductionPercentage = 40.0; 
 
   @override
@@ -54,11 +53,9 @@ class _CreditLimitScreenState extends State<CreditLimitScreen> {
     }
   }
 
-  // උපරිම ණය සීමාව ගණනය කරන Core Logic එක
   double get _calculatedCreditLimit {
     double estimatedMonthlyIncome = _averageLeaves * _currentTeaRate;
     double monthlyDeductionCapacity = estimatedMonthlyIncome * (_deductionPercentage / 100);
-    // මාස 12 කින් ආවරණය කරගත හැකි උපරිම ණය සීමාව
     return monthlyDeductionCapacity * 12; 
   }
 
@@ -111,7 +108,6 @@ class _CreditLimitScreenState extends State<CreditLimitScreen> {
                 ),
                 const SizedBox(height: 20),
                 
-                // දත්ත පෙන්වීම
                 Card(
                   elevation: 3,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -119,19 +115,18 @@ class _CreditLimitScreenState extends State<CreditLimitScreen> {
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       children: [
-                        _buildInfoRow('මාස 3 ක සාමාන්‍ය (Net Weight):', '${_averageLeaves.toStringAsFixed(2)} Kg'),
+                        _buildInfoRow(AppStrings.isSinhala ? 'මාස 3 ක සාමාන්‍ය:' : '3-Month Average:', '${_averageLeaves.toStringAsFixed(2)} Kg'),
                         const Divider(height: 20),
-                        _buildInfoRow('කිලෝ 1 ක වර්තමාන මිල:', 'Rs. ${_currentTeaRate.toStringAsFixed(2)}'),
+                        _buildInfoRow(AppStrings.isSinhala ? 'කිලෝ 1 ක වර්තමාන මිල:' : 'Current Rate (1kg):', 'Rs. ${_currentTeaRate.toStringAsFixed(2)}'),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 35),
 
-                // Deduction Percentage Slider එක
-                const Text(
-                  'ණය වෙනුවෙන් කපාගන්නා ප්‍රතිශතය',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                Text(
+                  AppStrings.isSinhala ? 'ණය වෙනුවෙන් කපාගන්නා ප්‍රතිශතය' : 'Loan Deduction Percentage',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -166,7 +161,6 @@ class _CreditLimitScreenState extends State<CreditLimitScreen> {
                 ),
                 const SizedBox(height: 40),
 
-                // අවසාන ප්‍රතිඵලය
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 16),
@@ -177,9 +171,9 @@ class _CreditLimitScreenState extends State<CreditLimitScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        'ලබා දිය හැකි උපරිම ණය මුදල',
-                        style: TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.w600),
+                      Text(
+                        AppStrings.maxCreditLimit,
+                        style: const TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 15),
                       Text(
@@ -192,7 +186,7 @@ class _CreditLimitScreenState extends State<CreditLimitScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        '(මාස 12 කින් අයකර ගැනීමේ පදනම මත)',
+                        AppStrings.basedOn12Months,
                         style: TextStyle(fontSize: 13, color: Colors.red.shade300),
                       )
                     ],

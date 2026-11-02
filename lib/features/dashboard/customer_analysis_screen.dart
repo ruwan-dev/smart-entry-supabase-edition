@@ -1,3 +1,4 @@
+import 'package:smart_entry/core/localization/app_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -344,9 +345,9 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildLegend(const Color(0xFF10B981), "ක්‍රියාකාරී (Active)"),
+              _buildLegend(const Color(0xFF10B981), AppStrings.active),
               const SizedBox(height: 12),
-              _buildLegend(const Color(0xFFEF4444), "අක්‍රිය (Inactive)"),
+              _buildLegend(const Color(0xFFEF4444), AppStrings.inactive),
             ],
           ),
         ],
@@ -379,8 +380,8 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'ශ්‍රේණිගත කිරීම් අනුව (By Rating)',
+        Text(
+          AppStrings.byRating,
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
@@ -550,8 +551,8 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text(
-          'පාරිභෝගික විශ්ලේෂණය',
+        title: Text(
+          AppStrings.customerAnalysis,
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         backgroundColor: Colors.white,
@@ -608,8 +609,8 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'සමස්ත දත්ත',
+                  Text(
+                    AppStrings.overallData,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -623,14 +624,14 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                         return Column(
                           children: [
                         _buildStatCard(
-                            'මුළු පාරිභෝගිකයින්',
+                            AppStrings.customers,
                             '$_totalCustomers',
                             Icons.people_alt_rounded,
                             primaryAppColor,
                         ),
                             const SizedBox(height: 12),
                         _buildStatCard(
-                            'ණය සහිත අය',
+                            AppStrings.withDebt,
                             '$_debtorCustomers',
                             Icons.account_balance_wallet_rounded,
                             const Color(0xFFD32F2F),
@@ -642,7 +643,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                         children: [
                           Expanded(
                             child: _buildStatCard(
-                          'මුළු පාරිභෝගිකයින්',
+                          AppStrings.customers,
                           '$_totalCustomers',
                           Icons.people_alt_rounded,
                           primaryAppColor,
@@ -651,7 +652,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildStatCard(
-                          'ණය සහිත අය',
+                          AppStrings.withDebt,
                           '$_debtorCustomers',
                           Icons.account_balance_wallet_rounded,
                           const Color(0xFFD32F2F),
@@ -666,8 +667,8 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                   const SizedBox(height: 24),
                   _buildRatingDistribution(),
                   const SizedBox(height: 32),
-                  const Text(
-                    'අක්‍රිය පාරිභෝගිකයින්',
+                  Text(
+                    AppStrings.inactiveCustomers,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -676,12 +677,12 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                   ),
                   const SizedBox(height: 12),
                   if (_inactiveCustomersList.isEmpty)
-                    const Center(
+                    Center(
                       child: Padding(
-                        padding: EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(20),
                         child: Text(
-                          "සියලුම පාරිභෝගිකයින් සක්‍රියයි!",
-                          style: TextStyle(
+                          AppStrings.allCustomersActive,
+                          style: const TextStyle(
                             color: Colors.green,
                             fontWeight: FontWeight.bold,
                           ),
@@ -697,13 +698,13 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
 
                       String lastDateStr = lastDate != null
                           ? "${lastDate.year}-${lastDate.month.toString().padLeft(2, '0')}-${lastDate.day.toString().padLeft(2, '0')}"
-                          : "දත්ත නොමැත";
+                          : AppStrings.noDataFound;
                       String weightStr = lastDate != null
                           ? "${lastMonthWeight.toStringAsFixed(1)} Kg"
                           : "-";
                       String debtStr = debt > 0
                           ? "Rs. ${debt.toStringAsFixed(2)}"
-                          : "නැත";
+                          : AppStrings.no;
                       String tier = _customerTiers[cId] ?? "Silver";
 
                       return Container(
@@ -746,7 +747,7 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                                           ),
                                         ),
                                         Text(
-                                          'යොමුව: ${customer['refNumber']}',
+                                          '${AppStrings.refPrefix}${customer['refNumber']}',
                                           style: TextStyle(
                                             color: Colors.blueGrey.shade600,
                                             fontSize: 12,
@@ -774,8 +775,8 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        const Text(
-                                          "අවසන් දළු දුන් දිනය",
+                                        Text(
+                                          AppStrings.lastLeafDate,
                                           style: TextStyle(
                                             fontSize: 10,
                                             color: Colors.blueGrey,
@@ -797,8 +798,8 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
                                       children: [
-                                        const Text(
-                                          "එම මාසයේ දළු",
+                                        Text(
+                                          AppStrings.leafInThatMonth,
                                           style: TextStyle(
                                             fontSize: 10,
                                             color: Colors.blueGrey,
@@ -820,8 +821,8 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.end,
                                       children: [
-                                        const Text(
-                                          "හිඟ මුදල (ණය)",
+                                        Text(
+                                          AppStrings.debtOutstanding,
                                           style: TextStyle(
                                             fontSize: 10,
                                             color: Colors.blueGrey,
@@ -882,7 +883,7 @@ class TierCustomersScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: Text(
-          '$tierName පාරිභෝගිකයින්',
+          AppStrings.isSinhala ? '$tierName පාරිභෝගිකයින්' : '$tierName Customers',
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         backgroundColor: color.withOpacity(0.1),
@@ -893,7 +894,7 @@ class TierCustomersScreen extends StatelessWidget {
       body: customers.isEmpty
           ? Center(
               child: Text(
-                "මෙම ශ්‍රේණියේ පාරිභෝගිකයින් නැත.",
+                AppStrings.isSinhala ? "මෙම ශ්‍රේණියේ පාරිභෝගිකයින් නැත." : "No customers in this tier.",
                 style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 16),
               ),
             )
@@ -908,7 +909,7 @@ class TierCustomersScreen extends StatelessWidget {
                 DateTime? lastDate = latestDates[cId];
                 String dateStr = lastDate != null
                     ? "${lastDate.year}-${lastDate.month.toString().padLeft(2, '0')}-${lastDate.day.toString().padLeft(2, '0')}"
-                    : "දත්ත නොමැත";
+                    : AppStrings.noDataFound;
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -968,8 +969,8 @@ class TierCustomersScreen extends StatelessWidget {
                                     const SizedBox(height: 4),
                                     Text(
                                       debt > 0
-                                          ? 'යොමුව: ${customer['refNumber']} | ණය: Rs.${debt.toStringAsFixed(2)}'
-                                          : 'යොමුව: ${customer['refNumber']}',
+                                          ? '${AppStrings.refPrefix}${customer['refNumber']} | ${AppStrings.isSinhala ? 'ණය' : 'Debt'}: Rs.${debt.toStringAsFixed(2)}'
+                                          : '${AppStrings.refPrefix}${customer['refNumber']}',
                                       style: TextStyle(
                                         color: Colors.blueGrey.shade600,
                                         fontSize: 12,
@@ -977,7 +978,7 @@ class TierCustomersScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'අවසන් දින: $dateStr',
+                                      AppStrings.isSinhala ? 'අවසන් දින: $dateStr' : 'Last Date: $dateStr',
                                       style: TextStyle(
                                         color: Colors.blueGrey.shade400,
                                         fontSize: 11,
@@ -989,8 +990,8 @@ class TierCustomersScreen extends StatelessWidget {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  const Text(
-                                    'අවසන් දළු ප්‍රමාණය',
+                                  Text(
+                                    AppStrings.isSinhala ? 'අවසන් දළු ප්‍රමාණය' : 'Last Leaf Qty',
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: Colors.blueGrey,

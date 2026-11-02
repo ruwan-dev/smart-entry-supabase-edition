@@ -6,37 +6,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/theme.dart';
-
-// අලුතින් හදපු Splash Screen එක Import කරගන්න
+import 'core/localization/app_language.dart';
 import 'features/splash/splash_screen.dart'; 
-
-// ඔයා අලුතින් හදපු Network Service එක import කරගන්න
 import 'core/network_service.dart';
+import 'core/whatsapp/whatsapp_service.dart';
 
-// මුළු App එකම පාලනය කරන Global Navigator Key එක මෙතන හදන්න
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
-
-Process? _nodeProcess;
-
-void _startNodeServer() async {
-  try {
-     // In release mode (production), it looks for node.exe in the same folder as the app.
-     // In debug mode, it uses the installed node on your computer.
-     String executable = kReleaseMode ? 'node.exe' : 'node';
-     
-     _nodeProcess = await Process.start(
-        executable, 
-        ['whatsapp_server/server.js'],
-        runInShell: true, 
-     );
-     debugPrint("WhatsApp Node server started in background. PID: ${_nodeProcess?.pid}");
-  } catch (e) {
-     debugPrint("Failed to start WhatsApp node server: $e");
-  }
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppLanguageService.initialize();
   
   if (!kIsWeb && Platform.isWindows) {
     await windowManager.ensureInitialized();
@@ -53,13 +32,13 @@ void main() async {
       await windowManager.focus();
     });
 
-    // Start the WhatsApp Node.js server automatically
-    _startNodeServer();
+    // Start WhatsApp background service
+    WhatsAppService.instance.initialize();
   }
 
   await Supabase.initialize(
     url: 'https://etlxrdxldtobffzficxu.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0bHhyZHhsZHRvYmZmemZpY3h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwMDU4MjAsImV4cCI6MjEwNDU4MTgyMH0.ZphFjMlc9-RpJ0Pr7zdCYPSVgl1FK0plC6JwPC9IwIY',
+    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0bHhyZHhsZHRvYmZmemZpY3h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwMDU4MjAsImV4cCI6MjEwNDU4MTgyMH0.ZphFjMlc9-RpJ0Pr7zdCYPSVgl1FK0plC6JwPC9IwIY',
   );
   
   runApp(
@@ -70,7 +49,6 @@ void main() async {
   );
 }
 
-// Network Service එක Initialize කරන්න ඕන නිසා මේක StatefulWidget එකක් බවට පත් කළා
 class TeaCollectionApp extends StatefulWidget {
   const TeaCollectionApp({super.key});
 
@@ -87,7 +65,7 @@ class _TeaCollectionAppState extends State<TeaCollectionApp> with WindowListener
       windowManager.addListener(this);
     }
     
-    // App එක Start වෙද්දිම Network Service එකට Navigator Key එක යවලා On කරනවා
+    // Initialize NetworkService on app start (uses IP checks to bypass DNS freeze on Windows)
     NetworkService().initialize(globalNavigatorKey);
   }
 
@@ -102,30 +80,32 @@ class _TeaCollectionAppState extends State<TeaCollectionApp> with WindowListener
   @override
   void onWindowClose() async {
     // When the user clicks the close button (X), kill the Node server before closing
-    if (_nodeProcess != null) {
-      debugPrint("Killing WhatsApp Node server...");
-      _nodeProcess?.kill();
+    if (!kIsWeb && Platform.isWindows) {
+      WhatsAppService.instance.killServer();
     }
     await windowManager.destroy();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
-      // මේක අනිවාර්යයෙන්ම දාන්න (එතකොට තමයි ඕනම Screen එකක ඉඳන් Popup එක එන්නෙ)
-      navigatorKey: globalNavigatorKey,
-      
-      title: 'Smart Entry',
-      theme: appTheme.copyWith(
-        textTheme: GoogleFonts.notoSansSinhalaTextTheme(appTheme.textTheme),
-        primaryTextTheme: GoogleFonts.notoSansSinhalaTextTheme(appTheme.primaryTextTheme),
-      ),
-      debugShowCheckedModeBanner: false,
-      
-      // මුලින්ම LoginScreen එකට යන එක වෙනුවට SplashScreen එකට යවනවා
-      home: const SplashScreen(), 
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: AppLanguageService.currentLanguage,
+      builder: (context, currentLang, _) {
+        return MaterialApp(
+          locale: DevicePreview.locale(context),
+          builder: DevicePreview.appBuilder,
+          navigatorKey: globalNavigatorKey,
+          
+          title: 'Smart Entry',
+          theme: appTheme.copyWith(
+            textTheme: GoogleFonts.notoSansSinhalaTextTheme(appTheme.textTheme),
+            primaryTextTheme: GoogleFonts.notoSansSinhalaTextTheme(appTheme.primaryTextTheme),
+          ),
+          debugShowCheckedModeBanner: false,
+          
+          home: const SplashScreen(), 
+        );
+      },
     );
   }
 }

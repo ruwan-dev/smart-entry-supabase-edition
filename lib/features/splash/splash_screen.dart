@@ -47,7 +47,6 @@ class _SplashScreenState extends State<SplashScreen> {
     });
   }
 
-  // තත්පර 3කට පස්සේ Main Screen එකට යනවා
   Future<void> _navigateToNextScreen() async {
     await Future.delayed(const Duration(seconds: 4));
     if (mounted) {
@@ -68,7 +67,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8), // ආකර්ෂණීය ලා අළු පසුබිම
+      backgroundColor: const Color(0xFFF4F6F8),
       body: Stack(
         children: [
           const Center(

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.2+3
 
 environment:
   sdk: ^3.10.4
@@ -52,6 +52,7 @@ dependencies:
   shared_preferences: ^2.5.5
   device_preview: 1.3.1
   window_manager: ^0.5.2
+  package_info_plus: ^10.2.2
 
 dev_dependencies:
   flutter_test:
@@ -73,8 +74,8 @@ flutter_launcher_icons:
   windows:
     generate: true
     image_path: "assets/app_icon_transparent.png"
-  image_path: "assets/app_icon_transparent.png" # ඔබේ ලෝගෝ එක තියෙන පාර (Path)
-  min_sdk_android: 21 # ඔබගේ ඇන්ඩ්‍රොයිඩ් sdk එකට අනුව
+  image_path: "assets/app_icon_transparent.png"
+  min_sdk_android: 21
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -102,6 +103,7 @@ flutter:
     - assets/advance_badge.png
     - assets/tealeaves_badge.png
     - assets/teapackets_badge.png
+    - assets/trolley_badge.png
     - assets/closing_bg.jpg
     - assets/analysis_bg.jpg
     - assets/whatsapp_bg.jpg
@@ -146,10 +148,10 @@ msix_config:
   display_name: Smart Entry
   publisher_display_name: Ruwan Pathirana
   identity_name: com.ruwan.smartentry
-  msix_version: 1.0.0.0
+  msix_version: 1.0.1.0
   logo_path: assets/logo.png
 flutter_native_splash:
-  color: "#000000" # මුල් ස්ක්‍රීන් එක සම්පූර්ණයෙන්ම කළු කරයි
+  color: "#000000"
   android: true
   ios: true
-  web: false #
+  web: false

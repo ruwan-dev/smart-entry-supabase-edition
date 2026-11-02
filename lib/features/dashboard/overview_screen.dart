@@ -11,6 +11,9 @@ import 'top_suppliers_screen.dart';
 import 'customer_analysis_screen.dart';
 import '../../core/widgets/skeleton_box.dart';
 import 'package:smart_entry/core/app_state.dart';
+import '../../core/items/item_service.dart';
+import 'package:smart_entry/core/localization/app_strings.dart';
+import 'package:smart_entry/core/localization/app_language.dart';
 
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -28,9 +31,9 @@ class OverviewScreen extends StatefulWidget {
 }
 
 class _OverviewScreenState extends State<OverviewScreen> {
-  String _selectedFilter = 'මෙම මාසය';
+  String _selectedFilter = 'This Month';
   bool _isLoading = true;
-  bool _isSummaryLoading = true; // අලුතින් එක් කරන ලද විචල්‍යය
+  bool _isSummaryLoading = true;
 
   bool _isMonthlySummaryExpanded = false;
 
@@ -55,14 +58,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
   List<Map<String, dynamic>> _allArrears = [];
 
   final List<String> _filterOptions = [
-    'අද',
-    'මෙම සතිය',
-    'මෙම මාසය',
-    'පසුගිය මාස 6',
-    'පසුගිය වසර',
+    'Today',
+    'This Week',
+    'This Month',
+    'Last 6 Months',
+    'Last Year',
   ];
 
-  String _chartFilter = 'මාසිකව';
+  String _chartFilter = 'Monthly';
   bool _isChartLoading = true;
   List<double> _chartIncomeValues = [];
   List<double> _chartExpenseValues = [];
@@ -75,7 +78,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   bool _isHeatmapLoading = true;
   double _heatmapMaxWeight = 0;
 
-  final List<String> _chartFilterOptions = ['මාසිකව', 'වාර්ෂිකව'];
+  final List<String> _chartFilterOptions = ['Monthly', 'Yearly'];
 
   final Color primaryAppColor = const Color(0xFF1976D2);
 
@@ -83,9 +86,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
   void initState() {
     super.initState();
     AppState.refreshTrigger.addListener(_onRefresh);
+    AppLanguageService.currentLanguage.addListener(_onLanguageChanged);
     _fetchDashboardData();
     _fetchChartData();
     _fetchHeatmapData();
+  }
+
+  void _onLanguageChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onRefresh() {
@@ -97,6 +105,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   @override
   void dispose() {
     AppState.refreshTrigger.removeListener(_onRefresh);
+    AppLanguageService.currentLanguage.removeListener(_onLanguageChanged);
     super.dispose();
   }
 
@@ -159,14 +168,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
     DateTime start;
     DateTime end = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-    if (_selectedFilter == 'අද') {
+    if (_selectedFilter == 'Today') {
       start = DateTime(now.year, now.month, now.day);
-    } else if (_selectedFilter == 'මෙම සතිය') {
+    } else if (_selectedFilter == 'This Week') {
       start = now.subtract(Duration(days: now.weekday - 1));
       start = DateTime(start.year, start.month, start.day);
-    } else if (_selectedFilter == 'මෙම මාසය') {
+    } else if (_selectedFilter == 'This Month') {
       start = DateTime(now.year, now.month, 1);
-    } else if (_selectedFilter == 'පසුගිය මාස 6') {
+    } else if (_selectedFilter == 'Last 6 Months') {
       start = DateTime(now.year, now.month - 5, 1);
     } else {
       start = DateTime(now.year - 1, now.month, now.day);
@@ -194,17 +203,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _previousSummaryData = null;
       }
 
-      var priceDoc = await Supabase.instance.client
-          .from('global_settings')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
-          .eq('id', 'prices')
-          .maybeSingle();
-      if (priceDoc != null) {
-        fert1Price = (priceDoc['fertilizer1Price'] ?? 0.0).toDouble();
-        fert2Price = (priceDoc['fertilizer2Price'] ?? 0.0).toDouble();
-        teaPkt1Price = (priceDoc['teaPacket1Price'] ?? 0.0).toDouble();
-        teaPkt2Price = (priceDoc['teaPacket2Price'] ?? 0.0).toDouble();
-      }
+      final orgItems = await ItemService.getItems(
+        organizationId: AppState.currentOrganizationId.value ?? '',
+      );
+      fert1Price = orgItems.where((it) => it.slotIndex == 1).firstOrNull?.unitPrice ?? 15500.0;
+      fert2Price = orgItems.where((it) => it.slotIndex == 2).firstOrNull?.unitPrice ?? 18000.0;
+      teaPkt1Price = orgItems.where((it) => it.slotIndex == 3).firstOrNull?.unitPrice ?? 650.0;
+      teaPkt2Price = orgItems.where((it) => it.slotIndex == 4).firstOrNull?.unitPrice ?? 0.0;
 
       var ratesSnap = await Supabase.instance.client
           .from('monthly_rates')
@@ -253,10 +258,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
         double w = (d['netWeight'] ?? 0.0).toDouble();
         tw += w;
         ta += (d['advanceAmount'] ?? 0.0).toDouble();
-        f1 += (d['fertilizer1Qty'] ?? 0.0).toDouble();
-        f2 += (d['fertilizer2Qty'] ?? 0.0).toDouble();
-        t1 += (d['teaPacket1Qty'] ?? 0.0).toDouble();
-        t2 += (d['teaPacket2Qty'] ?? 0.0).toDouble();
+
+        final parsed = ItemService.parseDailyEntryItems(d);
+        f1 += parsed.f1Qty;
+        f2 += parsed.f2Qty + parsed.otherDynamicQty;
+        t1 += parsed.t1Qty;
+        t2 += parsed.t2Qty;
+
         String cId = d['customerId'] ?? '';
         if (cId.isNotEmpty)
           supplierWeightMap[cId] = (supplierWeightMap[cId] ?? 0.0) + w;
@@ -378,7 +386,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       List<double> expVals = [];
       List<String> tl = [];
 
-      if (_chartFilter == 'මාසිකව') {
+      if (_chartFilter == 'Monthly') {
         incVals = List.filled(12, 0.0);
         expVals = List.filled(12, 0.0);
         for (int i = 11; i >= 0; i--) {
@@ -415,7 +423,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             expVals[11 - i] = exp;
           }
         }
-      } else if (_chartFilter == 'වාර්ෂිකව') {
+      } else if (_chartFilter == 'Yearly') {
         incVals = List.filled(5, 0.0);
         expVals = List.filled(5, 0.0);
         for (int i = 4; i >= 0; i--) {
@@ -681,7 +689,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         double availableWidthForChart = constraints.maxWidth - 50 - 15;
         if (availableWidthForChart < 0) availableWidthForChart = 0;
 
-        double chartWidth = _chartFilter == 'දිනපතා' || _chartFilter == 'මාසිකව'
+        double chartWidth = _chartFilter == 'Daily' || _chartFilter == 'Monthly'
             ? (availableWidthForChart > 1200 ? availableWidthForChart : 1200.0)
             : availableWidthForChart;
 
@@ -908,10 +916,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
                   children: [
                     if (isNarrow) ...[
-                      const Center(
+                      Center(
                         child: Text(
-                          'දෛනික දළු එකතුව',
-                          style: TextStyle(
+                          AppStrings.dailyLeafTotal,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -923,9 +931,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'දෛනික දළු එකතුව',
+                              AppStrings.dailyLeafTotal,
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -941,8 +949,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        const Text(
-                          'අඩු',
+                        Text(
+                          AppStrings.low,
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.blueGrey,
@@ -969,8 +977,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           }),
                         ),
                         const SizedBox(width: 8),
-                        const Text(
-                          'වැඩි',
+                        Text(
+                          AppStrings.high,
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.blueGrey,
@@ -1051,8 +1059,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            "අවධානයට!",
+                          Text(
+                            AppStrings.attention,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF991B1B),
@@ -1061,7 +1069,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "ව්‍යාපාරයට රු. ${currencyF.format(_overallOutstandingAdvances)} ක හිඟ මුදලක් අයවීමට ඇත.",
+                            AppStrings.outstandingAlertPrompt(currencyF.format(_overallOutstandingAdvances)),
                             style: const TextStyle(
                               color: Color(0xFFB91C1C),
                               fontSize: 12,
@@ -1090,17 +1098,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
+                        children: [
                           Text(
-                            "බලන්න",
-                            style: TextStyle(
+                            AppStrings.view,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          SizedBox(width: 4),
-                          Icon(
+                          const SizedBox(width: 4),
+                          const Icon(
                             Icons.arrow_forward_ios_rounded,
                             color: Colors.white,
                             size: 10,
@@ -1204,7 +1212,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  // සාරාංශය (Summary) කොටස සඳහා පමණක් දිස්වන Skeleton Grid එක
   Widget _buildSkeletonSummaryGrid(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1238,17 +1245,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
     final weightF = NumberFormat('#,##0.##', 'en_US');
 
     final Map<String, IconData> summaryIconMap = {
-      'අද': Icons.today_rounded,
-      'මෙම සතිය': Icons.view_week_rounded,
-      'මෙම මාසය': Icons.calendar_month_rounded,
-      'පසුගිය මාස 6': Icons.date_range_rounded,
-      'පසුගිය වසර': Icons.event_repeat_rounded,
+      'Today': Icons.today_rounded,
+      'This Week': Icons.view_week_rounded,
+      'This Month': Icons.calendar_month_rounded,
+      'Last 6 Months': Icons.date_range_rounded,
+      'Last Year': Icons.event_repeat_rounded,
     };
 
     final Map<String, IconData> chartIconMap = {
-      'දිනපතා': Icons.view_day_rounded,
-      'මාසිකව': Icons.calendar_view_month_rounded,
-      'වාර්ෂිකව': Icons.calendar_today_rounded,
+      'Daily': Icons.view_day_rounded,
+      'Monthly': Icons.calendar_view_month_rounded,
+      'Yearly': Icons.calendar_today_rounded,
     };
 
     return Scaffold(
@@ -1273,7 +1280,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     const SizedBox(height: 24),
 
                     _buildIconToggleHeader(
-                      'සාරාංශය',
+                      AppStrings.summary,
                       _selectedFilter,
                       _filterOptions,
                       summaryIconMap,
@@ -1286,7 +1293,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Summary loading වන විට Skeleton පෙන්වීම
                     _isSummaryLoading
                         ? _buildSkeletonSummaryGrid(context)
                         : _buildSummaryGrid(context, weightF, currencyF),
@@ -1297,7 +1303,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     const SizedBox(height: 32),
 
                     _buildIconToggleHeader(
-                      'ආදායම් සහ වියදම්',
+                      AppStrings.incomeAndExpense,
                       _chartFilter,
                       _chartFilterOptions,
                       chartIconMap,
@@ -1326,12 +1332,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
                                     _buildLegendItem(
-                                      "ආදායම (Rs)",
+                                      AppStrings.incomeRs,
                                       const Color(0xFF20C997),
                                     ),
                                     const SizedBox(width: 16),
                                     _buildLegendItem(
-                                      "වියදම (Rs)",
+                                      AppStrings.expenseRs,
                                       const Color(0xFFFF6B6B),
                                     ),
                                   ],
@@ -1344,9 +1350,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'වැඩිම දළු සැපයුම්කරුවන්',
+                            AppStrings.topSuppliers,
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
@@ -1370,7 +1376,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'සියල්ල බලන්න',
+                                  AppStrings.viewAll,
                                   style: TextStyle(
                                     color: primaryAppColor,
                                     fontWeight: FontWeight.bold,
@@ -1405,7 +1411,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         bool isMobile = w < 800;
 
         Widget customerCard = _statHeaderCard(
-          title: 'පාරිභෝගිකයින්',
+          title: AppStrings.customers,
           value: '$_totalCustomers',
           icon: Icons.people_alt_rounded,
           color: primaryAppColor,
@@ -1419,7 +1425,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         );
 
         Widget arrearsCard = _statHeaderCard(
-          title: 'මුළු හිඟ මුදල',
+          title: AppStrings.totalOutstandingAmount,
           value: 'Rs. ${currencyF.format(_overallOutstandingAdvances)}',
           icon: Icons.account_balance_wallet_rounded,
           color: const Color(0xFFD32F2F),
@@ -1612,8 +1618,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
     } catch (e) {}
 
     String summaryTitle = monthName.isNotEmpty
-        ? "$monthName මාසික සාරාංශය"
-        : "මාසික සාරාංශය";
+        ? AppStrings.monthlySummaryTitle(monthName)
+        : AppStrings.summary;
 
     var s = _latestSummaryData!;
     double cWeight = (s['totalWeight'] ?? 0).toDouble();
@@ -1779,7 +1785,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "මුළු දළු බර",
+                                  label: AppStrings.leafWeightTotal,
                                   value: "${weightF.format(cWeight)} Kg",
                                   icon: Icons.scale_rounded,
                                   color: const Color(0xFFF59E0B),
@@ -1790,7 +1796,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "මුළු ආදායම",
+                                  label: AppStrings.grossIncome,
                                   value: "Rs. ${currencyF.format(cGross)}",
                                   icon: Icons.trending_up_rounded,
                                   color: primaryAppColor,
@@ -1802,7 +1808,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "අත්තිකාරම් මුදල්",
+                                  label: AppStrings.advanceCash,
                                   value: "Rs. ${currencyF.format(cAdv)}",
                                   icon: Icons.payments_rounded,
                                   color: const Color(0xFF3B82F6),
@@ -1814,7 +1820,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "ප්‍රවාහන වියදම",
+                                  label: AppStrings.transportCost,
                                   value: "Rs. ${currencyF.format(cTrans)}",
                                   icon: Icons.local_shipping_rounded,
                                   color: const Color(0xFFEF4444),
@@ -1827,7 +1833,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "පොහොර වියදම",
+                                  label: AppStrings.itemCost,
                                   value: "Rs. ${currencyF.format(cFertAmt)}",
                                   icon: Icons.compost_rounded,
                                   color: const Color(0xFF047857),
@@ -1839,7 +1845,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        "වර්ගය 1: ${weightF.format(f1Qty)} | Rs. ${currencyF.format(cF1Amt)}",
+                                        "${AppStrings.fertilizer1}: ${weightF.format(f1Qty)} | Rs. ${currencyF.format(cF1Amt)}",
                                         style: const TextStyle(
                                           fontSize: 10,
                                           color: Colors.blueGrey,
@@ -1848,7 +1854,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        "වර්ගය 2: ${weightF.format(f2Qty)} | Rs. ${currencyF.format(cF2Amt)}",
+                                        "${AppStrings.fertilizer2}: ${weightF.format(f2Qty)} | Rs. ${currencyF.format(cF2Amt)}",
                                         style: const TextStyle(
                                           fontSize: 10,
                                           color: Colors.blueGrey,
@@ -1862,7 +1868,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "තේ පැකට් වියදම",
+                                  label: AppStrings.teaPacketCost,
                                   value: "Rs. ${currencyF.format(cTeaAmt)}",
                                   icon: Icons.local_cafe_rounded,
                                   color: const Color(0xFF8B5CF6),
@@ -1874,7 +1880,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        "වර්ගය 1: ${weightF.format(t1Qty)} | Rs. ${currencyF.format(cT1Amt)}",
+                                        "${AppStrings.teaPacket1}: ${weightF.format(t1Qty)} | Rs. ${currencyF.format(cT1Amt)}",
                                         style: const TextStyle(
                                           fontSize: 10,
                                           color: Colors.blueGrey,
@@ -1883,7 +1889,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        "වර්ගය 2: ${weightF.format(t2Qty)} | Rs. ${currencyF.format(cT2Amt)}",
+                                        "${AppStrings.teaPacket2}: ${weightF.format(t2Qty)} | Rs. ${currencyF.format(cT2Amt)}",
                                         style: const TextStyle(
                                           fontSize: 10,
                                           color: Colors.blueGrey,
@@ -1898,7 +1904,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "අයවියයුතු මුදල",
+                                  label: AppStrings.receivableAmount,
                                   value: "Rs. ${currencyF.format(cNegNet)}",
                                   icon: Icons.arrow_circle_down_rounded,
                                   color: const Color(0xFFFF6B6B),
@@ -1910,7 +1916,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "ලබා දිය යුතු මුදල",
+                                  label: AppStrings.payableAmount,
                                   value: "Rs. ${currencyF.format(cPosNet)}",
                                   icon: Icons.arrow_circle_up_rounded,
                                   color: const Color(0xFF20C997),
@@ -1921,7 +1927,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               SizedBox(
                                 width: w2,
                                 child: _miniTile(
-                                  label: "ලාභ/අලාභය",
+                                  label: AppStrings.profitOrLoss,
                                   value: "Rs. ${currencyF.format(cNet)}",
                                   icon: Icons.account_balance_rounded,
                                   color: primaryAppColor,
@@ -2129,7 +2135,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             SizedBox(
               width: cardW,
               child: _summaryCard(
-                title: 'මුළු දළු',
+                title: AppStrings.leafWeightTotal,
                 value: '${weightF.format(_totalWeight)} Kg',
                 icon: Icons.eco_rounded,
                 color: primaryAppColor,
@@ -2139,7 +2145,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             SizedBox(
               width: cardW,
               child: _summaryCard(
-                title: 'අත්තිකාරම්',
+                title: AppStrings.advance,
                 value: 'Rs. ${currencyF.format(_totalAdvance)}',
                 icon: Icons.payments_rounded,
                 color: const Color(0xFF3B82F6),
@@ -2149,7 +2155,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             SizedBox(
               width: cardW,
               child: _summaryCard(
-                title: 'පොහොර',
+                title: AppStrings.fertilizer,
                 value: weightF.format(_totalFertilizer1 + _totalFertilizer2),
                 icon: Icons.compost_rounded,
                 color: const Color(0xFF047857),
@@ -2171,7 +2177,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             SizedBox(
               width: cardW,
               child: _summaryCard(
-                title: 'තේ පැකට්',
+                title: AppStrings.teaPackets,
                 value: weightF.format(_totalTeaPacket1 + _totalTeaPacket2),
                 icon: Icons.local_cafe_rounded,
                 color: const Color(0xFF8B5CF6),
@@ -2404,8 +2410,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   Widget _buildTopSuppliersList(NumberFormat weightF) {
     if (_topSuppliers.isEmpty)
-      return const Center(
-        child: Text('දත්ත නොමැත', style: TextStyle(color: Colors.grey)),
+      return Center(
+        child: Text(AppStrings.noDataFound, style: const TextStyle(color: Colors.grey)),
       );
     return Column(
       children: _topSuppliers
@@ -2523,7 +2529,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             children: options.map((option) {
               bool isSelected = value == option;
               return Tooltip(
-                message: option,
+                message: _getFilterLabel(option),
                 child: InkWell(
                   onTap: () => onChanged(option),
                   borderRadius: BorderRadius.circular(30), // Pill shape
@@ -2553,5 +2559,26 @@ class _OverviewScreenState extends State<OverviewScreen> {
         ),
       ],
     );
+  }
+
+  String _getFilterLabel(String option) {
+    switch (option) {
+      case 'Today':
+        return AppStrings.today;
+      case 'This Week':
+        return AppStrings.thisWeek;
+      case 'This Month':
+        return AppStrings.thisMonth;
+      case 'Last 6 Months':
+        return AppStrings.last6Months;
+      case 'Last Year':
+        return AppStrings.lastYear;
+      case 'Monthly':
+        return AppStrings.monthly;
+      case 'Yearly':
+        return AppStrings.yearly;
+      default:
+        return option;
+    }
   }
 }

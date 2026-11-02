@@ -1,3 +1,4 @@
+import 'package:smart_entry/core/localization/app_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -102,7 +103,7 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
       body: _isLoading 
         ? _buildSkeleton()
         : _timelineData.isEmpty 
-          ? const Center(child: Text('කිසිදු ඉතිහාසයක් නොමැත.', style: TextStyle(fontSize: 16, color: Colors.grey)))
+          ? Center(child: Text(AppStrings.noHistoryFound, style: const TextStyle(fontSize: 16, color: Colors.grey)))
           : ListView.builder(
               padding: const EdgeInsets.all(20),
               itemCount: _timelineData.length,
@@ -231,19 +232,19 @@ class _CustomerTimelineScreenState extends State<CustomerTimelineScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _infoRow('ලබාදුන් සාමාන්‍ය දළු බර:', '${item['weight'].toStringAsFixed(1)} Kg'),
+                    _infoRow(AppStrings.isSinhala ? 'ලබාදුන් සාමාන්‍ය දළු බර:' : 'Normal Leaf Weight:', '${item['weight'].toStringAsFixed(1)} Kg'),
                     if ((item['weight2'] ?? 0) > 0)
-                      _infoRow('ලබාදුන් සුපිරි දළු බර:', '${item['weight2'].toStringAsFixed(1)} Kg'),
-                    _infoRow('දළ ආදායම:', 'Rs. ${currencyF.format(item['grossIncome'])}'),
-                    _infoRow('ලබාගත් අත්තිකාරම්:', 'Rs. ${currencyF.format(item['advances'])}', color: Colors.orange.shade700),
+                      _infoRow(AppStrings.isSinhala ? 'ලබාදුන් සුපිරි දළු බර:' : 'Super Leaf Weight:', '${item['weight2'].toStringAsFixed(1)} Kg'),
+                    _infoRow(AppStrings.isSinhala ? 'දළ ආදායම:' : 'Gross Income:', 'Rs. ${currencyF.format(item['grossIncome'])}'),
+                    _infoRow(AppStrings.isSinhala ? 'ලබාගත් අත්තිකාරම්:' : 'Advances Taken:', 'Rs. ${currencyF.format(item['advances'])}', color: Colors.orange.shade700),
                     if (item['arrears'] > 0)
-                      _infoRow('පසුගිය හිඟ මුදල:', 'Rs. ${currencyF.format(item['arrears'])}', color: Colors.red.shade400),
+                      _infoRow(AppStrings.isSinhala ? 'පසුගිය හිඟ මුදල:' : 'Previous Arrears:', 'Rs. ${currencyF.format(item['arrears'])}', color: Colors.red.shade400),
                     const Divider(height: 20, color: Color(0xFFF3F4F6)),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Expanded(child: Text('ශුද්ධ ශේෂය (Net Balance):', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4B5563)))),
+                        Expanded(child: Text(AppStrings.isSinhala ? 'ශුද්ධ ශේෂය:' : 'Net Balance:', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4B5563)))),
                         const SizedBox(width: 8),
                         Text(
                           'Rs. ${currencyF.format(item['netPayable'])}', 
