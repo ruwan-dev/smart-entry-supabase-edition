@@ -1584,7 +1584,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           title: AppStrings.factoryRevenue,
           value: 'Rs. ${currencyF.format(_totalFactoryRevenue)}',
           badgeText: null,
-          subtitle: AppStrings.allocatedToOtherFactories,
+          subtitle: AppStrings.deliveredToFactories,
           icon: Icons.factory_rounded,
           gradientColors: [
             const Color(0xFFEFF6FF),
@@ -1598,7 +1598,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           title: AppStrings.supplierPayout,
           value: 'Rs. ${currencyF.format(_totalSupplierPayout)}',
           badgeText: null,
-          subtitle: '${weightF.format(_totalWeight)} Kg intake',
+          subtitle: '${weightF.format(_totalWeight)} Kg ' + AppStrings.totalLeafIntake,
           icon: Icons.energy_savings_leaf_rounded,
           gradientColors: [
             const Color(0xFFF5F3FF),

@@ -642,6 +642,8 @@ class AppStrings {
   static String get leafHarvestAnalytics => isSinhala ? 'දළු අස්වනු විශ්ලේෂණය' : 'Leaf Harvest Analytics';
   static String get qualityBreakdown => isSinhala ? 'ගුණාත්මක අනුපාතය' : 'Quality Breakdown';
   static String get factoryRevenueVsCost => isSinhala ? 'කර්මාන්තශාලා ආදායම හා සැපයුම්කරුවන්ගේ වියදම' : 'Factory Inflow vs Supplier Cost';
+  static String get deliveredToFactories => isSinhala ? 'කර්මාන්තශාලා සැපයුම' : 'Delivered to Factories';
+  static String get totalLeafIntake => isSinhala ? 'දළු එකතුව' : 'Total Intake';
 
 
 
