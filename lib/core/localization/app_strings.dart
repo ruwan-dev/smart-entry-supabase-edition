@@ -644,6 +644,13 @@ class AppStrings {
   static String get factoryRevenueVsCost => isSinhala ? 'කර්මාන්තශාලා ආදායම හා සැපයුම්කරුවන්ගේ වියදම' : 'Factory Inflow vs Supplier Cost';
   static String get deliveredToFactories => isSinhala ? 'කර්මාන්තශාලා සැපයුම' : 'Delivered to Factories';
   static String get totalLeafIntake => isSinhala ? 'දළු එකතුව' : 'Total Intake';
+  static List<String> get weekdayShortNames => isSinhala
+      ? ['සඳු', 'අඟ', 'බදා', 'බ්‍රහ', 'සිකු', 'සෙන', 'ඉරි']
+      : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  static String get monthHarvestTotal => isSinhala ? 'මාසික දළු එකතුව' : 'Month Total Leaf';
+  static String get peakHarvestDay => isSinhala ? 'වැඩිම අස්වනු දිනය' : 'Peak Harvest Day';
+  static String get harvestDays => isSinhala ? 'අස්වනු ලැබූ දින' : 'Harvest Days';
+  static String get harvestConsistency => isSinhala ? 'අස්වනු අනුපාතය' : 'Consistency';
 
 
 

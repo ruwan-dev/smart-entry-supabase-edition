@@ -905,102 +905,483 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   Widget _buildHeatMapContainer({bool isMobile = false}) {
-    int daysInMonth = DateTime(_heatmapYear, _heatmapMonth + 1, 0).day;
-    String monthName = DateFormat(
-      'MMMM yyyy',
-    ).format(DateTime(_heatmapYear, _heatmapMonth, 1));
+    final DateTime firstDay = DateTime(_heatmapYear, _heatmapMonth, 1);
+    final int daysInMonth = DateTime(_heatmapYear, _heatmapMonth + 1, 0).day;
+    final int startOffset = (firstDay.weekday - 1) % 7; // Mon = 0, Sun = 6
+    final String monthName = DateFormat('MMMM yyyy').format(firstDay);
+    final weightF = NumberFormat('#,##0.##', 'en_US');
 
-    Widget gridWidget = _isHeatmapLoading
-        ? Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: List.generate(31, (index) {
-              return const SkeletonBox(width: 38, height: 38, borderRadius: 8);
-            }),
-          )
-        : Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: List.generate(31, (index) {
-              int day = index + 1;
+    // Aggregate telemetry for the month
+    final double monthTotal = _heatmapData.values.fold(0.0, (sum, w) => sum + w);
+    final int activeDays = _heatmapData.values.where((w) => w > 0).length;
+    int peakDay = 0;
+    double peakWeight = 0.0;
+    _heatmapData.forEach((d, w) {
+      if (w > peakWeight) {
+        peakWeight = w;
+        peakDay = d;
+      }
+    });
+    final double consistencyPct =
+        daysInMonth > 0 ? (activeDays / daysInMonth * 100.0) : 0.0;
+    final double avgOnActiveDays =
+        activeDays > 0 ? (monthTotal / activeDays) : 0.0;
 
-              if (day > daysInMonth) {
-                return const SizedBox(width: 38, height: 38);
-              }
+    // Weekday short labels
+    final weekdayLabels = AppStrings.weekdayShortNames;
 
-              double val = _heatmapData[day] ?? 0.0;
-              double intensity = _heatmapMaxWeight == 0
-                  ? 0
-                  : (val / _heatmapMaxWeight);
+    // Build true 7-column squared calendar
+    final int totalSlots = startOffset + daysInMonth;
+    final int rows = (totalSlots / 7).ceil();
 
-              Color cellColor = val == 0
-                  ? Colors.grey.shade100
-                  : Color.lerp(
-                      const Color(0xFFC8E6C9),
-                      const Color(0xFF1B5E20),
-                      intensity,
-                    )!;
-              Color textColor = intensity > 0.5
-                  ? Colors.white
-                  : Colors.blueGrey.shade700;
-
-              return Tooltip(
-                message: '$monthName $day\n${val.toStringAsFixed(1)} Kg',
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: cellColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.black.withOpacity(0.05)),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    day.toString(),
-                    style: TextStyle(
-                      color: textColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+    Widget calendarMatrix = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Weekday Headers
+        Row(
+          children: weekdayLabels
+              .map(
+                (lbl) => Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 6.0),
+                      child: Text(
+                        lbl,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueGrey.shade600,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              );
-            }),
-          );
+              )
+              .toList(),
+        ),
+        // Grid Rows
+        ...List.generate(rows, (r) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 5.0),
+            child: Row(
+              children: List.generate(7, (c) {
+                final int slotIndex = r * 7 + c;
+                final int dayNumber = slotIndex - startOffset + 1;
+                if (slotIndex < startOffset || dayNumber > daysInMonth) {
+                  return const Expanded(child: SizedBox(height: 36));
+                }
 
-    // Month navigator row (shared between title layouts)
-    Widget monthNavigator = Row(
-      mainAxisSize: MainAxisSize.min,
+                if (_isHeatmapLoading) {
+                  return const Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 2.0),
+                      child: SkeletonBox(
+                        width: double.infinity,
+                        height: 36,
+                        borderRadius: 8,
+                      ),
+                    ),
+                  );
+                }
+
+                final double dayVal = _heatmapData[dayNumber] ?? 0.0;
+                final double intensity = _heatmapMaxWeight > 0
+                    ? (dayVal / _heatmapMaxWeight).clamp(0.0, 1.0)
+                    : 0.0;
+                final bool hasHarvest = dayVal > 0;
+
+                final Color bgColor = !hasHarvest
+                    ? const Color(0xFFF8FAFC)
+                    : Color.lerp(
+                        const Color(0xFFC8E6C9),
+                        const Color(0xFF1B5E20),
+                        intensity,
+                      )!;
+
+                final Color textColor = !hasHarvest
+                    ? Colors.blueGrey.shade700
+                    : (intensity > 0.45 ? Colors.white : const Color(0xFF065F46));
+
+                final Border border = !hasHarvest
+                    ? Border.all(color: const Color(0xFFE2E8F0), width: 1.0)
+                    : Border.all(
+                        color: Color.lerp(
+                          const Color(0xFFA5D6A7),
+                          const Color(0xFF0D5314),
+                          intensity,
+                        )!,
+                        width: 1.0,
+                      );
+
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                    child: Tooltip(
+                      message:
+                          '$monthName $dayNumber\n${hasHarvest ? "${dayVal.toStringAsFixed(1)} Kg" : (AppStrings.isSinhala ? "දළු නොමැත" : "No harvest")}',
+                      child: Container(
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: border,
+                          boxShadow: hasHarvest
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF1B5E20)
+                                        .withValues(alpha: 0.18 * intensity),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1.5),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              dayNumber.toString(),
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: hasHarvest
+                                    ? FontWeight.bold
+                                    : FontWeight.w600,
+                                fontSize: 11,
+                              ),
+                            ),
+                            if (hasHarvest)
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                width: 3.5,
+                                height: 3.5,
+                                decoration: BoxDecoration(
+                                  color: intensity > 0.45
+                                      ? Colors.white
+                                      : const Color(0xFF065F46),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          );
+        }),
+      ],
+    );
+
+    // Month navigator controls
+    Widget monthNavigator = Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left_rounded, size: 20),
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(),
+            onPressed: () {
+              setState(() {
+                _heatmapMonth--;
+                if (_heatmapMonth < 1) {
+                  _heatmapMonth = 12;
+                  _heatmapYear--;
+                }
+              });
+              _fetchHeatmapData();
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text(
+              monthName,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded, size: 20),
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(),
+            onPressed: () {
+              setState(() {
+                _heatmapMonth++;
+                if (_heatmapMonth > 12) {
+                  _heatmapMonth = 1;
+                  _heatmapYear++;
+                }
+              });
+              _fetchHeatmapData();
+            },
+          ),
+        ],
+      ),
+    );
+
+    // Right-hand Side: Month Performance Telemetry Panel
+    Widget telemetryPanel = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left, size: 20),
-          onPressed: () {
-            setState(() {
-              _heatmapMonth--;
-              if (_heatmapMonth < 1) {
-                _heatmapMonth = 12;
-                _heatmapYear--;
-              }
-            });
-            _fetchHeatmapData();
-          },
+        // 1. Total Month Leaf Intake
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFBBF7D0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.eco_rounded,
+                  color: Color(0xFF16A34A),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      AppStrings.monthHarvestTotal,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green.shade900,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${weightF.format(monthTotal)} Kg',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF14532D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        Text(
-          monthName,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        const SizedBox(height: 8),
+
+        // 2. Dual Mini Metric Tiles: Peak Day & Active Rate
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          size: 14,
+                          color: Color(0xFFD97706),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            AppStrings.peakHarvestDay,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blueGrey.shade700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      peakDay > 0
+                          ? '$peakDay (${weightF.format(peakWeight)} Kg)'
+                          : '-',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      peakDay > 0 ? 'Max single day' : 'No harvest',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.blueGrey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.event_available_rounded,
+                          size: 14,
+                          color: Color(0xFF2563EB),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            AppStrings.harvestDays,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blueGrey.shade700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$activeDays / $daysInMonth',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    Text(
+                      '${consistencyPct.toStringAsFixed(0)}% frequency',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.blueGrey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        IconButton(
-          icon: const Icon(Icons.chevron_right, size: 20),
-          onPressed: () {
-            setState(() {
-              _heatmapMonth++;
-              if (_heatmapMonth > 12) {
-                _heatmapMonth = 1;
-                _heatmapYear++;
-              }
-            });
-            _fetchHeatmapData();
-          },
+        const SizedBox(height: 8),
+
+        // 3. Average per active day
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.65),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                AppStrings.dailyAverageIntake,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.blueGrey.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                '${weightF.format(avgOnActiveDays)} Kg / day',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // 4. Density Legend Bar
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '${AppStrings.low} (0 Kg)',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.blueGrey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Row(
+              children: List.generate(5, (index) {
+                return Container(
+                  width: 14,
+                  height: 14,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: index == 0
+                        ? const Color(0xFFF1F5F9)
+                        : Color.lerp(
+                            const Color(0xFFC8E6C9),
+                            const Color(0xFF1B5E20),
+                            index / 4,
+                          ),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: Colors.black.withValues(alpha: 0.08),
+                    ),
+                  ),
+                );
+              }),
+            ),
+            Text(
+              '${AppStrings.high} (${weightF.format(_heatmapMaxWeight)} Kg)',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.blueGrey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1011,7 +1392,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 20,
             spreadRadius: 2,
             offset: const Offset(0, 4),
@@ -1023,101 +1404,93 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.white.withOpacity(0.4),
-                  Colors.white.withOpacity(0.1),
+                  Colors.white.withValues(alpha: 0.65),
+                  Colors.white.withValues(alpha: 0.25),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.6),
                 width: 1.5,
               ),
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // If narrow (< 380px), stack title and month picker vertically
-                final isNarrow = constraints.maxWidth < 380;
+                final bool isSplitView = constraints.maxWidth >= 540;
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
                   children: [
-                    if (isNarrow) ...[
-                      Center(
-                        child: Text(
-                          AppStrings.dailyLeafTotal,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Center(child: monthNavigator),
-                    ] else
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              AppStrings.dailyLeafTotal,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                    // Top Header: Title & Month Navigation
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF16A34A)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.calendar_month_rounded,
+                                color: Color(0xFF16A34A),
+                                size: 18,
                               ),
                             ),
-                          ),
-                          monthNavigator,
-                        ],
-                      ),
-                    const SizedBox(height: 8),
-                    if (isMobile) gridWidget else Expanded(child: gridWidget),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          AppStrings.low,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blueGrey,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Row(
-                          children: List.generate(5, (index) {
-                            return Container(
-                              width: 14,
-                              height: 14,
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              decoration: BoxDecoration(
-                                color: index == 0
-                                    ? Colors.grey.shade100
-                                    : Color.lerp(
-                                        const Color(0xFFC8E6C9),
-                                        const Color(0xFF1B5E20),
-                                        index / 4,
-                                      ),
-                                borderRadius: BorderRadius.circular(3),
+                            const SizedBox(width: 8),
+                            Text(
+                              AppStrings.dailyLeafTotal,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B),
                               ),
-                            );
-                          }),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          AppStrings.high,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blueGrey,
-                          ),
-                        ),
+                        monthNavigator,
                       ],
                     ),
+                    const SizedBox(height: 12),
+
+                    // Main Area: Squared Calendar Grid + Telemetry Side Panel
+                    if (isSplitView)
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Left: True Squared Calendar Grid (7 columns)
+                            SizedBox(
+                              width: 310,
+                              child: calendarMatrix,
+                            ),
+                            // Divider
+                            Container(
+                              width: 1,
+                              color: Colors.black.withValues(alpha: 0.06),
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 14),
+                            ),
+                            // Right: Unused Space Reclaimed for Harvest Telemetry
+                            Expanded(child: telemetryPanel),
+                          ],
+                        ),
+                      )
+                    else ...[
+                      calendarMatrix,
+                      const SizedBox(height: 14),
+                      telemetryPanel,
+                    ],
                   ],
                 );
               },
@@ -1128,7 +1501,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildCriticalAlertBanner(
+    Widget _buildCriticalAlertBanner(
     BuildContext context,
     NumberFormat currencyF,
   ) {
