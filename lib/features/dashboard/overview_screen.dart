@@ -1037,32 +1037,15 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               : null,
                         ),
                         alignment: Alignment.center,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              dayNumber.toString(),
-                              style: TextStyle(
-                                color: textColor,
-                                fontWeight: hasHarvest
-                                    ? FontWeight.bold
-                                    : FontWeight.w600,
-                                fontSize: 11,
-                              ),
-                            ),
-                            if (hasHarvest)
-                              Container(
-                                margin: const EdgeInsets.only(top: 2),
-                                width: 3.5,
-                                height: 3.5,
-                                decoration: BoxDecoration(
-                                  color: intensity > 0.45
-                                      ? Colors.white
-                                      : const Color(0xFF065F46),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                          ],
+                        child: Text(
+                          dayNumber.toString(),
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: hasHarvest
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),
