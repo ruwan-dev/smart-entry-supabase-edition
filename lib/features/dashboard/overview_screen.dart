@@ -1093,7 +1093,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     // Right-hand Side: Month Performance Telemetry Panel
     Widget telemetryPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: isMobile ? MainAxisAlignment.start : MainAxisAlignment.spaceBetween,
+      mainAxisSize: MainAxisSize.min,
       children: [
         // 1. Total Month Leaf Intake
         Container(
@@ -1133,12 +1133,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      '${weightF.format(monthTotal)} Kg',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF14532D),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${weightF.format(monthTotal)} Kg',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF14532D),
+                        ),
                       ),
                     ),
                   ],
@@ -1206,6 +1210,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         fontSize: 9,
                         color: Colors.blueGrey.shade500,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -1255,6 +1261,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         fontWeight: FontWeight.w800,
                         color: Color(0xFF1E293B),
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       '${consistencyPct.toStringAsFixed(0)}% frequency',
@@ -1262,6 +1270,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         fontSize: 9,
                         color: Colors.blueGrey.shade500,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -1282,14 +1292,19 @@ class _OverviewScreenState extends State<OverviewScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                AppStrings.dailyAverageIntake,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.blueGrey.shade700,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  AppStrings.dailyAverageIntake,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.blueGrey.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${weightF.format(avgOnActiveDays)} Kg / day',
                 style: const TextStyle(
@@ -1304,55 +1319,61 @@ class _OverviewScreenState extends State<OverviewScreen> {
         const SizedBox(height: 8),
 
         // 4. Density Legend Bar
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '${AppStrings.low} (0 Kg)',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.blueGrey.shade600,
-                fontWeight: FontWeight.w500,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${AppStrings.low} (0 Kg)',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.blueGrey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            Row(
-              children: List.generate(5, (index) {
-                return Container(
-                  width: 14,
-                  height: 14,
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(
-                    color: index == 0
-                        ? const Color(0xFFF1F5F9)
-                        : Color.lerp(
-                            const Color(0xFFC8E6C9),
-                            const Color(0xFF1B5E20),
-                            index / 4,
-                          ),
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: Colors.black.withValues(alpha: 0.08),
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(5, (index) {
+                  return Container(
+                    width: 14,
+                    height: 14,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: index == 0
+                          ? const Color(0xFFF1F5F9)
+                          : Color.lerp(
+                              const Color(0xFFC8E6C9),
+                              const Color(0xFF1B5E20),
+                              index / 4,
+                            ),
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: Colors.black.withValues(alpha: 0.08),
+                      ),
                     ),
-                  ),
-                );
-              }),
-            ),
-            Text(
-              '${AppStrings.high} (${weightF.format(_heatmapMaxWeight)} Kg)',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.blueGrey.shade600,
-                fontWeight: FontWeight.w500,
+                  );
+                }),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                '${AppStrings.high} (${weightF.format(_heatmapMaxWeight)} Kg)',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.blueGrey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
 
     return Container(
       key: key,
-      height: isMobile ? null : 362,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -1391,80 +1412,69 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // Top Header: Title & Month Navigation
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF16A34A)
-                                    .withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF16A34A)
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.calendar_month_rounded,
+                                  color: Color(0xFF16A34A),
+                                  size: 18,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.calendar_month_rounded,
-                                color: Color(0xFF16A34A),
-                                size: 18,
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  AppStrings.dailyLeafTotal,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              AppStrings.dailyLeafTotal,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         monthBadge,
                       ],
                     ),
                     const SizedBox(height: 12),
 
                     // Main Area: Squared Calendar Grid + Telemetry Side Panel
-                    if (!isMobile && isSplitView)
-                      Expanded(
-                        child: Row(
-                          key: const ValueKey('hm_split_desktop'),
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Left: True Squared Calendar Grid (7 columns)
-                            SizedBox(
-                              width: 310,
-                              child: calendarMatrix,
-                            ),
-                            // Divider
-                            Container(
-                              width: 1,
-                              color: Colors.black.withValues(alpha: 0.06),
-                              margin:
-                                  const EdgeInsets.symmetric(horizontal: 14),
-                            ),
-                            // Right: Unused Space Reclaimed for Harvest Telemetry
-                            Expanded(child: telemetryPanel),
-                          ],
-                        ),
-                      )
-                    else if (isSplitView)
+                    if (isSplitView)
                       Row(
-                        key: const ValueKey('hm_split_tablet'),
+                        key: ValueKey(isMobile ? 'hm_split_mobile' : 'hm_split_desktop'),
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Left: True Squared Calendar Grid (7 columns)
-                          SizedBox(
-                            width: 310,
-                            child: calendarMatrix,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.center,
+                            child: SizedBox(
+                              width: 310,
+                              child: calendarMatrix,
+                            ),
                           ),
                           // Divider
                           Container(
                             width: 1,
+                            height: 280,
                             color: Colors.black.withValues(alpha: 0.06),
                             margin:
                                 const EdgeInsets.symmetric(horizontal: 14),
@@ -1480,9 +1490,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Center(
-                            child: SizedBox(
-                              width: 310,
-                              child: calendarMatrix,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.center,
+                              child: SizedBox(
+                                width: 310,
+                                child: calendarMatrix,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 14),
@@ -2324,22 +2338,27 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           ),
                           child: Icon(icon, color: accentColor, size: 20),
                         ),
+                        const SizedBox(width: 8),
                         if (badgeText != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: (badgeColor ?? accentColor).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              badgeText,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: badgeColor ?? accentColor,
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (badgeColor ?? accentColor).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                badgeText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: badgeColor ?? accentColor,
+                                ),
                               ),
                             ),
                           )
@@ -2401,7 +2420,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Widget _buildHarvestAndQualitySection(BuildContext context, NumberFormat weightF) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 880;
+        final isMobile = constraints.maxWidth < 1020;
 
         if (isMobile) {
           return Column(
@@ -2445,7 +2464,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     return Container(
       key: key,
-      height: isMobile ? null : 362,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -2480,46 +2498,54 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
-              mainAxisAlignment: isMobile ? MainAxisAlignment.start : MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 // Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: primaryAppColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: primaryAppColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.insights_rounded, color: primaryAppColor, size: 20),
                           ),
-                          child: Icon(Icons.insights_rounded, color: primaryAppColor, size: 20),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              AppStrings.leafHarvestAnalytics,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B),
-                              ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  AppStrings.leafHarvestAnalytics,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  AppStrings.qualityBreakdown,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.blueGrey.shade600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                            Text(
-                              AppStrings.qualityBreakdown,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.blueGrey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     InkWell(
                       onTap: () => Navigator.push(
                         context,
@@ -2614,10 +2640,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
                                 width: 8,
@@ -2639,6 +2668,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             ],
                           ),
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
                                 width: 8,
@@ -2699,12 +2729,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               ],
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              '$_activeSuppliersCount / $_totalCustomers',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF1E293B),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '$_activeSuppliersCount / $_totalCustomers',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E293B),
+                                ),
                               ),
                             ),
                             Text(
@@ -2713,6 +2747,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                 fontSize: 10,
                                 color: Colors.blueGrey.shade500,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -2749,12 +2785,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               ],
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              '${weightF.format(dailyAvg)} Kg',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF1E293B),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '${weightF.format(dailyAvg)} Kg',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E293B),
+                                ),
                               ),
                             ),
                             Text(
@@ -2763,6 +2803,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                 fontSize: 10,
                                 color: Colors.blueGrey.shade500,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
