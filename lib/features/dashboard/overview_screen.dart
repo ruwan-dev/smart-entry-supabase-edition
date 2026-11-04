@@ -47,6 +47,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   double _totalSupplierPayout = 0.0;
   double _netDealerIncome = 0.0;
   double _dealerMarginPerKg = 0.0;
+  double _totalFactoryDeliveredWeight = 0.0;
   double _normalLeafWeight = 0.0;
   double _superLeafWeight = 0.0;
   double _superLeafPercentage = 0.0;
@@ -435,6 +436,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
       }
 
       double totalFactoryIncome = 0.0;
+      double factoryDeliveredWeight = 0.0;
+      for (var fe in factoryEntries) {
+        double fnw = ((fe['netWeight'] ?? 0) as num).toDouble();
+        double fsw = ((fe['netWeight2'] ?? 0) as num).toDouble();
+        factoryDeliveredWeight += (fnw + fsw);
+      }
       Map<String, List<dynamic>> entriesByFactoryMonth = {};
       for (var fe in factoryEntries) {
         String fId = (fe['factoryId'] ?? '').toString();
@@ -495,6 +502,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _totalSupplierPayout = finalSupplierCost;
         _netDealerIncome = netIncome;
         _dealerMarginPerKg = marginPerKg;
+        _totalFactoryDeliveredWeight = factoryDeliveredWeight;
 
         _isLoading = false;
         _isInitialLoad = false;
@@ -1786,6 +1794,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
           const SizedBox(height: 24),
           _buildSkeletonHarvestAndQualitySection(context),
           const SizedBox(height: 32),
+          const SkeletonBox(
+            height: 220,
+            width: double.infinity,
+            borderRadius: 20,
+          ),
+          const SizedBox(height: 28),
           _buildSkeletonDbBusinessSummary(context),
           const SizedBox(height: 32),
           const SkeletonBox(
@@ -1829,12 +1843,22 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     _buildTopBannerAndMonthHeader(context, currencyF),
                     _isSummaryLoading
                         ? _buildSkeletonExecutiveKpiStrip(context)
-                        : _buildExecutiveKpiStrip(context, currencyF, weightF),
+                        : _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
                     const SizedBox(height: 24),
                     (_isHeatmapLoading || _isSummaryLoading)
                         ? _buildSkeletonHarvestAndQualitySection(context)
                         : _buildHarvestAndQualitySection(context, weightF),
                     const SizedBox(height: 32),
+
+                    // Bottom Section: Monthly Financial Settlement & Transit Variance
+                    _isSummaryLoading
+                        ? const SkeletonBox(
+                            height: 220,
+                            width: double.infinity,
+                            borderRadius: 20,
+                          )
+                        : _buildMonthlyFinancialSettlementSection(context, currencyF, weightF),
+                    const SizedBox(height: 28),
 
                     _isSummaryLoading
                         ? _buildSkeletonDbBusinessSummary(context)
@@ -2169,7 +2193,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildExecutiveKpiStrip(
+  Widget _buildRealTimeOperationalKpiStrip(
     BuildContext context,
     NumberFormat currencyF,
     NumberFormat weightF,
@@ -2180,57 +2204,54 @@ class _OverviewScreenState extends State<OverviewScreen> {
         final bool isDesktop = w >= 960;
         final bool isTablet = w >= 600 && w < 960;
 
-        final bool hasNoFactoryData = _totalFactoryRevenue == 0 && _totalSupplierPayout > 0;
-
         Widget buildCard1([Key? k]) => _buildKpiCard(
           key: k,
-          title: AppStrings.netDealerIncome,
-          value: hasNoFactoryData
-              ? 'Rs. 0.00'
-              : 'Rs. ${currencyF.format(_netDealerIncome)}',
-          badgeText: hasNoFactoryData
-              ? AppStrings.pendingFactoryEntry
-              : (_totalWeight > 0 ? 'Rs. ${_dealerMarginPerKg.toStringAsFixed(2)} / Kg' : null),
-          badgeColor: hasNoFactoryData ? const Color(0xFFD97706) : const Color(0xFF059669),
-          subtitle: null,
-          icon: Icons.payments_rounded,
-          gradientColors: hasNoFactoryData
-              ? [
-                  const Color(0xFFFFFBEB),
-                  const Color(0xFFFEF3C7).withValues(alpha: 0.6),
-                ]
-              : [
-                  const Color(0xFFECFDF5),
-                  const Color(0xFFD1FAE5).withValues(alpha: 0.6),
-                ],
-          accentColor: hasNoFactoryData ? const Color(0xFFD97706) : const Color(0xFF059669),
-          borderColor: hasNoFactoryData
-              ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
-              : const Color(0xFF10B981).withValues(alpha: 0.25),
+          title: AppStrings.leafWeightTotal,
+          value: '${weightF.format(_totalWeight)} Kg',
+          badgeText: _totalWeight > 0 ? '$_activeSuppliersCount ${AppStrings.customers}' : null,
+          badgeColor: const Color(0xFF059669),
+          subtitle: _normalLeafWeight > 0 || _superLeafWeight > 0
+              ? '${AppStrings.normalLeaf}: ${weightF.format(_normalLeafWeight)} Kg | ${AppStrings.superLeaf}: ${weightF.format(_superLeafWeight)} Kg'
+              : AppStrings.totalLeafIntake,
+          icon: Icons.eco_rounded,
+          gradientColors: [
+            const Color(0xFFECFDF5),
+            const Color(0xFFD1FAE5).withValues(alpha: 0.6),
+          ],
+          accentColor: const Color(0xFF059669),
+          borderColor: const Color(0xFF10B981).withValues(alpha: 0.25),
         );
 
         Widget buildCard2([Key? k]) => _buildKpiCard(
           key: k,
-          title: AppStrings.factoryRevenue,
-          value: 'Rs. ${currencyF.format(_totalFactoryRevenue)}',
-          badgeText: null,
-          subtitle: AppStrings.deliveredToFactories,
-          icon: Icons.factory_rounded,
+          title: AppStrings.superLeafRatio,
+          value: '${_superLeafPercentage.toStringAsFixed(1)}%',
+          badgeText: _totalWeight > 0
+              ? (_superLeafPercentage >= 60 ? 'උසස් තත්ත්වය' : 'සාමාන්‍ය තත්ත්වය')
+              : null,
+          badgeColor: _superLeafPercentage >= 60
+              ? const Color(0xFF0284C7)
+              : const Color(0xFFD97706),
+          subtitle: '${weightF.format(_superLeafWeight)} Kg ${AppStrings.superLeaf}',
+          icon: Icons.verified_rounded,
           gradientColors: [
-            const Color(0xFFEFF6FF),
-            const Color(0xFFDBEAFE).withValues(alpha: 0.6),
+            const Color(0xFFF0F9FF),
+            const Color(0xFFE0F2FE).withValues(alpha: 0.6),
           ],
-          accentColor: const Color(0xFF2563EB),
-          borderColor: const Color(0xFF3B82F6).withValues(alpha: 0.25),
+          accentColor: const Color(0xFF0284C7),
+          borderColor: const Color(0xFF38BDF8).withValues(alpha: 0.25),
         );
 
         Widget buildCard3([Key? k]) => _buildKpiCard(
           key: k,
-          title: AppStrings.supplierPayout,
-          value: 'Rs. ${currencyF.format(_totalSupplierPayout)}',
-          badgeText: null,
-          subtitle: '${weightF.format(_totalWeight)} Kg ${AppStrings.totalLeafIntake}',
-          icon: Icons.energy_savings_leaf_rounded,
+          title: AppStrings.activeSuppliers,
+          value: '$_activeSuppliersCount',
+          badgeText: _totalCustomers > 0
+              ? '${(_activeSuppliersCount / _totalCustomers * 100).toStringAsFixed(0)}% ආවරණය'
+              : null,
+          badgeColor: const Color(0xFF7C3AED),
+          subtitle: 'සම්පූර්ණ පාරිභෝගිකයින් $_totalCustomers න්',
+          icon: Icons.people_alt_rounded,
           gradientColors: [
             const Color(0xFFF5F3FF),
             const Color(0xFFEDE9FE).withValues(alpha: 0.6),
@@ -2264,7 +2285,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
         if (isDesktop) {
           return Row(
-            key: const ValueKey('kpi_desktop_row'),
+            key: const ValueKey('op_desktop_row'),
             children: [
               Expanded(child: buildCard1(const ValueKey('c1_d'))),
               const SizedBox(width: 14),
@@ -2277,10 +2298,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
           );
         } else if (isTablet) {
           return Column(
-            key: const ValueKey('kpi_tablet_col'),
+            key: const ValueKey('op_tablet_col'),
             children: [
               Row(
-                key: const ValueKey('kpi_tablet_r1'),
+                key: const ValueKey('op_tablet_r1'),
                 children: [
                   Expanded(child: buildCard1(const ValueKey('c1_t1'))),
                   const SizedBox(width: 14),
@@ -2289,7 +2310,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ),
               const SizedBox(height: 14),
               Row(
-                key: const ValueKey('kpi_tablet_r2'),
+                key: const ValueKey('op_tablet_r2'),
                 children: [
                   Expanded(child: buildCard3(const ValueKey('c3_t2'))),
                   const SizedBox(width: 14),
@@ -2300,7 +2321,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           );
         } else {
           return Column(
-            key: const ValueKey('kpi_mobile_col'),
+            key: const ValueKey('op_mobile_col'),
             children: [
               buildCard1(const ValueKey('c1_m')),
               const SizedBox(height: 12),
@@ -2313,6 +2334,362 @@ class _OverviewScreenState extends State<OverviewScreen> {
           );
         }
       },
+    );
+  }
+
+  Widget _buildMonthlyFinancialSettlementSection(
+    BuildContext context,
+    NumberFormat currencyF,
+    NumberFormat weightF,
+  ) {
+    final bool hasNoFactoryData = _totalFactoryRevenue == 0 && _totalSupplierPayout > 0;
+    final double variance = _totalFactoryDeliveredWeight - _totalWeight;
+    final double variancePercent = _totalWeight > 0 ? (variance / _totalWeight * 100.0) : 0.0;
+    final bool hasDeliveredData = _totalFactoryDeliveredWeight > 0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final bool isDesktop = w >= 960;
+        final bool isTablet = w >= 600 && w < 960;
+
+        Widget buildFinCard1([Key? k]) => _buildKpiCard(
+          key: k,
+          title: AppStrings.factoryRevenue,
+          value: 'Rs. ${currencyF.format(_totalFactoryRevenue)}',
+          badgeText: hasDeliveredData ? '${weightF.format(_totalFactoryDeliveredWeight)} Kg' : null,
+          badgeColor: const Color(0xFF2563EB),
+          subtitle: AppStrings.deliveredToFactories,
+          icon: Icons.factory_rounded,
+          gradientColors: [
+            const Color(0xFFEFF6FF),
+            const Color(0xFFDBEAFE).withValues(alpha: 0.6),
+          ],
+          accentColor: const Color(0xFF2563EB),
+          borderColor: const Color(0xFF3B82F6).withValues(alpha: 0.25),
+        );
+
+        Widget buildFinCard2([Key? k]) => _buildKpiCard(
+          key: k,
+          title: AppStrings.supplierPayout,
+          value: 'Rs. ${currencyF.format(_totalSupplierPayout)}',
+          badgeText: _totalWeight > 0 ? '${weightF.format(_totalWeight)} Kg' : null,
+          badgeColor: const Color(0xFF7C3AED),
+          subtitle: '${weightF.format(_totalWeight)} Kg ${AppStrings.totalLeafIntake}',
+          icon: Icons.energy_savings_leaf_rounded,
+          gradientColors: [
+            const Color(0xFFF5F3FF),
+            const Color(0xFFEDE9FE).withValues(alpha: 0.6),
+          ],
+          accentColor: const Color(0xFF7C3AED),
+          borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+        );
+
+        Widget buildFinCard3([Key? k]) => _buildKpiCard(
+          key: k,
+          title: AppStrings.netDealerIncome,
+          value: hasNoFactoryData
+              ? 'Rs. 0.00'
+              : 'Rs. ${currencyF.format(_netDealerIncome)}',
+          badgeText: hasNoFactoryData
+              ? AppStrings.pendingMonthlyRates
+              : (_totalWeight > 0 ? 'Rs. ${_dealerMarginPerKg.toStringAsFixed(2)} / Kg' : null),
+          badgeColor: hasNoFactoryData
+              ? const Color(0xFFD97706)
+              : (_netDealerIncome >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626)),
+          subtitle: hasNoFactoryData
+              ? AppStrings.pendingFactoryEntry
+              : (_netDealerIncome >= 0 ? 'ශුද්ධ ලාභය' : 'ව්‍යාපාරික පාඩුව'),
+          icon: Icons.payments_rounded,
+          gradientColors: hasNoFactoryData
+              ? [
+                  const Color(0xFFFFFBEB),
+                  const Color(0xFFFEF3C7).withValues(alpha: 0.6),
+                ]
+              : (_netDealerIncome >= 0
+                  ? [
+                      const Color(0xFFECFDF5),
+                      const Color(0xFFD1FAE5).withValues(alpha: 0.6),
+                    ]
+                  : [
+                      const Color(0xFFFEF2F2),
+                      const Color(0xFFFEE2E2).withValues(alpha: 0.6),
+                    ]),
+          accentColor: hasNoFactoryData
+              ? const Color(0xFFD97706)
+              : (_netDealerIncome >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626)),
+          borderColor: hasNoFactoryData
+              ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+              : (_netDealerIncome >= 0
+                  ? const Color(0xFF10B981).withValues(alpha: 0.25)
+                  : const Color(0xFFEF4444).withValues(alpha: 0.25)),
+        );
+
+        Widget cardsRow;
+        if (isDesktop) {
+          cardsRow = Row(
+            key: const ValueKey('fin_desktop_row'),
+            children: [
+              Expanded(child: buildFinCard1(const ValueKey('fc1_d'))),
+              const SizedBox(width: 14),
+              Expanded(child: buildFinCard2(const ValueKey('fc2_d'))),
+              const SizedBox(width: 14),
+              Expanded(child: buildFinCard3(const ValueKey('fc3_d'))),
+            ],
+          );
+        } else if (isTablet) {
+          cardsRow = Column(
+            key: const ValueKey('fin_tablet_col'),
+            children: [
+              Row(
+                children: [
+                  Expanded(child: buildFinCard1(const ValueKey('fc1_t'))),
+                  const SizedBox(width: 14),
+                  Expanded(child: buildFinCard2(const ValueKey('fc2_t'))),
+                ],
+              ),
+              const SizedBox(height: 14),
+              buildFinCard3(const ValueKey('fc3_t')),
+            ],
+          );
+        } else {
+          cardsRow = Column(
+            key: const ValueKey('fin_mobile_col'),
+            children: [
+              buildFinCard1(const ValueKey('fc1_m')),
+              const SizedBox(height: 12),
+              buildFinCard2(const ValueKey('fc2_m')),
+              const SizedBox(height: 12),
+              buildFinCard3(const ValueKey('fc3_m')),
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_rounded,
+                    color: Color(0xFF2563EB),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppStrings.financialOverview,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'කර්මාන්තශාලා ආදායම, සැපයුම් පිරිවැය සහ ප්‍රවාහන වෙනස',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            cardsRow,
+            const SizedBox(height: 16),
+            _buildTransitVarianceCard(context, weightF, hasDeliveredData, variance, variancePercent),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTransitVarianceCard(
+    BuildContext context,
+    NumberFormat weightF,
+    bool hasDeliveredData,
+    double variance,
+    double variancePercent,
+  ) {
+    final bool isLoss = variance < 0;
+    final Color statusColor = hasDeliveredData
+        ? (variancePercent.abs() <= 2.5 ? const Color(0xFF059669) : const Color(0xFFDC2626))
+        : Colors.blueGrey;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.18),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 16,
+            spreadRadius: 0,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.compare_arrows_rounded, color: statusColor, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    AppStrings.transitLossOrGain,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1F2937),
+                    ),
+                  ),
+                ],
+              ),
+              if (hasDeliveredData)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    variancePercent.abs() <= 2.5 ? 'සාමාන්‍ය ප්‍රවාහන හානිය' : 'අධික ප්‍රවාහන හානිය',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final bool isSmall = constraints.maxWidth < 500;
+              final col1 = _buildVarianceItem(
+                label: 'ගොවීන්ගේ එකතුව',
+                value: '${weightF.format(_totalWeight)} Kg',
+                icon: Icons.eco_outlined,
+                color: const Color(0xFF059669),
+              );
+              final col2 = _buildVarianceItem(
+                label: AppStrings.factoryDeliveredWeight,
+                value: hasDeliveredData ? '${weightF.format(_totalFactoryDeliveredWeight)} Kg' : 'සටහන් කර නැත',
+                icon: Icons.factory_outlined,
+                color: const Color(0xFF2563EB),
+              );
+              final col3 = _buildVarianceItem(
+                label: 'බර වෙනස (Variance)',
+                value: hasDeliveredData
+                    ? '${isLoss ? "" : "+"}${weightF.format(variance)} Kg (${variancePercent.toStringAsFixed(2)}%)'
+                    : 'දත්ත පොරොත්තුවෙන්',
+                icon: Icons.scale_rounded,
+                color: statusColor,
+              );
+
+              if (isSmall) {
+                return Column(
+                  children: [
+                    col1,
+                    const SizedBox(height: 10),
+                    col2,
+                    const SizedBox(height: 10),
+                    col3,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: col1),
+                  Container(height: 36, width: 1, color: Colors.grey.shade200),
+                  Expanded(child: col2),
+                  Container(height: 36, width: 1, color: Colors.grey.shade200),
+                  Expanded(child: col3),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVarianceItem({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
