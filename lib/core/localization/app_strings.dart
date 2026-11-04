@@ -658,6 +658,13 @@ class AppStrings {
   static String get factoryDeliveredWeight => isSinhala ? 'කර්මාන්තශාලාවට යැවූ බර' : 'Factory Delivered Weight';
   static String get pendingMonthlyRates => isSinhala ? 'මාසික මිල බලාපොරොත්තුවෙන්' : 'Rates Pending';
   static String get itemsIssued => isSinhala ? 'නිකුත් කළ ද්‍රව්‍ය' : 'Items Issued';
+  static String get weeklyIntakeTrend => isSinhala ? 'සතිපතා ලැබීම් ප්‍රවණතාව' : 'Weekly Intake Trend';
+  static String get peakHarvestWeek => isSinhala ? 'උච්චතම සතිය' : 'Peak Harvest Week';
+  static String get weeklyAverageIntake => isSinhala ? 'සතිපතා සාමාන්‍යය' : 'Weekly Average';
+  static String get weeklyTrend => isSinhala ? 'සතිපතා' : 'Weekly';
+  static String get suppliersTrend => isSinhala ? 'සැපයුම්කරුවන්' : 'Suppliers';
+  static String get topSuppliersShare => isSinhala ? 'ප්‍රමුඛ 5 දායකත්වය' : 'Top 5 Share';
+  static String get weekPrefix => isSinhala ? 'සතිය' : 'Week';
 
 
 

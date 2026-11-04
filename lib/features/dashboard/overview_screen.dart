@@ -44,6 +44,24 @@ class DashboardItemSummary {
   });
 }
 
+class WeeklyHarvestData {
+  final int weekNumber;
+  final String label;
+  final String dateRange;
+  final double normalWeight;
+  final double superWeight;
+  final double totalWeight;
+
+  const WeeklyHarvestData({
+    required this.weekNumber,
+    required this.label,
+    required this.dateRange,
+    required this.normalWeight,
+    required this.superWeight,
+    required this.totalWeight,
+  });
+}
+
 class OverviewScreen extends StatefulWidget {
   const OverviewScreen({super.key});
 
@@ -118,6 +136,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
   List<Map<String, dynamic>> _allMonthlySummaries = [];
 
   Map<int, double> _heatmapData = {}; // day -> weight
+  Map<int, double> _heatmapNormalData = {}; // day -> normal leaf weight
+  Map<int, double> _heatmapSuperData = {}; // day -> super leaf weight
+  String _harvestChartMode = 'weekly'; // 'weekly' or 'suppliers'
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
   int get _heatmapMonth => _selectedMonth;
@@ -160,6 +181,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
     setState(() {
       _isHeatmapLoading = true;
       _heatmapData = {};
+      _heatmapNormalData = {};
+      _heatmapSuperData = {};
       _heatmapMaxWeight = 0;
     });
     DateTime start = DateTime(_selectedYear, _selectedMonth, 1);
@@ -182,15 +205,25 @@ class _OverviewScreenState extends State<OverviewScreen> {
       }
 
       Map<int, double> data = {};
+      Map<int, double> normData = {};
+      Map<int, double> superData = {};
       double maxW = 0;
 
       for (var doc in snapshot) {
         if (doc['timestamp'] != null) {
           DateTime ts = DateTime.parse(doc['timestamp'].toString());
           int d = ts.day;
-          double w = (doc['netWeight'] ?? 0.0).toDouble() + (doc['netWeight2'] ?? 0.0).toDouble();
+          double nw = (doc['netWeight'] ?? 0.0) is num
+              ? (doc['netWeight'] as num).toDouble()
+              : (double.tryParse(doc['netWeight'].toString()) ?? 0.0);
+          double sw = (doc['netWeight2'] ?? 0.0) is num
+              ? (doc['netWeight2'] as num).toDouble()
+              : (double.tryParse(doc['netWeight2'].toString()) ?? 0.0);
+          double w = nw + sw;
 
           data[d] = (data[d] ?? 0) + w;
+          normData[d] = (normData[d] ?? 0) + nw;
+          superData[d] = (superData[d] ?? 0) + sw;
           if (data[d]! > maxW) maxW = data[d]!;
         }
       }
@@ -198,6 +231,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       if (mounted) {
         setState(() {
           _heatmapData = data;
+          _heatmapNormalData = normData;
+          _heatmapSuperData = superData;
           _heatmapMaxWeight = maxW;
           _isHeatmapLoading = false;
         });
@@ -1316,12 +1351,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
       ),
     );
 
-    // Right-hand Side: Month Performance Telemetry Panel
+    // Right-hand Side: Consolidated Month Performance & Leaf Quality Telemetry Panel
     Widget telemetryPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 1. Total Month Leaf Intake
+        // 1. Total Month Leaf Intake & Super Leaf Quality Breakdown
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
@@ -1329,222 +1364,219 @@ class _OverviewScreenState extends State<OverviewScreen> {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: const Color(0xFFBBF7D0)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF16A34A).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.eco_rounded,
-                  color: Color(0xFF16A34A),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      AppStrings.monthHarvestTotal,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green.shade900,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '${weightF.format(monthTotal)} Kg',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF14532D),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.eco_rounded,
+                          color: Color(0xFF16A34A),
+                          size: 18,
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            AppStrings.monthHarvestTotal,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade900,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${weightF.format(monthTotal)} Kg',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF14532D),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                      ),
                     ),
-                  ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${_superLeafPercentage.toStringAsFixed(1)}%',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF047857),
+                          ),
+                        ),
+                        Text(
+                          AppStrings.superLeafRatio,
+                          style: const TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF047857),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  height: 6,
+                  child: LinearProgressIndicator(
+                    value: monthTotal > 0
+                        ? (_superLeafWeight / monthTotal).clamp(0.0, 1.0)
+                        : 0.0,
+                    backgroundColor: const Color(0xFF93C5FD).withValues(alpha: 0.5),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                  ),
                 ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF3B82F6),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${AppStrings.normalLeaf}: ${weightF.format(_normalLeafWeight)} Kg',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blueGrey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${AppStrings.superLeaf}: ${weightF.format(_superLeafWeight)} Kg',
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF047857),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 8),
 
-        // 2. Dual Mini Metric Tiles: Peak Day & Active Rate
+        // 2. 2x2 Operational Telemetry Grid
         Row(
           children: [
+            // Peak Day
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.black.withValues(alpha: 0.05),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.star_rounded,
-                          size: 14,
-                          color: Color(0xFFD97706),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            AppStrings.peakHarvestDay,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blueGrey.shade700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      peakDay > 0
-                          ? '$peakDay (${weightF.format(peakWeight)} Kg)'
-                          : '-',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1E293B),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      peakDay > 0 ? 'Max single day' : 'No harvest',
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.blueGrey.shade500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+              child: _buildHeatmapMetricTile(
+                icon: Icons.star_rounded,
+                iconColor: const Color(0xFFD97706),
+                title: AppStrings.peakHarvestDay,
+                value: peakDay > 0
+                    ? '$peakDay (${weightF.format(peakWeight)} Kg)'
+                    : '-',
+                subtitle: peakDay > 0 ? 'Max single day' : 'No harvest',
               ),
             ),
             const SizedBox(width: 8),
+            // Active Days
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.black.withValues(alpha: 0.05),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.event_available_rounded,
-                          size: 14,
-                          color: Color(0xFF2563EB),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            AppStrings.harvestDays,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blueGrey.shade700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$activeDays / $daysInMonth',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1E293B),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${consistencyPct.toStringAsFixed(0)}% frequency',
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.blueGrey.shade500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+              child: _buildHeatmapMetricTile(
+                icon: Icons.event_available_rounded,
+                iconColor: const Color(0xFF2563EB),
+                title: AppStrings.harvestDays,
+                value: '$activeDays / $daysInMonth',
+                subtitle: '${consistencyPct.toStringAsFixed(0)}% frequency',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            // Active Suppliers
+            Expanded(
+              child: _buildHeatmapMetricTile(
+                icon: Icons.people_alt_rounded,
+                iconColor: primaryAppColor,
+                title: AppStrings.activeSuppliers,
+                value: '$_activeSuppliersCount / $_totalCustomers',
+                subtitle:
+                    '${_totalCustomers > 0 ? ((_activeSuppliersCount / _totalCustomers) * 100).toStringAsFixed(0) : '0'}% active rate',
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Daily Average
+            Expanded(
+              child: _buildHeatmapMetricTile(
+                icon: Icons.speed_rounded,
+                iconColor: const Color(0xFF059669),
+                title: AppStrings.dailyAverageIntake,
+                value: '${weightF.format(avgOnActiveDays)} Kg',
+                subtitle: '$activeDays active days',
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
 
-        // 3. Average per active day
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.65),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  AppStrings.dailyAverageIntake,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.blueGrey.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${weightF.format(avgOnActiveDays)} Kg / day',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // 4. Density Legend Bar
+        // 3. Density Legend Bar
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
@@ -1735,6 +1767,68 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeatmapMetricTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String value,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.black.withValues(alpha: 0.05),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: iconColor),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blueGrey.shade700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1E293B),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 8.5,
+              color: Colors.blueGrey.shade500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -2347,6 +2441,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             _isSummaryLoading = true;
                             _isHeatmapLoading = true;
                             _heatmapData = {};
+                            _heatmapNormalData = {};
+                            _heatmapSuperData = {};
                             _heatmapMaxWeight = 0;
                           });
                           setDialogState(() {});
@@ -2360,6 +2456,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             _isSummaryLoading = true;
                             _isHeatmapLoading = true;
                             _heatmapData = {};
+                            _heatmapNormalData = {};
+                            _heatmapSuperData = {};
                             _heatmapMaxWeight = 0;
                           });
                           setDialogState(() {});
@@ -2385,6 +2483,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           _isSummaryLoading = true;
                           _isHeatmapLoading = true;
                           _heatmapData = {};
+                          _heatmapNormalData = {};
+                          _heatmapSuperData = {};
                           _heatmapMaxWeight = 0;
                         });
                         Navigator.pop(ctx);
@@ -3317,7 +3417,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             children: [
               _buildHeatMapContainer(key: const ValueKey('hm_mobile'), isMobile: true),
               const SizedBox(height: 16),
-              _buildQualityAndIntakeMatrixCard(context, weightF, key: const ValueKey('q_mobile'), isMobile: true),
+              _buildHarvestAnalyticsBarChartCard(context, weightF, key: const ValueKey('q_mobile'), isMobile: true),
             ],
           );
         }
@@ -3333,7 +3433,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             const SizedBox(width: 16),
             Expanded(
               flex: 4,
-              child: _buildQualityAndIntakeMatrixCard(context, weightF, key: const ValueKey('q_desktop'), isMobile: false),
+              child: _buildHarvestAnalyticsBarChartCard(context, weightF, key: const ValueKey('q_desktop'), isMobile: false),
             ),
           ],
         );
@@ -3341,14 +3441,87 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildQualityAndIntakeMatrixCard(
+  List<WeeklyHarvestData> _getWeeklyHarvestData(int daysInMonth) {
+    final List<WeeklyHarvestData> weeks = [];
+    final weekRanges = [
+      (1, 1, 7),
+      (2, 8, 14),
+      (3, 15, 21),
+      (4, 22, 28),
+      if (daysInMonth >= 29) (5, 29, daysInMonth),
+    ];
+
+    for (var range in weekRanges) {
+      final int wNum = range.$1;
+      final int startD = range.$2;
+      final int endD = range.$3;
+
+      double nw = 0.0;
+      double sw = 0.0;
+      for (int d = startD; d <= endD; d++) {
+        nw += _heatmapNormalData[d] ?? 0.0;
+        sw += _heatmapSuperData[d] ?? 0.0;
+      }
+      double tot = nw + sw;
+      // Fallback if _heatmapNormalData is empty but _heatmapData is populated
+      if (tot == 0.0) {
+        for (int d = startD; d <= endD; d++) {
+          tot += _heatmapData[d] ?? 0.0;
+        }
+        nw = tot;
+      }
+
+      final String label = '${AppStrings.weekPrefix} $wNum';
+      final String rangeStr = '$startD - $endD';
+
+      weeks.add(
+        WeeklyHarvestData(
+          weekNumber: wNum,
+          label: label,
+          dateRange: rangeStr,
+          normalWeight: nw,
+          superWeight: sw,
+          totalWeight: tot,
+        ),
+      );
+    }
+    return weeks;
+  }
+
+  Widget _buildHarvestAnalyticsBarChartCard(
     BuildContext context,
     NumberFormat weightF, {
     Key? key,
     bool isMobile = false,
   }) {
-    final int activeDays = _heatmapData.values.where((w) => w > 0).length;
-    final double dailyAvg = activeDays > 0 ? (_totalWeight / activeDays) : 0.0;
+    final int daysInMonth = DateTime(_heatmapYear, _heatmapMonth + 1, 0).day;
+    final weeklyData = _getWeeklyHarvestData(daysInMonth);
+
+    // Operational Analytics for Weekly Intake
+    double maxWeekVol = 0.0;
+    WeeklyHarvestData? peakWeek;
+    double sumWeekly = 0.0;
+    for (var w in weeklyData) {
+      sumWeekly += w.totalWeight;
+      if (w.totalWeight > maxWeekVol) {
+        maxWeekVol = w.totalWeight;
+        peakWeek = w;
+      }
+    }
+    final double avgWeekly =
+        weeklyData.isNotEmpty ? (sumWeekly / weeklyData.length) : 0.0;
+
+    // Operational Analytics for Top Suppliers
+    final top5Suppliers = _topSuppliers.take(5).toList();
+    double maxSupVol = 0.0;
+    double top5Total = 0.0;
+    for (var s in top5Suppliers) {
+      final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
+      top5Total += sw;
+      if (sw > maxSupVol) maxSupVol = sw;
+    }
+    final double top5Share =
+        _totalWeight > 0 ? (top5Total / _totalWeight * 100.0) : 0.0;
 
     return Container(
       key: key,
@@ -3368,7 +3541,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -3388,7 +3561,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
+                // Top Header Row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -3401,9 +3574,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               color: primaryAppColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Icon(Icons.insights_rounded, color: primaryAppColor, size: 20),
+                            child: Icon(
+                              Icons.leaderboard_rounded,
+                              color: primaryAppColor,
+                              size: 19,
+                            ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3419,7 +3596,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  AppStrings.qualityBreakdown,
+                                  _harvestChartMode == 'weekly'
+                                      ? AppStrings.weeklyIntakeTrend
+                                      : AppStrings.top5Suppliers,
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.blueGrey.shade600,
@@ -3433,7 +3612,43 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
+                    // Mode Toggle: Weekly vs Top Suppliers
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.blueGrey.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.blueGrey.shade200.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildChartModePill(
+                            title: AppStrings.weeklyTrend,
+                            isSelected: _harvestChartMode == 'weekly',
+                            onTap: () {
+                              if (_harvestChartMode != 'weekly') {
+                                setState(() => _harvestChartMode = 'weekly');
+                              }
+                            },
+                          ),
+                          _buildChartModePill(
+                            title: AppStrings.suppliersTrend,
+                            isSelected: _harvestChartMode == 'suppliers',
+                            onTap: () {
+                              if (_harvestChartMode != 'suppliers') {
+                                setState(() => _harvestChartMode = 'suppliers');
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Jump to Customer Analysis Screen
                     InkWell(
                       onTap: () => Navigator.push(
                         context,
@@ -3441,13 +3656,18 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           builder: (context) => const CustomerAnalysisScreen(),
                         ),
                       ),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: primaryAppColor.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: primaryAppColor.withValues(alpha: 0.2)),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: primaryAppColor.withValues(alpha: 0.2),
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -3455,13 +3675,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             Text(
                               AppStrings.customerAnalysis,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.bold,
                                 color: primaryAppColor,
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            Icon(Icons.arrow_forward_ios_rounded, size: 10, color: primaryAppColor),
+                            const SizedBox(width: 3),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 9,
+                              color: primaryAppColor,
+                            ),
                           ],
                         ),
                       ),
@@ -3470,269 +3694,690 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Total Leaf Intake & Super Leaf Quality Breakdown
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                // Main Bar Chart Body
+                SizedBox(
+                  height: 195,
+                  child: _harvestChartMode == 'weekly'
+                      ? _buildWeeklyHarvestBarChart(
+                          weeklyData,
+                          maxWeekVol,
+                          weightF,
+                        )
+                      : _buildSuppliersHarvestBarChart(
+                          top5Suppliers,
+                          maxSupVol,
+                          weightF,
+                        ),
+                ),
+                const SizedBox(height: 10),
+
+                // Operational Summary Strip Below Bar Chart
+                if (_harvestChartMode == 'weekly') ...[
+                  Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      // Peak Week Badge
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.05),
+                            ),
+                          ),
+                          child: Row(
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.eco_rounded, size: 16, color: Color(0xFF059669)),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    AppStrings.leafWeightTotal,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.blueGrey.shade700,
-                                    ),
-                                  ),
-                                ],
+                              const Icon(
+                                Icons.military_tech_rounded,
+                                size: 16,
+                                color: Color(0xFFD97706),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${weightF.format(_totalWeight)} Kg',
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1E293B),
-                                  letterSpacing: -0.5,
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppStrings.peakHarvestWeek,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey.shade700,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      (peakWeek != null && peakWeek.totalWeight > 0)
+                                          ? '${peakWeek.label}: ${weightF.format(peakWeek.totalWeight)} Kg'
+                                          : '-',
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Weekly Average Badge
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.05),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '${_superLeafPercentage.toStringAsFixed(1)}%',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF047857),
-                                  ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.analytics_rounded,
+                                size: 16,
+                                color: Color(0xFF2563EB),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppStrings.weeklyAverageIntake,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey.shade700,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      '${weightF.format(avgWeekly)} Kg / ${AppStrings.isSinhala ? "සතිය" : "week"}',
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  AppStrings.superLeafRatio,
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF047857),
-                                  ),
-                                ),
-                              ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Compact Legend
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF2563EB),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            AppStrings.normalLeaf,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blueGrey.shade700,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          height: 10,
-                          child: LinearProgressIndicator(
-                            value: _totalWeight > 0 ? (_superLeafWeight / _totalWeight).clamp(0.0, 1.0) : 0.0,
-                            backgroundColor: const Color(0xFF93C5FD).withValues(alpha: 0.5),
-                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
+                      const SizedBox(width: 12),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF3B82F6),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${AppStrings.normalLeaf}: ${weightF.format(_normalLeafWeight)} Kg',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blueGrey.shade700,
-                                ),
-                              ),
-                            ],
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF10B981),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${AppStrings.superLeaf}: ${weightF.format(_superLeafWeight)} Kg',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF047857),
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 4),
+                          Text(
+                            AppStrings.superLeaf,
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF047857),
+                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 12),
-
-                // Dual Operational Matrix Blocks (Active Suppliers + Daily Intake)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.people_alt_rounded, size: 16, color: primaryAppColor),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    AppStrings.activeSuppliers,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.blueGrey.shade700,
+                ] else ...[
+                  // Suppliers Mode Operational Badges
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.05),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 16,
+                                color: Color(0xFF16A34A),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppStrings.topSuppliers,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey.shade700,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '$_activeSuppliersCount / $_totalCustomers',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1E293B),
+                                    Text(
+                                      top5Suppliers.isNotEmpty
+                                          ? '${top5Suppliers[0]['name']}: ${weightF.format(top5Suppliers[0]['weight'] ?? 0)} Kg'
+                                          : '-',
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                            Text(
-                              '${_totalCustomers > 0 ? ((_activeSuppliersCount / _totalCustomers) * 100).toStringAsFixed(0) : '0'}% active rate',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.blueGrey.shade500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.speed_rounded, size: 16, color: Color(0xFFD97706)),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    AppStrings.dailyAverageIntake,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.blueGrey.shade700,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.05),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.pie_chart_rounded,
+                                size: 16,
+                                color: Color(0xFF7C3AED),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppStrings.topSuppliersShare,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey.shade700,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '${weightF.format(dailyAvg)} Kg',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1E293B),
+                                    Text(
+                                      '${top5Share.toStringAsFixed(1)}% (${weightF.format(top5Total)} Kg)',
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                            Text(
-                              '$activeDays active days',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.blueGrey.shade500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildWeeklyHarvestBarChart(
+    List<WeeklyHarvestData> weeklyData,
+    double maxWeekVol,
+    NumberFormat weightF,
+  ) {
+    if (weeklyData.isEmpty || maxWeekVol <= 0) {
+      return Center(
+        child: Text(
+          AppStrings.noDataFound,
+          style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12),
+        ),
+      );
+    }
+
+    final double maxY = maxWeekVol > 0 ? (maxWeekVol * 1.25) : 100.0;
+    final double yInterval = maxY > 0 ? (maxY / 4) : 25.0;
+
+    final List<BarChartGroupData> barGroups = [];
+    for (int i = 0; i < weeklyData.length; i++) {
+      final w = weeklyData[i];
+      final bool hasSuper = w.superWeight > 0;
+
+      final List<BarChartRodStackItem> stackItems = hasSuper
+          ? [
+              BarChartRodStackItem(0, w.normalWeight, const Color(0xFF2563EB)),
+              BarChartRodStackItem(
+                w.normalWeight,
+                w.totalWeight,
+                const Color(0xFF10B981),
+              ),
+            ]
+          : [];
+
+      barGroups.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: w.totalWeight,
+              color: hasSuper ? null : const Color(0xFF2563EB),
+              rodStackItems: stackItems,
+              width: 22,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxY,
+                color: Colors.grey.withValues(alpha: 0.08),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return BarChart(
+      BarChartData(
+        maxY: maxY,
+        alignment: BarChartAlignment.spaceAround,
+        barTouchData: BarTouchData(
+          enabled: true,
+          touchTooltipData: BarTouchTooltipData(
+            tooltipRoundedRadius: 8,
+            tooltipPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 6,
+            ),
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              if (groupIndex < 0 || groupIndex >= weeklyData.length) return null;
+              final w = weeklyData[groupIndex];
+              return BarTooltipItem(
+                '${w.label} (${w.dateRange})\n',
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+                children: [
+                  TextSpan(
+                    text: '${weightF.format(w.totalWeight)} Kg\n',
+                    style: const TextStyle(
+                      color: Color(0xFF4ADE80),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                  TextSpan(
+                    text:
+                        '${AppStrings.normalLeaf}: ${weightF.format(w.normalWeight)} Kg',
+                    style: const TextStyle(
+                      color: Color(0xFF93C5FD),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 9.5,
+                    ),
+                  ),
+                  if (w.superWeight > 0)
+                    TextSpan(
+                      text:
+                          '\n${AppStrings.superLeaf}: ${weightF.format(w.superWeight)} Kg',
+                      style: const TextStyle(
+                        color: Color(0xFF34D399),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 9.5,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 42,
+              interval: yInterval,
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox();
+                final text = value >= 1000
+                    ? '${(value / 1000).toStringAsFixed(1)}k'
+                    : '${value.toInt()}';
+                return Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.blueGrey.shade500,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 26,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 || idx >= weeklyData.length) return const SizedBox();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    weeklyData[idx].label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueGrey.shade700,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: yInterval,
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: Colors.black.withValues(alpha: 0.05),
+            strokeWidth: 1,
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        barGroups: barGroups,
+      ),
+    );
+  }
+
+  Widget _buildSuppliersHarvestBarChart(
+    List<Map<String, dynamic>> top5Suppliers,
+    double maxSupVol,
+    NumberFormat weightF,
+  ) {
+    if (top5Suppliers.isEmpty || maxSupVol <= 0) {
+      return Center(
+        child: Text(
+          AppStrings.noDataFound,
+          style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12),
+        ),
+      );
+    }
+
+    final double maxY = maxSupVol > 0 ? (maxSupVol * 1.25) : 100.0;
+    final double yInterval = maxY > 0 ? (maxY / 4) : 25.0;
+
+    final List<BarChartGroupData> barGroups = [];
+    for (int i = 0; i < top5Suppliers.length; i++) {
+      final s = top5Suppliers[i];
+      final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
+
+      barGroups.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: sw,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0D9488), Color(0xFF14B8A6)],
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+              ),
+              width: 22,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxY,
+                color: Colors.grey.withValues(alpha: 0.08),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return BarChart(
+      BarChartData(
+        maxY: maxY,
+        alignment: BarChartAlignment.spaceAround,
+        barTouchData: BarTouchData(
+          enabled: true,
+          touchTooltipData: BarTouchTooltipData(
+            tooltipRoundedRadius: 8,
+            tooltipPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 6,
+            ),
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              if (groupIndex < 0 || groupIndex >= top5Suppliers.length) {
+                return null;
+              }
+              final s = top5Suppliers[groupIndex];
+              final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
+              return BarTooltipItem(
+                '${s['name']}\n',
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+                children: [
+                  TextSpan(
+                    text: '${weightF.format(sw)} Kg',
+                    style: const TextStyle(
+                      color: Color(0xFF2DD4BF),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 42,
+              interval: yInterval,
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox();
+                final text = value >= 1000
+                    ? '${(value / 1000).toStringAsFixed(1)}k'
+                    : '${value.toInt()}';
+                return Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.blueGrey.shade500,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 26,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 || idx >= top5Suppliers.length) {
+                  return const SizedBox();
+                }
+                String name =
+                    top5Suppliers[idx]['name']?.toString() ?? '${idx + 1}';
+                if (name.length > 7) name = '${name.substring(0, 6)}..';
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueGrey.shade700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: yInterval,
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: Colors.black.withValues(alpha: 0.05),
+            strokeWidth: 1,
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        barGroups: barGroups,
+      ),
+    );
+  }
+
+  Widget _buildChartModePill({
+    required String title,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? const Color(0xFF1E293B)
+                : Colors.blueGrey.shade600,
+          ),
+        ),
+      ),
+    );
+  }
   }
 
   Widget _buildDbBusinessSummary(NumberFormat currencyF, NumberFormat weightF) {

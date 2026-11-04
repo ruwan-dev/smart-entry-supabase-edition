@@ -84,4 +84,24 @@ void main() {
     expect(AppStrings.billUpToDate, 'Bill is up to date');
     expect(AppStrings.billChangesDetected, 'Changes Detected');
   });
+
+  test('AppStrings formats weekly harvest analytics strings in both languages', () async {
+    await AppLanguageService.setLanguage(AppLanguage.sinhala);
+    expect(AppStrings.weeklyIntakeTrend, 'සතිපතා ලැබීම් ප්‍රවණතාව');
+    expect(AppStrings.peakHarvestWeek, 'උච්චතම සතිය');
+    expect(AppStrings.weeklyAverageIntake, 'සතිපතා සාමාන්‍යය');
+    expect(AppStrings.weeklyTrend, 'සතිපතා');
+    expect(AppStrings.suppliersTrend, 'සැපයුම්කරුවන්');
+    expect(AppStrings.topSuppliersShare, 'ප්‍රමුඛ 5 දායකත්වය');
+    expect(AppStrings.weekPrefix, 'සතිය');
+
+    await AppLanguageService.setLanguage(AppLanguage.english);
+    expect(AppStrings.weeklyIntakeTrend, 'Weekly Intake Trend');
+    expect(AppStrings.peakHarvestWeek, 'Peak Harvest Week');
+    expect(AppStrings.weeklyAverageIntake, 'Weekly Average');
+    expect(AppStrings.weeklyTrend, 'Weekly');
+    expect(AppStrings.suppliersTrend, 'Suppliers');
+    expect(AppStrings.topSuppliersShare, 'Top 5 Share');
+    expect(AppStrings.weekPrefix, 'Week');
+  });
 }
