@@ -156,7 +156,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     super.initState();
     AppState.refreshTrigger.addListener(_onRefresh);
     AppLanguageService.currentLanguage.addListener(_onLanguageChanged);
-    _fetchDashboardData();
+    _fetchDashboardData(isFullRefresh: true);
     _fetchChartData();
     _fetchHeatmapData();
   }
@@ -166,7 +166,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   void _onRefresh() {
-    _fetchDashboardData();
+    _fetchDashboardData(isFullRefresh: true);
     _fetchChartData();
     _fetchHeatmapData();
   }
@@ -295,8 +295,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   bool _isInitialLoad = true;
+  bool _hasFetchedLiveTodayAndArrears = false;
 
-  Future<void> _fetchDashboardData() async {
+  Future<void> _fetchDashboardData({bool isFullRefresh = false}) async {
     setState(() {
       _isSummaryLoading = true;
       if (_isInitialLoad) _isLoading = true;
@@ -471,33 +472,40 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
       }
 
-      // Fetch today's leaf intake for real-time operational KPI card
-      DateTime now = DateTime.now();
-      DateTime todayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
-      DateTime todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+      // Fetch today's leaf intake for real-time operational KPI card (only on initial load or full refresh)
+      double todayTot = _todayTotalWeight;
+      double todayNorm = _todayNormalWeight;
+      double todaySup = _todaySuperWeight;
+      int todayCustCount = _todaySuppliersCount;
 
-      var todayEntriesSnapshot = await Supabase.instance.client
-          .from('daily_entries')
-          .select('netWeight, netWeight2, customerId')
-          .eq('organization_id', orgId)
-          .gte('timestamp', todayStart.toIso8601String())
-          .lte('timestamp', todayEnd.toIso8601String());
+      if (!_hasFetchedLiveTodayAndArrears || isFullRefresh) {
+        DateTime todayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
+        DateTime todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
 
-      double todayTot = 0.0;
-      double todayNorm = 0.0;
-      double todaySup = 0.0;
-      Set<String> todayCustIds = {};
+        var todayEntriesSnapshot = await Supabase.instance.client
+            .from('daily_entries')
+            .select('netWeight, netWeight2, customerId')
+            .eq('organization_id', orgId)
+            .gte('timestamp', todayStart.toIso8601String())
+            .lte('timestamp', todayEnd.toIso8601String());
 
-      for (var e in todayEntriesSnapshot) {
-        double w1 = _toDouble(e['netWeight']);
-        double w2 = _toDouble(e['netWeight2']);
-        todayNorm += w1;
-        todaySup += w2;
-        todayTot += (w1 + w2);
-        String cId = (e['customerId'] ?? '').toString();
-        if (cId.isNotEmpty && (w1 + w2) > 0) {
-          todayCustIds.add(cId);
+        todayTot = 0.0;
+        todayNorm = 0.0;
+        todaySup = 0.0;
+        Set<String> todayCustIds = {};
+
+        for (var e in todayEntriesSnapshot) {
+          double w1 = _toDouble(e['netWeight']);
+          double w2 = _toDouble(e['netWeight2']);
+          todayNorm += w1;
+          todaySup += w2;
+          todayTot += (w1 + w2);
+          String cId = (e['customerId'] ?? '').toString();
+          if (cId.isNotEmpty && (w1 + w2) > 0) {
+            todayCustIds.add(cId);
+          }
         }
+        todayCustCount = todayCustIds.length;
       }
 
       double tw = 0.0, nw = 0.0, sw = 0.0;
@@ -629,64 +637,70 @@ class _OverviewScreenState extends State<OverviewScreen> {
           .toList();
       _topSuppliers = _allSuppliers.take(5).toList();
 
-      // Read from finalized_bills for true arrears
-      var allFinalizedBills = await Supabase.instance.client
-          .from('finalized_bills')
-          .select('customerId, customerName, refNumber, billData, finalizedAt')
-          .eq('organization_id', orgId)
-          .order('finalizedAt', ascending: false);
+      // Read from finalized_bills for true arrears (only on initial load or full refresh)
+      double totalOverallOutstanding = _overallOutstandingAdvances;
+      List<Map<String, dynamic>> finalArrears = _allArrears;
 
-      Map<String, Map<String, dynamic>> latestBillPerCustomer = {};
-      for (var bill in allFinalizedBills) {
-        String cId = bill['customerId'] ?? '';
-        if (cId.isEmpty) continue;
-        if (!latestBillPerCustomer.containsKey(cId)) {
-          latestBillPerCustomer[cId] = bill;
+      if (!_hasFetchedLiveTodayAndArrears || isFullRefresh) {
+        var allFinalizedBills = await Supabase.instance.client
+            .from('finalized_bills')
+            .select('customerId, customerName, refNumber, billData, finalizedAt')
+            .eq('organization_id', orgId)
+            .order('finalizedAt', ascending: false);
+
+        Map<String, Map<String, dynamic>> latestBillPerCustomer = {};
+        for (var bill in allFinalizedBills) {
+          String cId = bill['customerId'] ?? '';
+          if (cId.isEmpty) continue;
+          if (!latestBillPerCustomer.containsKey(cId)) {
+            latestBillPerCustomer[cId] = bill;
+          }
         }
-      }
 
-      double totalOverallOutstanding = 0.0;
-      Map<String, double> arrearsMap = {};
+        totalOverallOutstanding = 0.0;
+        Map<String, double> arrearsMap = {};
 
-      for (var entry in latestBillPerCustomer.entries) {
-        String cId = entry.key;
-        var bill = entry.value;
-        var billData = bill['billData'];
-        if (billData is! Map) continue;
+        for (var entry in latestBillPerCustomer.entries) {
+          String cId = entry.key;
+          var bill = entry.value;
+          var billData = bill['billData'];
+          if (billData is! Map) continue;
 
-        double netPayable = _toDouble(billData['netPayable']);
+          double netPayable = _toDouble(billData['netPayable']);
 
-        if (netPayable < 0) {
-          double outstanding = netPayable.abs();
-          arrearsMap[cId] = outstanding;
-          totalOverallOutstanding += outstanding;
+          if (netPayable < 0) {
+            double outstanding = netPayable.abs();
+            arrearsMap[cId] = outstanding;
+            totalOverallOutstanding += outstanding;
+          }
         }
-      }
 
-      _allArrears =
-          arrearsMap.entries
-              .toList()
-              .map(
-                (e) => {
-                  'id': e.key,
-                  'name':
-                      customerNames[e.key] ??
-                      latestBillPerCustomer[e.key]?['customerName'] ??
-                      'Unknown',
-                  'customerNumber':
-                      customersSnapshot.firstWhere(
-                        (c) => c['id'] == e.key,
-                        orElse: () => {'refNumber': ''},
-                      )['refNumber'] ??
-                      '',
-                  'amount': e.value,
-                },
-              )
-              .toList()
-            ..sort(
-              (a, b) =>
-                  _toDouble(b['amount']).compareTo(_toDouble(a['amount'])),
-            );
+        finalArrears =
+            arrearsMap.entries
+                .toList()
+                .map(
+                  (e) => {
+                    'id': e.key,
+                    'name':
+                        customerNames[e.key] ??
+                        latestBillPerCustomer[e.key]?['customerName'] ??
+                        'Unknown',
+                    'customerNumber':
+                        customersSnapshot.firstWhere(
+                          (c) => c['id'] == e.key,
+                          orElse: () => {'refNumber': ''},
+                        )['refNumber'] ??
+                        '',
+                    'amount': e.value,
+                  },
+                )
+                .toList()
+              ..sort(
+                (a, b) =>
+                    _toDouble(b['amount']).compareTo(_toDouble(a['amount'])),
+              );
+        _hasFetchedLiveTodayAndArrears = true;
+      }
 
       // --- Factory Revenue Calculations ---
       final String factoryStartStr = DateFormat('yyyy-MM-dd').format(start);
@@ -853,11 +867,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _superLeafPercentage = superRatio;
         _activeSuppliersCount = activeSupplierIds.length;
         _overallOutstandingAdvances = totalOverallOutstanding;
+        _allArrears = finalArrears;
 
         _todayTotalWeight = todayTot;
         _todayNormalWeight = todayNorm;
         _todaySuperWeight = todaySup;
-        _todaySuppliersCount = todayCustIds.length;
+        _todaySuppliersCount = todayCustCount;
 
         _totalFactoryRevenue = totalFactoryIncome;
         _totalSupplierPayout = finalSupplierCost;
@@ -2325,9 +2340,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildTopBannerAndMonthHeader(context, currencyF),
-                    _isSummaryLoading
-                        ? _buildSkeletonExecutiveKpiStrip(context)
-                        : _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
+                    _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
                     const SizedBox(height: 24),
                     (_isHeatmapLoading || _isSummaryLoading)
                         ? _buildSkeletonHarvestAndQualitySection(context)
@@ -2529,7 +2542,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       _heatmapSuperData = {};
       _heatmapMaxWeight = 0;
     });
-    _fetchDashboardData();
+    _fetchDashboardData(isFullRefresh: false);
     _fetchHeatmapData();
   }
 
@@ -2750,9 +2763,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
               key: const ValueKey('op_desktop_row'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(flex: 1, child: buildCard1(const ValueKey('c1_d'))),
-                const SizedBox(width: 14),
                 Expanded(flex: 2, child: buildCard2(const ValueKey('c2_d'), showItemsOnDesktop)),
+                const SizedBox(width: 14),
+                Expanded(flex: 1, child: buildCard1(const ValueKey('c1_d'))),
                 const SizedBox(width: 14),
                 Expanded(flex: 1, child: buildCard4(const ValueKey('c4_d'))),
               ],
@@ -2762,6 +2775,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
           return Column(
             key: const ValueKey('op_tablet_col'),
             children: [
+              buildCard2(const ValueKey('c2_t2'), false),
+              const SizedBox(height: 14),
               IntrinsicHeight(
                 child: Row(
                   key: const ValueKey('op_tablet_r1'),
@@ -2773,17 +2788,15 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-              buildCard2(const ValueKey('c2_t2'), false),
             ],
           );
         } else {
           return Column(
             key: const ValueKey('op_mobile_col'),
             children: [
-              buildCard1(const ValueKey('c1_m')),
-              const SizedBox(height: 12),
               buildCard2(const ValueKey('c2_m'), false),
+              const SizedBox(height: 12),
+              buildCard1(const ValueKey('c1_m')),
               const SizedBox(height: 12),
               buildCard4(const ValueKey('c4_m')),
             ],
