@@ -38,11 +38,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
   bool _isMonthlySummaryExpanded = false;
 
   double _totalWeight = 0.0;
-  double _totalAdvance = 0.0;
-  double _totalFertilizer1 = 0.0;
-  double _totalFertilizer2 = 0.0;
-  double _totalTeaPacket1 = 0.0;
-  double _totalTeaPacket2 = 0.0;
   int _totalCustomers = 0;
 
   double _overallOutstandingAdvances = 0.0;
@@ -66,14 +61,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
   List<Map<String, dynamic>> _topSuppliers = [];
   List<Map<String, dynamic>> _allSuppliers = [];
   List<Map<String, dynamic>> _allArrears = [];
-
-  final List<String> _filterOptions = [
-    'Today',
-    'This Week',
-    'This Month',
-    'Last 6 Months',
-    'Last Year',
-  ];
 
   String _chartFilter = 'Monthly';
   bool _isChartLoading = true;
@@ -299,7 +286,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         offset += limit;
       }
 
-      double tw = 0.0, nw = 0.0, sw = 0.0, ta = 0.0, f1 = 0, f2 = 0, t1 = 0, t2 = 0;
+      double tw = 0.0, nw = 0.0, sw = 0.0;
       double calcSupplierPayout = 0.0;
       Set<String> activeSupplierIds = {};
       Map<String, double> supplierWeightMap = {};
@@ -311,13 +298,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
         nw += w1;
         sw += w2;
         tw += entryWeight;
-        ta += (d['advanceAmount'] ?? 0.0).toDouble();
-
-        final parsed = ItemService.parseDailyEntryItems(d);
-        f1 += parsed.f1Qty;
-        f2 += parsed.f2Qty + parsed.otherDynamicQty;
-        t1 += parsed.t1Qty;
-        t2 += parsed.t2Qty;
 
         String cId = d['customerId'] ?? '';
         if (cId.isNotEmpty) {
@@ -509,11 +489,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _superLeafWeight = sw;
         _superLeafPercentage = superRatio;
         _activeSuppliersCount = activeSupplierIds.length;
-        _totalAdvance = ta;
-        _totalFertilizer1 = f1;
-        _totalFertilizer2 = f2;
-        _totalTeaPacket1 = t1;
-        _totalTeaPacket2 = t2;
         _overallOutstandingAdvances = totalOverallOutstanding;
 
         _totalFactoryRevenue = totalFactoryIncome;
@@ -1810,10 +1785,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
           _buildSkeletonExecutiveKpiStrip(context),
           const SizedBox(height: 24),
           _buildSkeletonHarvestAndQualitySection(context),
-          const SizedBox(height: 28),
-          const SkeletonBox(height: 30, width: 150, borderRadius: 8),
-          const SizedBox(height: 16),
-          _buildSkeletonSummaryGrid(context),
           const SizedBox(height: 32),
           _buildSkeletonDbBusinessSummary(context),
           const SizedBox(height: 32),
@@ -1827,45 +1798,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildSkeletonSummaryGrid(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double w = constraints.maxWidth;
-        bool isMobile = w < 550;
-        bool isTablet = w < 900;
-        double cardW = isMobile ? w : (isTablet ? (w - 16) / 2 : (w - 48) / 4);
-
-        return Wrap(
-          spacing: 16,
-          runSpacing: 16,
-          children: List.generate(
-            4,
-            (index) => SizedBox(
-              width: cardW,
-              child: const SkeletonBox(
-                height: 140,
-                width: double.infinity,
-                borderRadius: 20,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final currencyF = NumberFormat('#,##0.00', 'en_US');
     final weightF = NumberFormat('#,##0.##', 'en_US');
-
-    final Map<String, IconData> summaryIconMap = {
-      'Today': Icons.today_rounded,
-      'This Week': Icons.view_week_rounded,
-      'This Month': Icons.calendar_month_rounded,
-      'Last 6 Months': Icons.date_range_rounded,
-      'Last Year': Icons.event_repeat_rounded,
-    };
 
     final Map<String, IconData> chartIconMap = {
       'Daily': Icons.view_day_rounded,
@@ -1898,26 +1834,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     (_isHeatmapLoading || _isSummaryLoading)
                         ? _buildSkeletonHarvestAndQualitySection(context)
                         : _buildHarvestAndQualitySection(context, weightF),
-                    const SizedBox(height: 24),
-
-                    _buildIconToggleHeader(
-                      AppStrings.summary,
-                      _selectedFilter,
-                      _filterOptions,
-                      summaryIconMap,
-                      (val) {
-                        if (_selectedFilter != val) {
-                          setState(() => _selectedFilter = val);
-                          _fetchDashboardData();
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    _isSummaryLoading
-                        ? _buildSkeletonSummaryGrid(context)
-                        : _buildSummaryGrid(context, weightF, currencyF),
-
                     const SizedBox(height: 32),
 
                     _isSummaryLoading
@@ -3454,298 +3370,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
       ),
     );
   }
-
-  Widget _buildSummaryGrid(
-    BuildContext context,
-    NumberFormat weightF,
-    NumberFormat currencyF,
-  ) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double w = constraints.maxWidth;
-        bool isMobile = w < 550;
-        bool isTablet = w < 900;
-        double cardW = isMobile ? w : (isTablet ? (w - 16) / 2 : (w - 48) / 4);
-
-        return Wrap(
-          spacing: 16,
-          runSpacing: 16,
-          children: [
-            SizedBox(
-              width: cardW,
-              child: _summaryCard(
-                title: AppStrings.leafWeightTotal,
-                value: '${weightF.format(_totalWeight)} Kg',
-                icon: Icons.eco_rounded,
-                color: primaryAppColor,
-                imagePath: 'assets/tealeaves_badge.png',
-              ),
-            ),
-            SizedBox(
-              width: cardW,
-              child: _summaryCard(
-                title: AppStrings.advance,
-                value: 'Rs. ${currencyF.format(_totalAdvance)}',
-                icon: Icons.payments_rounded,
-                color: const Color(0xFF3B82F6),
-                imagePath: 'assets/advance_badge.png',
-              ),
-            ),
-            SizedBox(
-              width: cardW,
-              child: _summaryCard(
-                title: AppStrings.fertilizer,
-                value: weightF.format(_totalFertilizer1 + _totalFertilizer2),
-                icon: Icons.compost_rounded,
-                color: const Color(0xFF047857),
-                imagePath: 'assets/fertilizer_badge.png',
-                subItems: [
-                  _buildSubItemIcon(
-                    Icons.compost_rounded,
-                    weightF.format(_totalFertilizer1),
-                    const Color(0xFFEF4444),
-                  ),
-                  _buildSubItemIcon(
-                    Icons.compost_rounded,
-                    weightF.format(_totalFertilizer2),
-                    const Color(0xFF3B82F6),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(
-              width: cardW,
-              child: _summaryCard(
-                title: AppStrings.teaPackets,
-                value: weightF.format(_totalTeaPacket1 + _totalTeaPacket2),
-                icon: Icons.local_cafe_rounded,
-                color: const Color(0xFF8B5CF6),
-                imagePath: 'assets/teapackets_badge.png',
-                subItems: [
-                  _buildSubItemIcon(
-                    Icons.local_cafe_rounded,
-                    weightF.format(_totalTeaPacket1),
-                    const Color(0xFFEF4444),
-                  ),
-                  _buildSubItemIcon(
-                    Icons.local_cafe_rounded,
-                    weightF.format(_totalTeaPacket2),
-                    const Color(0xFF3B82F6),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _summaryCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    List<Widget>? subItems,
-    String? imagePath,
-  }) {
-    if (imagePath != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          alignment: Alignment.topCenter,
-          children: [
-            // Full image — the entire tile
-            Image.asset(
-              imagePath,
-              width: double.infinity,
-              fit: BoxFit.fitWidth,
-            ),
-            // Text centered in the white space area (top ~40% of image)
-            Positioned.fill(
-              child: Align(
-                alignment: const Alignment(0, -0.85),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            value,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF1F2937),
-                            ),
-                          ),
-                          if (subItems != null) ...[
-                            const SizedBox(width: 6),
-                            const Text(
-                              "(",
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.blueGrey,
-                              ),
-                            ),
-                            ...subItems,
-                            const Text(
-                              ")",
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.blueGrey,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Color(0xFF6B7280),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 15,
-            spreadRadius: 0,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.white.withOpacity(0.4),
-                  Colors.white.withOpacity(0.1),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.4),
-                width: 1.5,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                const SizedBox(height: 8),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        value,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
-                      if (subItems != null) ...[
-                        const SizedBox(width: 4),
-                        const Text(
-                          "(",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.blueGrey,
-                          ),
-                        ),
-                        ...subItems,
-                        const Text(
-                          ")",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.blueGrey,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: Color(0xFF6B7280),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubItemIcon(IconData icon, String val, Color c) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 3),
-    child: Row(
-      children: [
-        Icon(icon, size: 12, color: c),
-        const SizedBox(width: 2),
-        Text(
-          val,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: Colors.blueGrey,
-          ),
-        ),
-      ],
-    ),
-  );
 
   Widget _buildTopSuppliersList(NumberFormat weightF) {
     if (_topSuppliers.isEmpty)
