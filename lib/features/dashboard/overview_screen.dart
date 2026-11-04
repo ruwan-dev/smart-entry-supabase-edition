@@ -178,6 +178,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
     super.dispose();
   }
 
+  /// Safely converts any DB value (num, String, int, double, null) to double.
+  static double _toDouble(dynamic val, [double fallback = 0.0]) {
+    if (val == null) return fallback;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? fallback;
+  }
+
   Future<void> _fetchHeatmapData() async {
     setState(() {
       _isHeatmapLoading = true;
@@ -261,12 +268,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
 
         if (d >= 1 && d <= 31) {
-          double nw = (doc['netWeight'] ?? 0.0) is num
-              ? (doc['netWeight'] as num).toDouble()
-              : (double.tryParse(doc['netWeight'].toString()) ?? 0.0);
-          double sw = (doc['netWeight2'] ?? 0.0) is num
-              ? (doc['netWeight2'] as num).toDouble()
-              : (double.tryParse(doc['netWeight2'].toString()) ?? 0.0);
+          double nw = _toDouble(doc['netWeight']);
+          double sw = _toDouble(doc['netWeight2']);
           double w = nw + sw;
 
           data[d] = (data[d] ?? 0.0) + w;
@@ -486,12 +489,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       Set<String> todayCustIds = {};
 
       for (var e in todayEntriesSnapshot) {
-        double w1 = (e['netWeight'] ?? 0.0) is num
-            ? (e['netWeight'] as num).toDouble()
-            : (double.tryParse(e['netWeight'].toString()) ?? 0.0);
-        double w2 = (e['netWeight2'] ?? 0.0) is num
-            ? (e['netWeight2'] as num).toDouble()
-            : (double.tryParse(e['netWeight2'].toString()) ?? 0.0);
+        double w1 = _toDouble(e['netWeight']);
+        double w2 = _toDouble(e['netWeight2']);
         todayNorm += w1;
         todaySup += w2;
         todayTot += (w1 + w2);
@@ -538,12 +537,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       Map<String, double> itemBreakdownA = {};
 
       for (var d in filteredEntries) {
-        double w1 = (d['netWeight'] ?? 0.0) is num
-            ? (d['netWeight'] as num).toDouble()
-            : (double.tryParse(d['netWeight'].toString()) ?? 0.0);
-        double w2 = (d['netWeight2'] ?? 0.0) is num
-            ? (d['netWeight2'] as num).toDouble()
-            : (double.tryParse(d['netWeight2'].toString()) ?? 0.0);
+        double w1 = _toDouble(d['netWeight']);
+        double w2 = _toDouble(d['netWeight2']);
         double entryWeight = w1 + w2;
         nw += w1;
         sw += w2;
@@ -565,11 +560,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
         totItemsCost += (parsed.f1Amt + parsed.f2Amt + parsed.t1Amt + parsed.t2Amt + parsed.otherDynamicAmt);
 
         for (var item in parsed.itemsList) {
-          int slot = (item['slot'] as num?)?.toInt() ?? 0;
+          int slot = int.tryParse(item['slot']?.toString() ?? '0') ?? 0;
           String code = (item['code'] ?? '').toString();
           String name = (item['desc'] ?? item['name'] ?? '').toString();
-          double q = (item['qty'] as num?)?.toDouble() ?? 0.0;
-          double a = (item['amt'] as num?)?.toDouble() ?? 0.0;
+          double q = _toDouble(item['qty']);
+          double a = _toDouble(item['amt']);
 
           if (slot < 1 || slot > 8) {
             final matchedItem = orgItems.where((it) => (it.code.isNotEmpty && it.code == code) || (name.isNotEmpty && it.name == name)).firstOrNull;
@@ -659,9 +654,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         var billData = bill['billData'];
         if (billData is! Map) continue;
 
-        double netPayable = (billData['netPayable'] ?? 0.0) is num
-            ? (billData['netPayable'] ?? 0.0).toDouble()
-            : double.tryParse(billData['netPayable'].toString()) ?? 0.0;
+        double netPayable = _toDouble(billData['netPayable']);
 
         if (netPayable < 0) {
           double outstanding = netPayable.abs();
@@ -692,7 +685,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               .toList()
             ..sort(
               (a, b) =>
-                  (b['amount'] as double).compareTo(a['amount'] as double),
+                  _toDouble(b['amount']).compareTo(_toDouble(a['amount'])),
             );
 
       // --- Factory Revenue Calculations ---
@@ -737,14 +730,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
       for (var fb in factoryFinalizedBills) {
         String fId = fb['factoryId'].toString();
         String m = fb['month'].toString();
-        factoryBillsGrossMap["${fId}_$m"] = ((fb['grossIncome'] ?? 0) as num).toDouble();
+        factoryBillsGrossMap["${fId}_$m"] = _toDouble(fb['grossIncome']);
       }
 
       double totalFactoryIncome = 0.0;
       double factoryDeliveredWeight = 0.0;
       for (var fe in factoryEntries) {
-        double fnw = ((fe['netWeight'] ?? 0) as num).toDouble();
-        double fsw = ((fe['netWeight2'] ?? 0) as num).toDouble();
+        double fnw = _toDouble(fe['netWeight']);
+        double fsw = _toDouble(fe['netWeight2']);
         factoryDeliveredWeight += (fnw + fsw);
       }
       Map<String, List<dynamic>> entriesByFactoryMonth = {};
@@ -769,8 +762,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
           double sRate = rates?['super'] ?? 0.0;
           double fGross = 0.0;
           for (var fe in entry.value) {
-            double fnw = ((fe['netWeight'] ?? 0) as num).toDouble();
-            double fsw = ((fe['netWeight2'] ?? 0) as num).toDouble();
+            double fnw = _toDouble(fe['netWeight']);
+            double fsw = _toDouble(fe['netWeight2']);
             fGross += (fnw * nRate) + (fsw * sRate);
           }
           totalFactoryIncome += fGross;
@@ -932,14 +925,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
           // Supplier leaf cost from monthly_summaries
           var matchSummary = summarySnapshot.where((s) => s['id'] == expectedId).firstOrNull;
           double supplierCost = matchSummary != null
-              ? ((matchSummary['totalGross'] ?? 0) as num).toDouble()
+              ? _toDouble(matchSummary['totalGross'])
               : 0.0;
 
           // Factory revenue from factory_finalized_bills
           double factoryRev = 0.0;
           for (var fb in factoryBillsSnapshot) {
             if (fb['month'] == monthKey) {
-              factoryRev += ((fb['grossIncome'] ?? 0) as num).toDouble();
+              factoryRev += _toDouble(fb['grossIncome']);
             }
           }
 
@@ -957,12 +950,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
           double yExp = 0;
           for (var doc in summarySnapshot) {
             if (doc['id'].toString().startsWith("$yearStr-")) {
-              yExp += ((doc['totalGross'] ?? 0) as num).toDouble();
+              yExp += _toDouble(doc['totalGross']);
             }
           }
           for (var fb in factoryBillsSnapshot) {
             if (fb['month'].toString().startsWith(yearStr)) {
-              yInc += ((fb['grossIncome'] ?? 0) as num).toDouble();
+              yInc += _toDouble(fb['grossIncome']);
             }
           }
           incVals[4 - i] = yInc;
@@ -1626,8 +1619,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 4,
                 children: [
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -3548,7 +3544,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                 ? Colors.blueGrey.shade600
                                 : Colors.transparent,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -3674,7 +3670,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     double maxSupVol = 0.0;
     double top5Total = 0.0;
     for (var s in top5Suppliers) {
-      final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
+      final double sw = _toDouble(s['weight']);
       top5Total += sw;
       if (sw > maxSupVol) maxSupVol = sw;
     }
@@ -4377,7 +4373,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     final List<BarChartGroupData> barGroups = [];
     for (int i = 0; i < top5Suppliers.length; i++) {
       final s = top5Suppliers[i];
-      final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
+      final double sw = _toDouble(s['weight']);
 
       barGroups.add(
         BarChartGroupData(
@@ -4420,7 +4416,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 return null;
               }
               final s = top5Suppliers[groupIndex];
-              final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
+              final double sw = _toDouble(s['weight']);
               return BarTooltipItem(
                 '${s['name']}\n',
                 const TextStyle(
