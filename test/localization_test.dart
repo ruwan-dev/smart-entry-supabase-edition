@@ -94,11 +94,6 @@ void main() {
     expect(AppStrings.suppliersTrend, 'සැපයුම්කරුවන්');
     expect(AppStrings.topSuppliersShare, 'ප්‍රමුඛ 5 දායකත්වය');
     expect(AppStrings.weekPrefix, 'සතිය');
-    expect(AppStrings.annualIncomeOutcomeTrend, 'වාර්ෂික ආදායම් හා වියදම් ප්‍රවණතාව');
-    expect(AppStrings.totalIncome, 'මුළු ආදායම');
-    expect(AppStrings.totalOutcome, 'මුළු වියදම');
-    expect(AppStrings.netProfitOrMargin, 'ශුද්ධ ලාභය');
-    expect(AppStrings.lastAvailableData, 'නවතම දත්ත');
 
     await AppLanguageService.setLanguage(AppLanguage.english);
     expect(AppStrings.weeklyIntakeTrend, 'Weekly Intake Trend');
@@ -108,10 +103,5 @@ void main() {
     expect(AppStrings.suppliersTrend, 'Suppliers');
     expect(AppStrings.topSuppliersShare, 'Top 5 Share');
     expect(AppStrings.weekPrefix, 'Week');
-    expect(AppStrings.annualIncomeOutcomeTrend, 'Annual Income & Outcome Trend');
-    expect(AppStrings.totalIncome, 'Total Income');
-    expect(AppStrings.totalOutcome, 'Total Outcome');
-    expect(AppStrings.netProfitOrMargin, 'Net Margin');
-    expect(AppStrings.lastAvailableData, 'Latest Data');
   });
 }
