@@ -627,7 +627,7 @@ class AppStrings {
   // ---------------------------------------------------------------------------
   // Executive Dashboard & Income Analytics
   // ---------------------------------------------------------------------------
-  static String get netDealerIncome => isSinhala ? 'නෙට් ආයතනික ආදායම' : 'Net Dealer Income';
+  static String get netDealerIncome => isSinhala ? 'ආයතනික ආදායම' : 'Dealer Income';
   static String get dealerGrossMargin => isSinhala ? 'දළ ලාභය' : 'Gross Margin';
   static String get factoryRevenue => isSinhala ? 'කර්මාන්තශාලා ආදායම' : 'Factory Revenue';
   static String get supplierPayout => isSinhala ? 'සැපයුම්කරුවන්ගේ දළු වියදම' : 'Supplier Leaf Cost';

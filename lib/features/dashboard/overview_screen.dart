@@ -2103,9 +2103,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ? AppStrings.pendingFactoryEntry
               : (_totalWeight > 0 ? 'Rs. ${_dealerMarginPerKg.toStringAsFixed(2)} / Kg' : null),
           badgeColor: hasNoFactoryData ? const Color(0xFFD97706) : const Color(0xFF059669),
-          subtitle: hasNoFactoryData
-              ? '${AppStrings.supplierPayout}: Rs. ${currencyF.format(_totalSupplierPayout)}'
-              : AppStrings.dealerGrossMargin,
+          subtitle: null,
           icon: Icons.payments_rounded,
           gradientColors: hasNoFactoryData
               ? [
@@ -2226,7 +2224,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required String value,
     String? badgeText,
     Color? badgeColor,
-    required String subtitle,
+    String? subtitle,
     required IconData icon,
     required List<Color> gradientColors,
     required Color accentColor,
@@ -2334,10 +2332,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      subtitle,
+                      subtitle ?? '',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.blueGrey.shade600,
+                        color: (subtitle != null && subtitle.isNotEmpty)
+                            ? Colors.blueGrey.shade600
+                            : Colors.transparent,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
