@@ -83,8 +83,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
   List<Map<String, dynamic>> _allMonthlySummaries = [];
 
   Map<int, double> _heatmapData = {}; // day -> weight
-  int _heatmapMonth = DateTime.now().month;
-  int _heatmapYear = DateTime.now().year;
+  int _selectedYear = DateTime.now().year;
+  int _selectedMonth = DateTime.now().month;
+  int get _heatmapMonth => _selectedMonth;
+  int get _heatmapYear => _selectedYear;
   bool _isHeatmapLoading = true;
   double _heatmapMaxWeight = 0;
 
@@ -121,8 +123,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   Future<void> _fetchHeatmapData() async {
     setState(() => _isHeatmapLoading = true);
-    DateTime start = DateTime(_heatmapYear, _heatmapMonth, 1);
-    DateTime end = DateTime(_heatmapYear, _heatmapMonth + 1, 0, 23, 59, 59);
+    DateTime start = DateTime(_selectedYear, _selectedMonth, 1);
+    DateTime end = DateTime(_selectedYear, _selectedMonth + 1, 0, 23, 59, 59);
 
     try {
       List<dynamic> snapshot = [];
@@ -181,38 +183,49 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     if (_selectedFilter == 'Today') {
       start = DateTime(now.year, now.month, now.day);
+      end = DateTime(now.year, now.month, now.day, 23, 59, 59);
     } else if (_selectedFilter == 'This Week') {
       start = now.subtract(Duration(days: now.weekday - 1));
       start = DateTime(start.year, start.month, start.day);
+      end = DateTime(now.year, now.month, now.day, 23, 59, 59);
     } else if (_selectedFilter == 'This Month') {
-      start = DateTime(now.year, now.month, 1);
+      int lastDay = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
+      start = DateTime(_selectedYear, _selectedMonth, 1);
+      end = DateTime(_selectedYear, _selectedMonth, lastDay, 23, 59, 59);
     } else if (_selectedFilter == 'Last 6 Months') {
-      start = DateTime(now.year, now.month - 5, 1);
+      int lastDay = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
+      start = DateTime(_selectedYear, _selectedMonth - 5, 1);
+      end = DateTime(_selectedYear, _selectedMonth, lastDay, 23, 59, 59);
     } else {
-      start = DateTime(now.year - 1, now.month, now.day);
+      int lastDay = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
+      start = DateTime(_selectedYear - 1, _selectedMonth, 1);
+      end = DateTime(_selectedYear, _selectedMonth, lastDay, 23, 59, 59);
     }
 
     try {
-      var latestSummaries = await Supabase.instance.client
+      String selMonthName = DateFormat('MMMM').format(DateTime(_selectedYear, _selectedMonth, 1));
+      String expectedSummaryId = "$_selectedYear-$selMonthName";
+
+      var allSummaries = await Supabase.instance.client
           .from('monthly_summaries')
           .select()
-          .eq('organization_id', orgId)
-          .order('finalizedAt', ascending: false)
-          .limit(2);
+          .eq('organization_id', orgId);
 
-      if (latestSummaries.isNotEmpty) {
-        _latestSummaryData = latestSummaries.first;
-        _latestSummaryId = latestSummaries.first['id'];
+      var currentMonthSummary = allSummaries.where((s) => s['id'] == expectedSummaryId).firstOrNull;
 
-        if (latestSummaries.length > 1) {
-          _previousSummaryData = latestSummaries[1];
-        } else {
-          _previousSummaryData = null;
-        }
+      if (currentMonthSummary != null) {
+        _latestSummaryData = currentMonthSummary;
+        _latestSummaryId = currentMonthSummary['id'];
+        DateTime prevMonthDate = DateTime(_selectedYear, _selectedMonth - 1, 1);
+        String prevMonthName = DateFormat('MMMM').format(prevMonthDate);
+        String prevExpectedId = "${prevMonthDate.year}-$prevMonthName";
+        _previousSummaryData = allSummaries.where((s) => s['id'] == prevExpectedId).firstOrNull;
       } else {
-        _latestSummaryData = null;
-        _latestSummaryId = null;
-        _previousSummaryData = null;
+        var sortedSummaries = List<Map<String, dynamic>>.from(allSummaries)
+          ..sort((a, b) => (b['finalizedAt'] ?? '').toString().compareTo((a['finalizedAt'] ?? '').toString()));
+        _latestSummaryData = sortedSummaries.isNotEmpty ? sortedSummaries.first : null;
+        _latestSummaryId = _latestSummaryData?['id'];
+        _previousSummaryData = sortedSummaries.length > 1 ? sortedSummaries[1] : null;
       }
 
       final orgItems = await ItemService.getItems(
@@ -465,8 +478,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
       // Check if current month summary provides supplier leaf gross
       double finalSupplierCost = calcSupplierPayout;
       if (_selectedFilter == 'This Month' && _latestSummaryData != null) {
-        String curMonthName = DateFormat('MMMM').format(now);
-        String expectedSummaryId = "${now.year}-$curMonthName";
+        DateTime selDate = DateTime(_selectedYear, _selectedMonth, 1);
+        String curMonthName = DateFormat('MMMM').format(selDate);
+        String expectedSummaryId = "$_selectedYear-$curMonthName";
         if (_latestSummaryId == expectedSummaryId) {
           double sGross = (_latestSummaryData!['totalGross'] ?? 0).toDouble();
           if (sGross > 0) finalSupplierCost = sGross;
@@ -1058,54 +1072,21 @@ class _OverviewScreenState extends State<OverviewScreen> {
       ],
     );
 
-    // Month navigator controls
-    Widget monthNavigator = Container(
+    // Month badge
+    Widget monthBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+        color: const Color(0xFF16A34A).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.2)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left_rounded, size: 20),
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
-            onPressed: () {
-              setState(() {
-                _heatmapMonth--;
-                if (_heatmapMonth < 1) {
-                  _heatmapMonth = 12;
-                  _heatmapYear--;
-                }
-              });
-              _fetchHeatmapData();
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Text(
-              monthName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right_rounded, size: 20),
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
-            onPressed: () {
-              setState(() {
-                _heatmapMonth++;
-                if (_heatmapMonth > 12) {
-                  _heatmapMonth = 1;
-                  _heatmapYear++;
-                }
-              });
-              _fetchHeatmapData();
-            },
-          ),
-        ],
+      child: Text(
+        '$_selectedYear ${AppStrings.getMonthName(_selectedMonth)}',
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF15803D),
+        ),
       ),
     );
 
@@ -1441,7 +1422,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             ),
                           ],
                         ),
-                        monthNavigator,
+                        monthBadge,
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -1780,6 +1761,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildCriticalAlertBanner(context, currencyF),
+                    _buildTopMonthNavigatorHeader(context),
                     _buildExecutiveKpiStrip(context, currencyF, weightF),
                     const SizedBox(height: 24),
                     _buildHarvestAndQualitySection(context, weightF),
@@ -1910,6 +1892,296 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
+  Widget _buildTopMonthNavigatorHeader(BuildContext context) {
+    final String currentMonthName = AppStrings.getMonthName(_selectedMonth);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 600;
+
+          final monthNavigator = Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left_rounded, size: 22),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 18,
+                  onPressed: () {
+                    setState(() {
+                      _selectedFilter = 'This Month';
+                      _selectedMonth--;
+                      if (_selectedMonth < 1) {
+                        _selectedMonth = 12;
+                        _selectedYear--;
+                      }
+                    });
+                    _fetchDashboardData();
+                    _fetchHeatmapData();
+                  },
+                ),
+                InkWell(
+                  onTap: () => _showMonthPickerMenu(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.calendar_month_rounded,
+                          size: 16,
+                          color: primaryAppColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$_selectedYear $currentMonthName',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueGrey.shade900,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_drop_down_rounded,
+                          size: 18,
+                          color: Colors.blueGrey.shade600,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded, size: 22),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 18,
+                  onPressed: () {
+                    setState(() {
+                      _selectedFilter = 'This Month';
+                      _selectedMonth++;
+                      if (_selectedMonth > 12) {
+                        _selectedMonth = 1;
+                        _selectedYear++;
+                      }
+                    });
+                    _fetchDashboardData();
+                    _fetchHeatmapData();
+                  },
+                ),
+              ],
+            ),
+          );
+
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: primaryAppColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.dashboard_rounded,
+                        color: primaryAppColor,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            AppStrings.monthlyOverview,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          Text(
+                            '$_selectedYear $currentMonthName ${AppStrings.summary}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.blueGrey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Center(child: monthNavigator),
+              ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryAppColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.dashboard_rounded,
+                      color: primaryAppColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppStrings.monthlyOverview,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      Text(
+                        '$_selectedYear $currentMonthName ${AppStrings.summary}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blueGrey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              monthNavigator,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showMonthPickerMenu(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$_selectedYear',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left_rounded),
+                        onPressed: () {
+                          setState(() => _selectedYear--);
+                          setDialogState(() {});
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right_rounded),
+                        onPressed: () {
+                          setState(() => _selectedYear++);
+                          setDialogState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 320,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: List.generate(12, (index) {
+                    final int m = index + 1;
+                    final bool isSel = m == _selectedMonth;
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedFilter = 'This Month';
+                          _selectedMonth = m;
+                        });
+                        Navigator.pop(ctx);
+                        _fetchDashboardData();
+                        _fetchHeatmapData();
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        width: 70,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSel ? primaryAppColor : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          AppStrings.getMonthName(m),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color:
+                                isSel ? Colors.white : Colors.blueGrey.shade800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildExecutiveKpiStrip(
     BuildContext context,
     NumberFormat currencyF,
@@ -1921,19 +2193,33 @@ class _OverviewScreenState extends State<OverviewScreen> {
         final bool isDesktop = w >= 960;
         final bool isTablet = w >= 600 && w < 960;
 
+        final bool hasNoFactoryData = _totalFactoryRevenue == 0 && _totalSupplierPayout > 0;
         final card1 = _buildKpiCard(
           title: AppStrings.netDealerIncome,
-          value: 'Rs. ${currencyF.format(_netDealerIncome)}',
-          badgeText: _totalWeight > 0 ? 'Rs. ${_dealerMarginPerKg.toStringAsFixed(2)} / Kg' : null,
-          badgeColor: const Color(0xFF059669),
-          subtitle: AppStrings.dealerGrossMargin,
+          value: hasNoFactoryData
+              ? 'Rs. 0.00'
+              : 'Rs. ${currencyF.format(_netDealerIncome)}',
+          badgeText: hasNoFactoryData
+              ? AppStrings.pendingFactoryEntry
+              : (_totalWeight > 0 ? 'Rs. ${_dealerMarginPerKg.toStringAsFixed(2)} / Kg' : null),
+          badgeColor: hasNoFactoryData ? const Color(0xFFD97706) : const Color(0xFF059669),
+          subtitle: hasNoFactoryData
+              ? '${AppStrings.supplierPayout}: Rs. ${currencyF.format(_totalSupplierPayout)}'
+              : AppStrings.dealerGrossMargin,
           icon: Icons.payments_rounded,
-          gradientColors: [
-            const Color(0xFFECFDF5),
-            const Color(0xFFD1FAE5).withValues(alpha: 0.6),
-          ],
-          accentColor: const Color(0xFF059669),
-          borderColor: const Color(0xFF10B981).withValues(alpha: 0.25),
+          gradientColors: hasNoFactoryData
+              ? [
+                  const Color(0xFFFFFBEB),
+                  const Color(0xFFFEF3C7).withValues(alpha: 0.6),
+                ]
+              : [
+                  const Color(0xFFECFDF5),
+                  const Color(0xFFD1FAE5).withValues(alpha: 0.6),
+                ],
+          accentColor: hasNoFactoryData ? const Color(0xFFD97706) : const Color(0xFF059669),
+          borderColor: hasNoFactoryData
+              ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+              : const Color(0xFF10B981).withValues(alpha: 0.25),
         );
 
         final card2 = _buildKpiCard(

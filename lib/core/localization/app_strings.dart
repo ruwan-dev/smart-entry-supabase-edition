@@ -651,6 +651,8 @@ class AppStrings {
   static String get peakHarvestDay => isSinhala ? 'වැඩිම අස්වනු දිනය' : 'Peak Harvest Day';
   static String get harvestDays => isSinhala ? 'අස්වනු ලැබූ දින' : 'Harvest Days';
   static String get harvestConsistency => isSinhala ? 'අස්වනු අනුපාතය' : 'Consistency';
+  static String get pendingFactoryEntry => isSinhala ? 'කර්මාන්තශාලා සටහන් පොරොත්තුවෙන්' : 'Pending Factory Entry';
+  static String get monthlyOverview => isSinhala ? 'මාසික දළ විශ්ලේෂණය' : 'Monthly Overview';
 
 
 
