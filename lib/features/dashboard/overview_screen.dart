@@ -122,7 +122,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
   int _lastAvailableDataMonth = 0;
-  bool _hasUserManuallySelectedMonth = false;
+  int _graphFocusedMonth = 0;
   int get _heatmapMonth => _selectedMonth;
   int get _heatmapYear => _selectedYear;
   bool _isHeatmapLoading = true;
@@ -130,9 +130,15 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   final Color primaryAppColor = const Color(0xFF1976D2);
 
+  void _selectGraphMonth(int month) {
+    if (month == _graphFocusedMonth) return;
+    setState(() {
+      _graphFocusedMonth = month;
+    });
+  }
+
   void _selectMonth(int month) {
     if (month == _selectedMonth && _selectedFilter == 'This Month') return;
-    _hasUserManuallySelectedMonth = true;
     setState(() {
       _selectedFilter = 'This Month';
       _selectedMonth = month;
@@ -294,48 +300,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _previousSummaryData = allSummaries.where((s) => s['id'] == prevExpectedId).firstOrNull;
       } else {
         if (_selectedFilter == 'This Month') {
-          // If the selected month has no summary and the user has not manually locked a month,
-          // find the last available month in this year that has finalized data!
-          int bestMonth = 0;
-          Map<String, dynamic>? bestSummary;
-          if (!_hasUserManuallySelectedMonth) {
-            const engMonths = [
-              'January', 'February', 'March', 'April', 'May', 'June',
-              'July', 'August', 'September', 'October', 'November', 'December'
-            ];
-            for (var s in allSummaries) {
-              final sid = (s['id'] ?? '').toString();
-              if (sid.startsWith('$_selectedYear-')) {
-                final parts = sid.split('-');
-                if (parts.length >= 2) {
-                  final mIdx = engMonths.indexWhere(
-                    (em) => em.toLowerCase() == parts[1].toLowerCase(),
-                  );
-                  if (mIdx != -1 && (mIdx + 1) > bestMonth) {
-                    bestMonth = mIdx + 1;
-                    bestSummary = s;
-                  }
-                }
-              }
-            }
-          }
-
-          if (bestMonth > 0 && bestSummary != null) {
-            _selectedMonth = bestMonth;
-            _lastAvailableDataMonth = bestMonth;
-            _latestSummaryData = bestSummary;
-            _latestSummaryId = bestSummary['id'];
-            DateTime prevMonthDate = DateTime(_selectedYear, bestMonth - 1, 1);
-            String prevMonthName = DateFormat('MMMM').format(prevMonthDate);
-            String prevExpectedId = "${prevMonthDate.year}-$prevMonthName";
-            _previousSummaryData = allSummaries.where((s) => s['id'] == prevExpectedId).firstOrNull;
-            // Also refresh heatmap for this discovered latest month
-            _fetchHeatmapData();
-          } else {
-            _latestSummaryData = null;
-            _latestSummaryId = null;
-            _previousSummaryData = null;
-          }
+          _latestSummaryData = null;
+          _latestSummaryId = null;
+          _previousSummaryData = null;
         } else {
           var sortedSummaries = List<Map<String, dynamic>>.from(allSummaries)
             ..sort((a, b) => (b['finalizedAt'] ?? '').toString().compareTo((a['finalizedAt'] ?? '').toString()));
@@ -890,32 +857,19 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
       }
 
-      int newSelectedMonth = _selectedMonth;
-      if (!_hasUserManuallySelectedMonth && lastDataMonth > 0) {
-        if (incVals[_selectedMonth - 1] == 0 && expVals[_selectedMonth - 1] == 0) {
-          newSelectedMonth = lastDataMonth;
-        }
-      }
-
-      final bool monthSwitched = newSelectedMonth != _selectedMonth;
-
       if (mounted) {
         setState(() {
           _chartIncomeValues = incVals;
           _chartExpenseValues = expVals;
           _chartLabels = tl;
           _lastAvailableDataMonth = lastDataMonth;
-          if (monthSwitched) {
-            _selectedMonth = newSelectedMonth;
+          // Graph focuses by default on the last month that has data (without touching dashboard month)
+          if (_graphFocusedMonth == 0 || _graphFocusedMonth > 12) {
+            _graphFocusedMonth = lastDataMonth > 0 ? lastDataMonth : _selectedMonth;
           }
           _isChartLoading = false;
           _isInitialChartLoad = false;
         });
-
-        if (monthSwitched) {
-          _fetchDashboardData();
-          _fetchHeatmapData();
-        }
       }
     } catch (e) {
       if (mounted) setState(() => _isChartLoading = false);
@@ -2130,7 +2084,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         onPressed: () {
                           setState(() {
                             _selectedYear--;
-                            _hasUserManuallySelectedMonth = false;
+                            _graphFocusedMonth = 0;
                             _isSummaryLoading = true;
                             _isHeatmapLoading = true;
                             _heatmapData = {};
@@ -2146,7 +2100,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         onPressed: () {
                           setState(() {
                             _selectedYear++;
-                            _hasUserManuallySelectedMonth = false;
+                            _graphFocusedMonth = 0;
                             _isSummaryLoading = true;
                             _isHeatmapLoading = true;
                             _heatmapData = {};
@@ -3173,6 +3127,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
     final double maxY = maxVal * 1.38;
     final double yInterval = (maxY / 4) > 0 ? (maxY / 4) : 25000.0;
 
+    final int activeGraphMonth = _graphFocusedMonth > 0
+        ? _graphFocusedMonth
+        : (_lastAvailableDataMonth > 0 ? _lastAvailableDataMonth : _selectedMonth);
+
     // Build 12 month grouped bar data
     final List<BarChartGroupData> barGroups = [];
     for (int i = 0; i < 12; i++) {
@@ -3181,10 +3139,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
       final double exp =
           i < _chartExpenseValues.length ? _chartExpenseValues[i] : 0.0;
 
+      final int m = i + 1;
+      final bool isFocused = m == activeGraphMonth;
+      final bool hasData = inc > 0 || exp > 0;
+      final int rodIndexWithMaxHeight = exp >= inc ? 1 : 0;
+
       barGroups.add(
         BarChartGroupData(
           x: i,
           barsSpace: 2,
+          showingTooltipIndicators:
+              (isFocused && hasData) ? [rodIndexWithMaxHeight] : [],
           barRods: [
             // Income Rod (Green)
             BarChartRodData(
@@ -3375,7 +3340,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                 touchResponse.spot!.touchedBarGroupIndex;
                             if (tappedIndex >= 0 && tappedIndex < 12) {
                               final int tappedMonth = tappedIndex + 1;
-                              _selectMonth(tappedMonth);
+                              _selectGraphMonth(tappedMonth);
                             }
                           }
                         },
@@ -3499,12 +3464,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               if (idx < 0 || idx >= 12) return const SizedBox();
                               final int m = idx + 1;
                               final bool isCurrentSel =
-                                  m == _selectedMonth;
+                                  m == activeGraphMonth;
                               final bool isLastDataMonth =
                                   m == _lastAvailableDataMonth;
 
                               return GestureDetector(
-                                onTap: () => _selectMonth(m),
+                                onTap: () => _selectGraphMonth(m),
                                 child: Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Column(
