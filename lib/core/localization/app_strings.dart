@@ -656,6 +656,7 @@ class AppStrings {
   static String get transitLossOrGain => isSinhala ? 'ප්‍රවාහන බර වෙනස' : 'Transit Weight Variance';
   static String get factoryDeliveredWeight => isSinhala ? 'කර්මාන්තශාලාවට යැවූ බර' : 'Factory Delivered Weight';
   static String get pendingMonthlyRates => isSinhala ? 'මාසික මිල බලාපොරොත්තුවෙන්' : 'Rates Pending';
+  static String get itemsIssued => isSinhala ? 'නිකුත් කළ ද්‍රව්‍ය' : 'Items Issued';
 
 
 

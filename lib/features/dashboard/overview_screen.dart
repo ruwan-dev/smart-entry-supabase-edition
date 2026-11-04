@@ -53,6 +53,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
   double _superLeafPercentage = 0.0;
   int _activeSuppliersCount = 0;
 
+  double _totalFertilizerQty = 0.0;
+  double _totalTeaPacketQty = 0.0;
+  double _totalOtherItemsQty = 0.0;
+  double _totalItemsCost = 0.0;
+  Map<String, double> _itemBreakdownQuantities = {};
+  Map<String, double> _itemBreakdownAmounts = {};
+
   Map<String, dynamic>? _latestSummaryData;
   String? _latestSummaryId;
   Map<String, dynamic>? _previousSummaryData;
@@ -292,6 +299,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
       Set<String> activeSupplierIds = {};
       Map<String, double> supplierWeightMap = {};
 
+      double totFertQty = 0.0;
+      double totTeaQty = 0.0;
+      double totOtherQty = 0.0;
+      double totItemsCost = 0.0;
+      Map<String, double> itemBreakdownQ = {};
+      Map<String, double> itemBreakdownA = {};
+
       for (var d in filteredEntries) {
         double w1 = (d['netWeight'] ?? 0.0).toDouble();
         double w2 = (d['netWeight2'] ?? 0.0).toDouble();
@@ -299,6 +313,31 @@ class _OverviewScreenState extends State<OverviewScreen> {
         nw += w1;
         sw += w2;
         tw += entryWeight;
+
+        final parsed = ItemService.parseDailyEntryItems(
+          d,
+          f1Price: fert1Price,
+          f2Price: fert2Price,
+          t1Price: teaPkt1Price,
+          t2Price: teaPkt2Price,
+        );
+        double fQ = parsed.f1Qty + parsed.f2Qty;
+        double tQ = parsed.t1Qty + parsed.t2Qty;
+        double oQ = parsed.otherDynamicQty;
+        totFertQty += fQ;
+        totTeaQty += tQ;
+        totOtherQty += oQ;
+        totItemsCost += (parsed.f1Amt + parsed.f2Amt + parsed.t1Amt + parsed.t2Amt + parsed.otherDynamicAmt);
+
+        for (var item in parsed.itemsList) {
+          String name = (item['name'] ?? '').toString();
+          double q = (item['qty'] as num?)?.toDouble() ?? 0.0;
+          double a = (item['amt'] as num?)?.toDouble() ?? 0.0;
+          if (name.isNotEmpty && (q > 0 || a > 0)) {
+            itemBreakdownQ[name] = (itemBreakdownQ[name] ?? 0.0) + q;
+            itemBreakdownA[name] = (itemBreakdownA[name] ?? 0.0) + a;
+          }
+        }
 
         String cId = d['customerId'] ?? '';
         if (cId.isNotEmpty) {
@@ -472,7 +511,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
       }
 
-      // Check if current month summary provides supplier leaf gross
+      // Check if current month summary provides supplier leaf gross or items
       double finalSupplierCost = calcSupplierPayout;
       if (_selectedFilter == 'This Month' && _latestSummaryData != null) {
         DateTime selDate = DateTime(_selectedYear, _selectedMonth, 1);
@@ -481,6 +520,24 @@ class _OverviewScreenState extends State<OverviewScreen> {
         if (_latestSummaryId == expectedSummaryId) {
           double sGross = (_latestSummaryData!['totalGross'] ?? 0).toDouble();
           if (sGross > 0) finalSupplierCost = sGross;
+
+          double sF1Q = (_latestSummaryData!['totalF1Qty'] ?? 0).toDouble();
+          double sF2Q = (_latestSummaryData!['totalF2Qty'] ?? 0).toDouble();
+          double sT1Q = (_latestSummaryData!['totalT1Qty'] ?? 0).toDouble();
+          double sT2Q = (_latestSummaryData!['totalT2Qty'] ?? 0).toDouble();
+          double sF1A = (_latestSummaryData!['totalF1Amt'] ?? 0).toDouble();
+          double sF2A = (_latestSummaryData!['totalF2Amt'] ?? 0).toDouble();
+          double sT1A = (_latestSummaryData!['totalT1Amt'] ?? 0).toDouble();
+          double sT2A = (_latestSummaryData!['totalT2Amt'] ?? 0).toDouble();
+          if (totFertQty + totTeaQty == 0 && (sF1Q + sF2Q + sT1Q + sT2Q > 0)) {
+            totFertQty = sF1Q + sF2Q;
+            totTeaQty = sT1Q + sT2Q;
+            totItemsCost = sF1A + sF2A + sT1A + sT2A;
+            if (sF1Q > 0) itemBreakdownQ[AppStrings.fertilizer1] = sF1Q;
+            if (sF2Q > 0) itemBreakdownQ[AppStrings.fertilizer2] = sF2Q;
+            if (sT1Q > 0) itemBreakdownQ[AppStrings.teaPacket1] = sT1Q;
+            if (sT2Q > 0) itemBreakdownQ[AppStrings.teaPacket2] = sT2Q;
+          }
         }
       }
 
@@ -503,6 +560,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _netDealerIncome = netIncome;
         _dealerMarginPerKg = marginPerKg;
         _totalFactoryDeliveredWeight = factoryDeliveredWeight;
+
+        _totalFertilizerQty = totFertQty;
+        _totalTeaPacketQty = totTeaQty;
+        _totalOtherItemsQty = totOtherQty;
+        _totalItemsCost = totItemsCost;
+        _itemBreakdownQuantities = itemBreakdownQ;
+        _itemBreakdownAmounts = itemBreakdownA;
 
         _isLoading = false;
         _isInitialLoad = false;
@@ -2222,24 +2286,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
           borderColor: const Color(0xFF10B981).withValues(alpha: 0.25),
         );
 
-        Widget buildCard2([Key? k]) => _buildKpiCard(
+        Widget buildCard2([Key? k]) => _buildItemsKpiCard(
           key: k,
-          title: AppStrings.superLeafRatio,
-          value: '${_superLeafPercentage.toStringAsFixed(1)}%',
-          badgeText: _totalWeight > 0
-              ? (_superLeafPercentage >= 60 ? 'උසස් තත්ත්වය' : 'සාමාන්‍ය තත්ත්වය')
-              : null,
-          badgeColor: _superLeafPercentage >= 60
-              ? const Color(0xFF0284C7)
-              : const Color(0xFFD97706),
-          subtitle: '${weightF.format(_superLeafWeight)} Kg ${AppStrings.superLeaf}',
-          icon: Icons.verified_rounded,
-          gradientColors: [
-            const Color(0xFFF0F9FF),
-            const Color(0xFFE0F2FE).withValues(alpha: 0.6),
-          ],
-          accentColor: const Color(0xFF0284C7),
-          borderColor: const Color(0xFF38BDF8).withValues(alpha: 0.25),
+          context: context,
+          currencyF: currencyF,
+          weightF: weightF,
+          onTap: () => _showItemsBreakdownDialog(context, currencyF, weightF),
         );
 
         Widget buildCard3([Key? k]) => _buildKpiCard(
@@ -2688,6 +2740,357 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemsKpiCard({
+    Key? key,
+    required BuildContext context,
+    required NumberFormat currencyF,
+    required NumberFormat weightF,
+    VoidCallback? onTap,
+  }) {
+    final double totalQty = _totalFertilizerQty + _totalTeaPacketQty + _totalOtherItemsQty;
+    final String valueText = _totalItemsCost > 0
+        ? 'Rs. ${currencyF.format(_totalItemsCost)}'
+        : (totalQty > 0 ? '${weightF.format(totalQty)} ඒකක' : 'Rs. 0.00');
+
+    final String subtitleText = totalQty > 0
+        ? '${AppStrings.fertilizer}: ${weightF.format(_totalFertilizerQty)} | ${AppStrings.teaPackets}: ${weightF.format(_totalTeaPacketQty)}'
+        : 'ද්‍රව්‍ය නිකුත් කර නැත';
+
+    final Color accentColor = const Color(0xFF0284C7);
+    final Color borderColor = const Color(0xFF38BDF8).withValues(alpha: 0.25);
+    final List<Color> gradientColors = [
+      const Color(0xFFF0F9FF),
+      const Color(0xFFE0F2FE).withValues(alpha: 0.6),
+    ];
+
+    return Container(
+      key: key,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.06),
+            blurRadius: 16,
+            spreadRadius: 0,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: gradientColors,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor, width: 1.5),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.category_rounded, color: accentColor, size: 20),
+                        ),
+                        const SizedBox(width: 8),
+                        if (totalQty > 0)
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: accentColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${weightF.format(totalQty)} ඒකක',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: accentColor,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: accentColor.withValues(alpha: 0.6),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                AppStrings.itemsIssued,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blueGrey.shade800,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  valueText,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF111827),
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitleText,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.blueGrey.shade600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: totalQty > 0
+                              ? PieChart(
+                                  PieChartData(
+                                    sectionsSpace: 2,
+                                    centerSpaceRadius: 12,
+                                    startDegreeOffset: -90,
+                                    sections: [
+                                      if (_totalFertilizerQty > 0)
+                                        PieChartSectionData(
+                                          color: const Color(0xFF059669),
+                                          value: _totalFertilizerQty,
+                                          radius: 9,
+                                          showTitle: false,
+                                        ),
+                                      if (_totalTeaPacketQty > 0)
+                                        PieChartSectionData(
+                                          color: const Color(0xFF0284C7),
+                                          value: _totalTeaPacketQty,
+                                          radius: 9,
+                                          showTitle: false,
+                                        ),
+                                      if (_totalOtherItemsQty > 0)
+                                        PieChartSectionData(
+                                          color: const Color(0xFFF59E0B),
+                                          value: _totalOtherItemsQty,
+                                          radius: 9,
+                                          showTitle: false,
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              : Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    PieChart(
+                                      PieChartData(
+                                        sectionsSpace: 0,
+                                        centerSpaceRadius: 14,
+                                        sections: [
+                                          PieChartSectionData(
+                                            color: Colors.blueGrey.shade100,
+                                            value: 1,
+                                            radius: 5,
+                                            showTitle: false,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.pie_chart_outline_rounded,
+                                      size: 16,
+                                      color: Colors.blueGrey.shade300,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showItemsBreakdownDialog(
+    BuildContext context,
+    NumberFormat currencyF,
+    NumberFormat weightF,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.category_rounded, color: Color(0xFF0284C7), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                AppStrings.itemsIssued,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildBreakdownDialogRow(
+                  title: AppStrings.fertilizer,
+                  qty: '${weightF.format(_totalFertilizerQty)} මිටි / ඒකක',
+                  icon: Icons.compost_rounded,
+                  color: const Color(0xFF059669),
+                ),
+                const SizedBox(height: 10),
+                _buildBreakdownDialogRow(
+                  title: AppStrings.teaPackets,
+                  qty: '${weightF.format(_totalTeaPacketQty)} පැකට්',
+                  icon: Icons.local_cafe_rounded,
+                  color: const Color(0xFF0284C7),
+                ),
+                if (_totalOtherItemsQty > 0) ...[
+                  const SizedBox(height: 10),
+                  _buildBreakdownDialogRow(
+                    title: AppStrings.extraItems,
+                    qty: '${weightF.format(_totalOtherItemsQty)} ඒකක',
+                    icon: Icons.inventory_2_rounded,
+                    color: const Color(0xFFF59E0B),
+                  ),
+                ],
+                if (_itemBreakdownQuantities.isNotEmpty) ...[
+                  const Divider(height: 24),
+                  ..._itemBreakdownQuantities.entries.map((e) {
+                    final double amt = _itemBreakdownAmounts[e.key] ?? 0.0;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(e.key, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                            amt > 0
+                                ? '${weightF.format(e.value)} (Rs. ${currencyF.format(amt)})'
+                                : '${weightF.format(e.value)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1F2937),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('මුළු වටිනාකම', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                    Text(
+                      'Rs. ${currencyF.format(_totalItemsCost)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                        color: Color(0xFF0284C7),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(AppStrings.close, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildBreakdownDialogRow({
+    required String title,
+    required String qty,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700))),
+          Text(qty, style: TextStyle(fontWeight: FontWeight.w800, color: color)),
         ],
       ),
     );
