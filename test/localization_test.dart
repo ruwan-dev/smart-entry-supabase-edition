@@ -39,10 +39,14 @@ void main() {
     await AppLanguageService.setLanguage(AppLanguage.sinhala);
     expect(AppStrings.getMonthName(1), 'ජනවාරි');
     expect(AppStrings.getMonthName(12), 'දෙසැම්බර්');
+    expect(AppStrings.getMonthShortName(1), 'ජන');
+    expect(AppStrings.getMonthShortName(11), 'නොවැ');
 
     await AppLanguageService.setLanguage(AppLanguage.english);
     expect(AppStrings.getMonthName(1), 'January');
     expect(AppStrings.getMonthName(12), 'December');
+    expect(AppStrings.getMonthShortName(1), 'Jan');
+    expect(AppStrings.getMonthShortName(11), 'Nov');
   });
 
   test('AppStrings formats display month and recalculation dialog strings in both languages', () async {

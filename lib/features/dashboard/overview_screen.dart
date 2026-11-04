@@ -2033,100 +2033,51 @@ class _OverviewScreenState extends State<OverviewScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Container(
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.white,
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showMonthPickerMenu(context),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade300),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left_rounded, size: 20),
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  constraints: const BoxConstraints(),
-                  splashRadius: 16,
-                  onPressed: () {
-                    setState(() {
-                      _selectedFilter = 'This Month';
-                      _selectedMonth--;
-                      if (_selectedMonth < 1) {
-                        _selectedMonth = 12;
-                        _selectedYear--;
-                      }
-                      _isSummaryLoading = true;
-                      _isHeatmapLoading = true;
-                      _heatmapData = {};
-                      _heatmapMaxWeight = 0;
-                    });
-                    _fetchDashboardData();
-                    _fetchHeatmapData();
-                  },
-                ),
-                InkWell(
-                  onTap: () => _showMonthPickerMenu(context),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.calendar_month_rounded,
-                          size: 14,
-                          color: primaryAppColor,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '$_selectedYear $currentMonthName',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blueGrey.shade900,
-                          ),
-                        ),
-                        const SizedBox(width: 3),
-                        Icon(
-                          Icons.arrow_drop_down_rounded,
-                          size: 18,
-                          color: Colors.blueGrey.shade600,
-                        ),
-                      ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade300),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
                     ),
-                  ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right_rounded, size: 20),
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  constraints: const BoxConstraints(),
-                  splashRadius: 16,
-                  onPressed: () {
-                    setState(() {
-                      _selectedFilter = 'This Month';
-                      _selectedMonth++;
-                      if (_selectedMonth > 12) {
-                        _selectedMonth = 1;
-                        _selectedYear++;
-                      }
-                      _isSummaryLoading = true;
-                      _isHeatmapLoading = true;
-                      _heatmapData = {};
-                      _heatmapMaxWeight = 0;
-                    });
-                    _fetchDashboardData();
-                    _fetchHeatmapData();
-                  },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.calendar_month_rounded,
+                      size: 15,
+                      color: primaryAppColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$_selectedYear $currentMonthName',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey.shade900,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_drop_down_rounded,
+                      size: 18,
+                      color: Colors.blueGrey.shade600,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ],
@@ -2187,10 +2138,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ],
               ),
               content: SizedBox(
-                width: 320,
+                width: 340,
                 child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: 10,
+                  runSpacing: 10,
                   children: List.generate(12, (index) {
                     final int m = index + 1;
                     final bool isSel = m == _selectedMonth;
@@ -2210,17 +2161,20 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        width: 70,
+                        width: 76,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: isSel ? primaryAppColor : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(12),
+                          border: isSel
+                              ? null
+                              : Border.all(color: Colors.grey.shade300, width: 0.8),
                         ),
                         alignment: Alignment.center,
                         child: Text(
-                          AppStrings.getMonthName(m),
+                          AppStrings.getMonthShortName(m),
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: FontWeight.bold,
                             color:
                                 isSel ? Colors.white : Colors.blueGrey.shade800,

@@ -667,6 +667,12 @@ class AppStrings {
 
   static String getMonthName(int month) => monthNames[(month - 1).clamp(0, 11)];
 
+  static List<String> get monthShortNames => isSinhala
+      ? ['ජන', 'පෙබ', 'මාර්', 'අප්‍රේ', 'මැයි', 'ජූනි', 'ජූලි', 'අගෝ', 'සැප්', 'ඔක්', 'නොවැ', 'දෙසැ']
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  static String getMonthShortName(int month) => monthShortNames[(month - 1).clamp(0, 11)];
+
   /// Formats a month string like '2026 September' into the active language (e.g. '2026 සැප්තැම්බර්').
   static String formatDisplayMonth(String? displayMonth) {
     if (displayMonth == null || displayMonth.trim().isEmpty) return '';
