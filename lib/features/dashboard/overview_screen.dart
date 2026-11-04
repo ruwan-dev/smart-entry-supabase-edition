@@ -1525,11 +1525,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     Widget _buildCriticalAlertBanner(
     BuildContext context,
-    NumberFormat currencyF,
-  ) {
+    NumberFormat currencyF, {
+    bool removeBottomMargin = false,
+  }) {
     if (_overallOutstandingAdvances <= 0) return const SizedBox();
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: EdgeInsets.only(bottom: removeBottomMargin ? 0 : 20),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -1795,7 +1796,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildFullSkeletonDashboard() {
+  Widget _buildFullSkeletonDashboard([NumberFormat? currencyF]) {
+    final curF = currencyF ?? NumberFormat('#,##0.00', 'en_US');
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(
         horizontal: 16.0,
@@ -1804,7 +1806,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTopMonthNavigatorHeader(context),
+          _buildTopBannerAndMonthHeader(context, curF),
           _buildSkeletonExecutiveKpiStrip(context),
           const SizedBox(height: 24),
           _buildSkeletonHarvestAndQualitySection(context),
@@ -1879,7 +1881,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           await _fetchChartData();
         },
         child: _isLoading
-            ? _buildFullSkeletonDashboard()
+            ? _buildFullSkeletonDashboard(currencyF)
             : SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16.0,
@@ -1888,8 +1890,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildCriticalAlertBanner(context, currencyF),
-                    _buildTopMonthNavigatorHeader(context),
+                    _buildTopBannerAndMonthHeader(context, currencyF),
                     _isSummaryLoading
                         ? _buildSkeletonExecutiveKpiStrip(context)
                         : _buildExecutiveKpiStrip(context, currencyF, weightF),
@@ -2026,61 +2027,119 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildTopMonthNavigatorHeader(BuildContext context) {
-    final String currentMonthName = AppStrings.getMonthName(_selectedMonth);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showMonthPickerMenu(context),
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey.shade300),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
+  Widget _buildTopBannerAndMonthHeader(
+    BuildContext context,
+    NumberFormat currencyF,
+  ) {
+    final bool hasAlert = _overallOutstandingAdvances > 0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isMobile = constraints.maxWidth < 650;
+
+        if (!hasAlert) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _buildTopMonthNavigatorHeader(context),
+              ],
+            ),
+          );
+        }
+
+        if (isMobile) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildCriticalAlertBanner(
+                  context,
+                  currencyF,
+                  removeBottomMargin: true,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _buildTopMonthNavigatorHeader(context),
                   ],
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.calendar_month_rounded,
-                      size: 15,
-                      color: primaryAppColor,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$_selectedYear $currentMonthName',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey.shade900,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.arrow_drop_down_rounded,
-                      size: 18,
-                      color: Colors.blueGrey.shade600,
-                    ),
-                  ],
+              ],
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: _buildCriticalAlertBanner(
+                  context,
+                  currencyF,
+                  removeBottomMargin: true,
                 ),
               ),
-            ),
+              const SizedBox(width: 14),
+              _buildTopMonthNavigatorHeader(context),
+            ],
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTopMonthNavigatorHeader(BuildContext context) {
+    final String currentMonthName = AppStrings.getMonthName(_selectedMonth);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showMonthPickerMenu(context),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade300),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.calendar_month_rounded,
+                size: 15,
+                color: primaryAppColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$_selectedYear $currentMonthName',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueGrey.shade900,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 18,
+                color: Colors.blueGrey.shade600,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
