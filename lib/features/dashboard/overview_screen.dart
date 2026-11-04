@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -21,6 +22,24 @@ class MyCustomScrollBehavior extends MaterialScrollBehavior {
     PointerDeviceKind.touch,
     PointerDeviceKind.mouse,
   };
+}
+
+class DashboardItemSummary {
+  final int slotIndex;
+  final String name;
+  final String code;
+  final double qty;
+  final double amount;
+  final Color color;
+
+  DashboardItemSummary({
+    required this.slotIndex,
+    required this.name,
+    required this.code,
+    required this.qty,
+    required this.amount,
+    required this.color,
+  });
 }
 
 class OverviewScreen extends StatefulWidget {
@@ -57,8 +76,21 @@ class _OverviewScreenState extends State<OverviewScreen> {
   double _totalTeaPacketQty = 0.0;
   double _totalOtherItemsQty = 0.0;
   double _totalItemsCost = 0.0;
+  double _totalItemsQty = 0.0;
+  List<DashboardItemSummary> _activeItemsSummary = [];
   Map<String, double> _itemBreakdownQuantities = {};
   Map<String, double> _itemBreakdownAmounts = {};
+
+  static const List<Color> _itemSlotColors = [
+    Color(0xFF059669), // Slot 1: Emerald Green (e.g. Fertilizer 1)
+    Color(0xFF0D9488), // Slot 2: Teal (e.g. Fertilizer 2)
+    Color(0xFF0284C7), // Slot 3: Sky Blue (e.g. Tea Packet 1)
+    Color(0xFF6366F1), // Slot 4: Indigo (e.g. Tea Packet 2)
+    Color(0xFF8B5CF6), // Slot 5: Purple
+    Color(0xFFD946EF), // Slot 6: Fuchsia
+    Color(0xFFF59E0B), // Slot 7: Amber
+    Color(0xFFEF4444), // Slot 8: Rose Red
+  ];
 
   Map<String, dynamic>? _latestSummaryData;
   String? _latestSummaryId;
@@ -299,6 +331,30 @@ class _OverviewScreenState extends State<OverviewScreen> {
       Set<String> activeSupplierIds = {};
       Map<String, double> supplierWeightMap = {};
 
+      Map<int, double> slotQuantities = {for (int i = 1; i <= 8; i++) i: 0.0};
+      Map<int, double> slotAmounts = {for (int i = 1; i <= 8; i++) i: 0.0};
+      Map<int, String> slotNames = {};
+      Map<int, String> slotCodes = {};
+
+      for (var orgItem in orgItems) {
+        if (orgItem.slotIndex >= 1 && orgItem.slotIndex <= 8) {
+          slotNames[orgItem.slotIndex] = orgItem.name;
+          slotCodes[orgItem.slotIndex] = orgItem.code;
+        }
+      }
+      slotNames.putIfAbsent(1, () => AppStrings.fertilizer1);
+      slotCodes.putIfAbsent(1, () => 'F1');
+      slotNames.putIfAbsent(2, () => AppStrings.fertilizer2);
+      slotCodes.putIfAbsent(2, () => 'F2');
+      slotNames.putIfAbsent(3, () => AppStrings.teaPacket1);
+      slotCodes.putIfAbsent(3, () => 'T1');
+      slotNames.putIfAbsent(4, () => AppStrings.teaPacket2);
+      slotCodes.putIfAbsent(4, () => 'T2');
+      for (int i = 5; i <= 8; i++) {
+        slotNames.putIfAbsent(i, () => 'ද්‍රව්‍ය 0$i');
+        slotCodes.putIfAbsent(i, () => 'I$i');
+      }
+
       double totFertQty = 0.0;
       double totTeaQty = 0.0;
       double totOtherQty = 0.0;
@@ -330,9 +386,34 @@ class _OverviewScreenState extends State<OverviewScreen> {
         totItemsCost += (parsed.f1Amt + parsed.f2Amt + parsed.t1Amt + parsed.t2Amt + parsed.otherDynamicAmt);
 
         for (var item in parsed.itemsList) {
-          String name = (item['name'] ?? '').toString();
+          int slot = (item['slot'] as num?)?.toInt() ?? 0;
+          String code = (item['code'] ?? '').toString();
+          String name = (item['desc'] ?? item['name'] ?? '').toString();
           double q = (item['qty'] as num?)?.toDouble() ?? 0.0;
           double a = (item['amt'] as num?)?.toDouble() ?? 0.0;
+
+          if (slot < 1 || slot > 8) {
+            final matchedItem = orgItems.where((it) => (it.code.isNotEmpty && it.code == code) || (name.isNotEmpty && it.name == name)).firstOrNull;
+            if (matchedItem != null && matchedItem.slotIndex >= 1 && matchedItem.slotIndex <= 8) {
+              slot = matchedItem.slotIndex;
+            } else if (code == 'F1') {
+              slot = 1;
+            } else if (code == 'F2') {
+              slot = 2;
+            } else if (code == 'T1') {
+              slot = 3;
+            } else if (code == 'T2') {
+              slot = 4;
+            } else {
+              slot = 1;
+            }
+          }
+
+          if (name.isNotEmpty) slotNames[slot] = name;
+          if (code.isNotEmpty) slotCodes[slot] = code;
+          slotQuantities[slot] = (slotQuantities[slot] ?? 0.0) + q;
+          slotAmounts[slot] = (slotAmounts[slot] ?? 0.0) + a;
+
           if (name.isNotEmpty && (q > 0 || a > 0)) {
             itemBreakdownQ[name] = (itemBreakdownQ[name] ?? 0.0) + q;
             itemBreakdownA[name] = (itemBreakdownA[name] ?? 0.0) + a;
@@ -529,16 +610,56 @@ class _OverviewScreenState extends State<OverviewScreen> {
           double sF2A = (_latestSummaryData!['totalF2Amt'] ?? 0).toDouble();
           double sT1A = (_latestSummaryData!['totalT1Amt'] ?? 0).toDouble();
           double sT2A = (_latestSummaryData!['totalT2Amt'] ?? 0).toDouble();
-          if (totFertQty + totTeaQty == 0 && (sF1Q + sF2Q + sT1Q + sT2Q > 0)) {
+
+          double curSlotTotalQ = slotQuantities.values.fold(0.0, (sum, val) => sum + val);
+          if (curSlotTotalQ == 0 && (sF1Q + sF2Q + sT1Q + sT2Q > 0)) {
             totFertQty = sF1Q + sF2Q;
             totTeaQty = sT1Q + sT2Q;
             totItemsCost = sF1A + sF2A + sT1A + sT2A;
-            if (sF1Q > 0) itemBreakdownQ[AppStrings.fertilizer1] = sF1Q;
-            if (sF2Q > 0) itemBreakdownQ[AppStrings.fertilizer2] = sF2Q;
-            if (sT1Q > 0) itemBreakdownQ[AppStrings.teaPacket1] = sT1Q;
-            if (sT2Q > 0) itemBreakdownQ[AppStrings.teaPacket2] = sT2Q;
+            slotQuantities[1] = sF1Q;
+            slotQuantities[2] = sF2Q;
+            slotQuantities[3] = sT1Q;
+            slotQuantities[4] = sT2Q;
+            slotAmounts[1] = sF1A;
+            slotAmounts[2] = sF2A;
+            slotAmounts[3] = sT1A;
+            slotAmounts[4] = sT2A;
+            if (sF1Q > 0) itemBreakdownQ[slotNames[1] ?? AppStrings.fertilizer1] = sF1Q;
+            if (sF2Q > 0) itemBreakdownQ[slotNames[2] ?? AppStrings.fertilizer2] = sF2Q;
+            if (sT1Q > 0) itemBreakdownQ[slotNames[3] ?? AppStrings.teaPacket1] = sT1Q;
+            if (sT2Q > 0) itemBreakdownQ[slotNames[4] ?? AppStrings.teaPacket2] = sT2Q;
           }
         }
+      }
+
+      List<DashboardItemSummary> activeItems = [];
+      double aggregatedTotalQ = 0.0;
+      double aggregatedTotalAmt = 0.0;
+      for (int s = 1; s <= 8; s++) {
+        double q = slotQuantities[s] ?? 0.0;
+        double a = slotAmounts[s] ?? 0.0;
+        aggregatedTotalQ += q;
+        aggregatedTotalAmt += a;
+        if (q > 0 || a > 0) {
+          activeItems.add(
+            DashboardItemSummary(
+              slotIndex: s,
+              name: slotNames[s] ?? 'ද්‍රව්‍ය $s',
+              code: slotCodes[s] ?? 'I$s',
+              qty: q,
+              amount: a,
+              color: _itemSlotColors[s - 1],
+            ),
+          );
+        }
+      }
+      if (totItemsCost == 0 && aggregatedTotalAmt > 0) {
+        totItemsCost = aggregatedTotalAmt;
+      }
+      if (totFertQty + totTeaQty + totOtherQty == 0 && aggregatedTotalQ > 0) {
+        totFertQty = (slotQuantities[1] ?? 0) + (slotQuantities[2] ?? 0);
+        totTeaQty = (slotQuantities[3] ?? 0) + (slotQuantities[4] ?? 0);
+        totOtherQty = aggregatedTotalQ - (totFertQty + totTeaQty);
       }
 
       // Net dealer income & margin per Kg
@@ -565,6 +686,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _totalTeaPacketQty = totTeaQty;
         _totalOtherItemsQty = totOtherQty;
         _totalItemsCost = totItemsCost;
+        _totalItemsQty = aggregatedTotalQ;
+        _activeItemsSummary = activeItems;
         _itemBreakdownQuantities = itemBreakdownQ;
         _itemBreakdownAmounts = itemBreakdownA;
 
@@ -2272,7 +2395,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
           key: k,
           title: AppStrings.leafWeightTotal,
           value: '${weightF.format(_totalWeight)} Kg',
-          badgeText: _totalWeight > 0 ? '$_activeSuppliersCount ${AppStrings.customers}' : null,
+          badgeText: _totalWeight > 0
+              ? '$_activeSuppliersCount${_totalCustomers > 0 ? "/$_totalCustomers" : ""} ${AppStrings.customers}'
+              : null,
           badgeColor: const Color(0xFF059669),
           subtitle: _normalLeafWeight > 0 || _superLeafWeight > 0
               ? '${AppStrings.normalLeaf}: ${weightF.format(_normalLeafWeight)} Kg | ${AppStrings.superLeaf}: ${weightF.format(_superLeafWeight)} Kg'
@@ -2292,24 +2417,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
           currencyF: currencyF,
           weightF: weightF,
           onTap: () => _showItemsBreakdownDialog(context, currencyF, weightF),
-        );
-
-        Widget buildCard3([Key? k]) => _buildKpiCard(
-          key: k,
-          title: AppStrings.activeSuppliers,
-          value: '$_activeSuppliersCount',
-          badgeText: _totalCustomers > 0
-              ? '${(_activeSuppliersCount / _totalCustomers * 100).toStringAsFixed(0)}% ආවරණය'
-              : null,
-          badgeColor: const Color(0xFF7C3AED),
-          subtitle: 'සම්පූර්ණ පාරිභෝගිකයින් $_totalCustomers න්',
-          icon: Icons.people_alt_rounded,
-          gradientColors: [
-            const Color(0xFFF5F3FF),
-            const Color(0xFFEDE9FE).withValues(alpha: 0.6),
-          ],
-          accentColor: const Color(0xFF7C3AED),
-          borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
         );
 
         Widget buildCard4([Key? k]) => _buildKpiCard(
@@ -2336,39 +2443,36 @@ class _OverviewScreenState extends State<OverviewScreen> {
         );
 
         if (isDesktop) {
-          return Row(
-            key: const ValueKey('op_desktop_row'),
-            children: [
-              Expanded(child: buildCard1(const ValueKey('c1_d'))),
-              const SizedBox(width: 14),
-              Expanded(child: buildCard2(const ValueKey('c2_d'))),
-              const SizedBox(width: 14),
-              Expanded(child: buildCard3(const ValueKey('c3_d'))),
-              const SizedBox(width: 14),
-              Expanded(child: buildCard4(const ValueKey('c4_d'))),
-            ],
+          return IntrinsicHeight(
+            child: Row(
+              key: const ValueKey('op_desktop_row'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 1, child: buildCard1(const ValueKey('c1_d'))),
+                const SizedBox(width: 14),
+                Expanded(flex: 2, child: buildCard2(const ValueKey('c2_d'))),
+                const SizedBox(width: 14),
+                Expanded(flex: 1, child: buildCard4(const ValueKey('c4_d'))),
+              ],
+            ),
           );
         } else if (isTablet) {
           return Column(
             key: const ValueKey('op_tablet_col'),
             children: [
-              Row(
-                key: const ValueKey('op_tablet_r1'),
-                children: [
-                  Expanded(child: buildCard1(const ValueKey('c1_t1'))),
-                  const SizedBox(width: 14),
-                  Expanded(child: buildCard2(const ValueKey('c2_t1'))),
-                ],
+              IntrinsicHeight(
+                child: Row(
+                  key: const ValueKey('op_tablet_r1'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: buildCard1(const ValueKey('c1_t1'))),
+                    const SizedBox(width: 14),
+                    Expanded(child: buildCard4(const ValueKey('c4_t1'))),
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
-              Row(
-                key: const ValueKey('op_tablet_r2'),
-                children: [
-                  Expanded(child: buildCard3(const ValueKey('c3_t2'))),
-                  const SizedBox(width: 14),
-                  Expanded(child: buildCard4(const ValueKey('c4_t2'))),
-                ],
-              ),
+              buildCard2(const ValueKey('c2_t2')),
             ],
           );
         } else {
@@ -2378,8 +2482,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
               buildCard1(const ValueKey('c1_m')),
               const SizedBox(height: 12),
               buildCard2(const ValueKey('c2_m')),
-              const SizedBox(height: 12),
-              buildCard3(const ValueKey('c3_m')),
               const SizedBox(height: 12),
               buildCard4(const ValueKey('c4_m')),
             ],
@@ -2752,14 +2854,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required NumberFormat weightF,
     VoidCallback? onTap,
   }) {
-    final double totalQty = _totalFertilizerQty + _totalTeaPacketQty + _totalOtherItemsQty;
+    final double totalQty = _totalItemsQty > 0
+        ? _totalItemsQty
+        : (_totalFertilizerQty + _totalTeaPacketQty + _totalOtherItemsQty);
     final String valueText = _totalItemsCost > 0
         ? 'Rs. ${currencyF.format(_totalItemsCost)}'
         : (totalQty > 0 ? '${weightF.format(totalQty)} ඒකක' : 'Rs. 0.00');
-
-    final String subtitleText = totalQty > 0
-        ? '${AppStrings.fertilizer}: ${weightF.format(_totalFertilizerQty)} | ${AppStrings.teaPackets}: ${weightF.format(_totalTeaPacketQty)}'
-        : 'ද්‍රව්‍ය නිකුත් කර නැත';
 
     final Color accentColor = const Color(0xFF0284C7);
     final Color borderColor = const Color(0xFF38BDF8).withValues(alpha: 0.25);
@@ -2803,7 +2903,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 borderRadius: BorderRadius.circular(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2848,112 +2948,39 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                    const SizedBox(height: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                AppStrings.itemsIssued,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blueGrey.shade800,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  valueText,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w900,
-                                    color: Color(0xFF111827),
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                subtitleText,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.blueGrey.shade600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                        Text(
+                          AppStrings.itemsIssued,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey.shade800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            valueText,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF111827),
+                              letterSpacing: -0.5,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: totalQty > 0
-                              ? PieChart(
-                                  PieChartData(
-                                    sectionsSpace: 2,
-                                    centerSpaceRadius: 12,
-                                    startDegreeOffset: -90,
-                                    sections: [
-                                      if (_totalFertilizerQty > 0)
-                                        PieChartSectionData(
-                                          color: const Color(0xFF059669),
-                                          value: _totalFertilizerQty,
-                                          radius: 9,
-                                          showTitle: false,
-                                        ),
-                                      if (_totalTeaPacketQty > 0)
-                                        PieChartSectionData(
-                                          color: const Color(0xFF0284C7),
-                                          value: _totalTeaPacketQty,
-                                          radius: 9,
-                                          showTitle: false,
-                                        ),
-                                      if (_totalOtherItemsQty > 0)
-                                        PieChartSectionData(
-                                          color: const Color(0xFFF59E0B),
-                                          value: _totalOtherItemsQty,
-                                          radius: 9,
-                                          showTitle: false,
-                                        ),
-                                    ],
-                                  ),
-                                )
-                              : Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    PieChart(
-                                      PieChartData(
-                                        sectionsSpace: 0,
-                                        centerSpaceRadius: 14,
-                                        sections: [
-                                          PieChartSectionData(
-                                            color: Colors.blueGrey.shade100,
-                                            value: 1,
-                                            radius: 5,
-                                            showTitle: false,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Icon(
-                                      Icons.pie_chart_outline_rounded,
-                                      size: 16,
-                                      color: Colors.blueGrey.shade300,
-                                    ),
-                                  ],
-                                ),
-                        ),
+                        const SizedBox(height: 8),
+                        _buildHorizontalItemBar(totalQty),
+                        const SizedBox(height: 6),
+                        _buildItemSubtitleOrLegends(weightF),
                       ],
                     ),
                   ],
@@ -2966,11 +2993,97 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
+  Widget _buildHorizontalItemBar(double totalQty) {
+    if (_activeItemsSummary.isEmpty || totalQty <= 0) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: Container(
+          height: 8,
+          width: double.infinity,
+          color: Colors.blueGrey.shade100,
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(5),
+      child: Container(
+        height: 8,
+        width: double.infinity,
+        color: Colors.blueGrey.shade100,
+        child: Row(
+          children: _activeItemsSummary.map((item) {
+            final double q = item.qty > 0 ? item.qty : (item.amount > 0 ? item.amount : 1.0);
+            final double denom = totalQty > 0 ? totalQty : (_totalItemsCost > 0 ? _totalItemsCost : 1.0);
+            final int flex = math.max(1, ((q / denom) * 1000).round());
+            return Expanded(
+              flex: flex,
+              child: Container(
+                color: item.color,
+                margin: _activeItemsSummary.length > 1
+                    ? const EdgeInsets.symmetric(horizontal: 0.5)
+                    : EdgeInsets.zero,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemSubtitleOrLegends(NumberFormat weightF) {
+    if (_activeItemsSummary.isEmpty) {
+      return Text(
+        'ද්‍රව්‍ය නිකුත් කර නැත',
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.blueGrey.shade600,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: _activeItemsSummary.map((item) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: item.color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${item.name}: ${weightF.format(item.qty)}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.blueGrey.shade700,
+              ),
+            ),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
   void _showItemsBreakdownDialog(
     BuildContext context,
     NumberFormat currencyF,
     NumberFormat weightF,
   ) {
+    final double totalQty = _totalItemsQty > 0
+        ? _totalItemsQty
+        : (_totalFertilizerQty + _totalTeaPacketQty + _totalOtherItemsQty);
+
     showDialog(
       context: context,
       builder: (ctx) {
@@ -2993,72 +3106,176 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ),
             ],
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildBreakdownDialogRow(
-                  title: AppStrings.fertilizer,
-                  qty: '${weightF.format(_totalFertilizerQty)} මිටි / ඒකක',
-                  icon: Icons.compost_rounded,
-                  color: const Color(0xFF059669),
-                ),
-                const SizedBox(height: 10),
-                _buildBreakdownDialogRow(
-                  title: AppStrings.teaPackets,
-                  qty: '${weightF.format(_totalTeaPacketQty)} පැකට්',
-                  icon: Icons.local_cafe_rounded,
-                  color: const Color(0xFF0284C7),
-                ),
-                if (_totalOtherItemsQty > 0) ...[
-                  const SizedBox(height: 10),
-                  _buildBreakdownDialogRow(
-                    title: AppStrings.extraItems,
-                    qty: '${weightF.format(_totalOtherItemsQty)} ඒකක',
-                    icon: Icons.inventory_2_rounded,
-                    color: const Color(0xFFF59E0B),
-                  ),
-                ],
-                if (_itemBreakdownQuantities.isNotEmpty) ...[
-                  const Divider(height: 24),
-                  ..._itemBreakdownQuantities.entries.map((e) {
-                    final double amt = _itemBreakdownAmounts[e.key] ?? 0.0;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(e.key, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          Text(
-                            amt > 0
-                                ? '${weightF.format(e.value)} (Rs. ${currencyF.format(amt)})'
-                                : '${weightF.format(e.value)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1F2937),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-                const Divider(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('මුළු වටිනාකම', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-                    Text(
-                      'Rs. ${currencyF.format(_totalItemsCost)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                        color: Color(0xFF0284C7),
+          content: Container(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_activeItemsSummary.isNotEmpty && totalQty > 0) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        height: 12,
+                        width: double.infinity,
+                        color: Colors.blueGrey.shade100,
+                        child: Row(
+                          children: _activeItemsSummary.map((item) {
+                            final double q = item.qty > 0 ? item.qty : (item.amount > 0 ? item.amount : 1.0);
+                            final double denom = totalQty > 0 ? totalQty : (_totalItemsCost > 0 ? _totalItemsCost : 1.0);
+                            final int flex = math.max(1, ((q / denom) * 1000).round());
+                            return Expanded(
+                              flex: flex,
+                              child: Container(
+                                color: item.color,
+                                margin: _activeItemsSummary.length > 1
+                                    ? const EdgeInsets.symmetric(horizontal: 0.5)
+                                    : EdgeInsets.zero,
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
+                    const SizedBox(height: 14),
                   ],
-                ),
-              ],
+                  if (_activeItemsSummary.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text(
+                          'මෙම කාලසීමාව තුළ ද්‍රව්‍ය නිකුත් කර නැත',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blueGrey.shade600,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ..._activeItemsSummary.map((item) {
+                      final double share = totalQty > 0
+                          ? (item.qty / totalQty * 100.0)
+                          : (_totalItemsCost > 0 ? (item.amount / _totalItemsCost * 100.0) : 0.0);
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: item.color.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: item.color.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: item.color.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                item.code.isNotEmpty ? item.code : '0${item.slotIndex}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  color: item.color,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (item.amount > 0)
+                                    Text(
+                                      'Rs. ${currencyF.format(item.amount)}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.blueGrey.shade600,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${weightF.format(item.qty)} ඒකක',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: item.color,
+                                  ),
+                                ),
+                                if (share > 0)
+                                  Text(
+                                    '${share.toStringAsFixed(1)}%',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blueGrey.shade500,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  const Divider(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'මුළු ඒකක එකතුව',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      Text(
+                        '${weightF.format(totalQty)} ඒකක',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'මුළු වටිනාකම',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
+                      Text(
+                        'Rs. ${currencyF.format(_totalItemsCost)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: Color(0xFF0284C7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -3069,30 +3286,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
           ],
         );
       },
-    );
-  }
-
-  Widget _buildBreakdownDialogRow({
-    required String title,
-    required String qty,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
-          Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700))),
-          Text(qty, style: TextStyle(fontWeight: FontWeight.w800, color: color)),
-        ],
-      ),
     );
   }
 
@@ -3144,7 +3337,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 borderRadius: BorderRadius.circular(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3189,42 +3382,48 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blueGrey.shade800,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        value,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF111827),
-                          letterSpacing: -0.5,
+                    const SizedBox(height: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey.shade800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle ?? '',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: (subtitle != null && subtitle.isNotEmpty)
-                            ? Colors.blueGrey.shade600
-                            : Colors.transparent,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            value,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF111827),
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle ?? '',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: (subtitle != null && subtitle.isNotEmpty)
+                                ? Colors.blueGrey.shade600
+                                : Colors.transparent,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ],
                 ),
