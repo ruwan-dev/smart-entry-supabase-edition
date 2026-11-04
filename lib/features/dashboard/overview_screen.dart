@@ -2701,8 +2701,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final w = constraints.maxWidth;
-        final bool isDesktop = w >= 960;
-        final bool isTablet = w >= 600 && w < 960;
+        final bool isDesktop = w >= 1020;
+        final bool isTablet = w >= 600 && w < 1020;
         final bool isMobilePlatform = !kIsWeb && Platform.isAndroid;
         final bool showItemsOnDesktop = isDesktop && !isMobilePlatform;
 
@@ -2773,11 +2773,24 @@ class _OverviewScreenState extends State<OverviewScreen> {
               key: const ValueKey('op_desktop_row'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(flex: 2, child: buildCard2(const ValueKey('c2_d'), showItemsOnDesktop)),
-                const SizedBox(width: 14),
-                Expanded(flex: 1, child: buildCard1(const ValueKey('c1_d'))),
-                const SizedBox(width: 14),
-                Expanded(flex: 1, child: buildCard4(const ValueKey('c4_d'))),
+                Expanded(
+                  flex: 6,
+                  child: buildCard2(const ValueKey('c2_d'), showItemsOnDesktop),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 4,
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: buildCard1(const ValueKey('c1_d'))),
+                        const SizedBox(width: 14),
+                        Expanded(child: buildCard4(const ValueKey('c4_d'))),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           );
