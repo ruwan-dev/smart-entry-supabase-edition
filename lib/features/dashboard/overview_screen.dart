@@ -918,7 +918,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     return idx != -1 ? idx + 1 : -1;
   }
 
-  Widget _buildHeatMapContainer({bool isMobile = false}) {
+  Widget _buildHeatMapContainer({Key? key, bool isMobile = false}) {
     final DateTime firstDay = DateTime(_heatmapYear, _heatmapMonth, 1);
     final int daysInMonth = DateTime(_heatmapYear, _heatmapMonth + 1, 0).day;
     final int startOffset = (firstDay.weekday - 1) % 7; // Mon = 0, Sun = 6
@@ -1093,7 +1093,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     // Right-hand Side: Month Performance Telemetry Panel
     Widget telemetryPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: isMobile ? MainAxisAlignment.start : MainAxisAlignment.spaceBetween,
       children: [
         // 1. Total Month Leaf Intake
         Container(
@@ -1351,6 +1351,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
 
     return Container(
+      key: key,
       height: isMobile ? null : 362,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
@@ -1428,9 +1429,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     const SizedBox(height: 12),
 
                     // Main Area: Squared Calendar Grid + Telemetry Side Panel
-                    if (isSplitView)
+                    if (!isMobile && isSplitView)
                       Expanded(
                         child: Row(
+                          key: const ValueKey('hm_split_desktop'),
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Left: True Squared Calendar Grid (7 columns)
@@ -1450,11 +1452,43 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           ],
                         ),
                       )
-                    else ...[
-                      calendarMatrix,
-                      const SizedBox(height: 14),
-                      telemetryPanel,
-                    ],
+                    else if (isSplitView)
+                      Row(
+                        key: const ValueKey('hm_split_tablet'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Left: True Squared Calendar Grid (7 columns)
+                          SizedBox(
+                            width: 310,
+                            child: calendarMatrix,
+                          ),
+                          // Divider
+                          Container(
+                            width: 1,
+                            color: Colors.black.withValues(alpha: 0.06),
+                            margin:
+                                const EdgeInsets.symmetric(horizontal: 14),
+                          ),
+                          // Right: Unused Space Reclaimed for Harvest Telemetry
+                          Expanded(child: telemetryPanel),
+                        ],
+                      )
+                    else
+                      Column(
+                        key: const ValueKey('hm_stacked_mobile'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Center(
+                            child: SizedBox(
+                              width: 310,
+                              child: calendarMatrix,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          telemetryPanel,
+                        ],
+                      ),
                   ],
                 );
               },
@@ -2094,7 +2128,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
         final bool isTablet = w >= 600 && w < 960;
 
         final bool hasNoFactoryData = _totalFactoryRevenue == 0 && _totalSupplierPayout > 0;
-        final card1 = _buildKpiCard(
+
+        Widget buildCard1([Key? k]) => _buildKpiCard(
+          key: k,
           title: AppStrings.netDealerIncome,
           value: hasNoFactoryData
               ? 'Rs. 0.00'
@@ -2120,7 +2156,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
               : const Color(0xFF10B981).withValues(alpha: 0.25),
         );
 
-        final card2 = _buildKpiCard(
+        Widget buildCard2([Key? k]) => _buildKpiCard(
+          key: k,
           title: AppStrings.factoryRevenue,
           value: 'Rs. ${currencyF.format(_totalFactoryRevenue)}',
           badgeText: null,
@@ -2134,11 +2171,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
           borderColor: const Color(0xFF3B82F6).withValues(alpha: 0.25),
         );
 
-        final card3 = _buildKpiCard(
+        Widget buildCard3([Key? k]) => _buildKpiCard(
+          key: k,
           title: AppStrings.supplierPayout,
           value: 'Rs. ${currencyF.format(_totalSupplierPayout)}',
           badgeText: null,
-          subtitle: '${weightF.format(_totalWeight)} Kg ' + AppStrings.totalLeafIntake,
+          subtitle: '${weightF.format(_totalWeight)} Kg ${AppStrings.totalLeafIntake}',
           icon: Icons.energy_savings_leaf_rounded,
           gradientColors: [
             const Color(0xFFF5F3FF),
@@ -2148,7 +2186,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
           borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
         );
 
-        final card4 = _buildKpiCard(
+        Widget buildCard4([Key? k]) => _buildKpiCard(
+          key: k,
           title: AppStrings.capitalExposure,
           value: 'Rs. ${currencyF.format(_overallOutstandingAdvances)}',
           badgeText: _allArrears.isNotEmpty ? '${_allArrears.length} ${AppStrings.customers}' : null,
@@ -2172,46 +2211,51 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
         if (isDesktop) {
           return Row(
+            key: const ValueKey('kpi_desktop_row'),
             children: [
-              Expanded(child: card1),
+              Expanded(child: buildCard1(const ValueKey('c1_d'))),
               const SizedBox(width: 14),
-              Expanded(child: card2),
+              Expanded(child: buildCard2(const ValueKey('c2_d'))),
               const SizedBox(width: 14),
-              Expanded(child: card3),
+              Expanded(child: buildCard3(const ValueKey('c3_d'))),
               const SizedBox(width: 14),
-              Expanded(child: card4),
+              Expanded(child: buildCard4(const ValueKey('c4_d'))),
             ],
           );
         } else if (isTablet) {
           return Column(
+            key: const ValueKey('kpi_tablet_col'),
             children: [
               Row(
+                key: const ValueKey('kpi_tablet_r1'),
                 children: [
-                  Expanded(child: card1),
+                  Expanded(child: buildCard1(const ValueKey('c1_t1'))),
                   const SizedBox(width: 14),
-                  Expanded(child: card2),
+                  Expanded(child: buildCard2(const ValueKey('c2_t1'))),
                 ],
               ),
               const SizedBox(height: 14),
               Row(
+                key: const ValueKey('kpi_tablet_r2'),
                 children: [
-                  Expanded(child: card3),
+                  Expanded(child: buildCard3(const ValueKey('c3_t2'))),
                   const SizedBox(width: 14),
-                  Expanded(child: card4),
+                  Expanded(child: buildCard4(const ValueKey('c4_t2'))),
                 ],
               ),
             ],
           );
         } else {
           return Column(
+            key: const ValueKey('kpi_mobile_col'),
             children: [
-              card1,
+              buildCard1(const ValueKey('c1_m')),
               const SizedBox(height: 12),
-              card2,
+              buildCard2(const ValueKey('c2_m')),
               const SizedBox(height: 12),
-              card3,
+              buildCard3(const ValueKey('c3_m')),
               const SizedBox(height: 12),
-              card4,
+              buildCard4(const ValueKey('c4_m')),
             ],
           );
         }
@@ -2220,6 +2264,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   Widget _buildKpiCard({
+    Key? key,
     required String title,
     required String value,
     String? badgeText,
@@ -2232,6 +2277,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     VoidCallback? onTap,
   }) {
     return Container(
+      key: key,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
@@ -2356,26 +2402,32 @@ class _OverviewScreenState extends State<OverviewScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 880;
-        final heatmapWidget = _buildHeatMapContainer(isMobile: isMobile);
-        final qualityWidget = _buildQualityAndIntakeMatrixCard(context, weightF, isMobile: isMobile);
 
         if (isMobile) {
           return Column(
+            key: const ValueKey('harvest_col_mobile'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              heatmapWidget,
+              _buildHeatMapContainer(key: const ValueKey('hm_mobile'), isMobile: true),
               const SizedBox(height: 16),
-              qualityWidget,
+              _buildQualityAndIntakeMatrixCard(context, weightF, key: const ValueKey('q_mobile'), isMobile: true),
             ],
           );
         }
 
         return Row(
+          key: const ValueKey('harvest_row_desktop'),
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(flex: 6, child: heatmapWidget),
+            Expanded(
+              flex: 6,
+              child: _buildHeatMapContainer(key: const ValueKey('hm_desktop'), isMobile: false),
+            ),
             const SizedBox(width: 16),
-            Expanded(flex: 4, child: qualityWidget),
+            Expanded(
+              flex: 4,
+              child: _buildQualityAndIntakeMatrixCard(context, weightF, key: const ValueKey('q_desktop'), isMobile: false),
+            ),
           ],
         );
       },
@@ -2385,12 +2437,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Widget _buildQualityAndIntakeMatrixCard(
     BuildContext context,
     NumberFormat weightF, {
+    Key? key,
     bool isMobile = false,
   }) {
     final int activeDays = _heatmapData.values.where((w) => w > 0).length;
     final double dailyAvg = activeDays > 0 ? (_totalWeight / activeDays) : 0.0;
 
     return Container(
+      key: key,
       height: isMobile ? null : 362,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
@@ -2426,7 +2480,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
+              mainAxisAlignment: isMobile ? MainAxisAlignment.start : MainAxisAlignment.spaceBetween,
               children: [
                 // Header
                 Row(
