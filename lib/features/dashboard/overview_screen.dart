@@ -59,6 +59,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
   double _totalWeight = 0.0;
   int _totalCustomers = 0;
 
+  // Today's Operational Telemetry
+  double _todayTotalWeight = 0.0;
+  double _todayNormalWeight = 0.0;
+  double _todaySuperWeight = 0.0;
+  int _todaySuppliersCount = 0;
+
   double _overallOutstandingAdvances = 0.0;
 
   // Organization Financial & Yield Analytics
@@ -324,6 +330,39 @@ class _OverviewScreenState extends State<OverviewScreen> {
         filteredEntries.addAll(chunk);
         if (chunk.length < limit) break;
         offset += limit;
+      }
+
+      // Fetch today's leaf intake for real-time operational KPI card
+      DateTime now = DateTime.now();
+      DateTime todayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      DateTime todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+
+      var todayEntriesSnapshot = await Supabase.instance.client
+          .from('daily_entries')
+          .select('netWeight, netWeight2, customerId')
+          .eq('organization_id', orgId)
+          .gte('timestamp', todayStart.toIso8601String())
+          .lte('timestamp', todayEnd.toIso8601String());
+
+      double todayTot = 0.0;
+      double todayNorm = 0.0;
+      double todaySup = 0.0;
+      Set<String> todayCustIds = {};
+
+      for (var e in todayEntriesSnapshot) {
+        double w1 = (e['netWeight'] ?? 0.0) is num
+            ? (e['netWeight'] as num).toDouble()
+            : (double.tryParse(e['netWeight'].toString()) ?? 0.0);
+        double w2 = (e['netWeight2'] ?? 0.0) is num
+            ? (e['netWeight2'] as num).toDouble()
+            : (double.tryParse(e['netWeight2'].toString()) ?? 0.0);
+        todayNorm += w1;
+        todaySup += w2;
+        todayTot += (w1 + w2);
+        String cId = (e['customerId'] ?? '').toString();
+        if (cId.isNotEmpty && (w1 + w2) > 0) {
+          todayCustIds.add(cId);
+        }
       }
 
       double tw = 0.0, nw = 0.0, sw = 0.0;
@@ -675,6 +714,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _superLeafPercentage = superRatio;
         _activeSuppliersCount = activeSupplierIds.length;
         _overallOutstandingAdvances = totalOverallOutstanding;
+
+        _todayTotalWeight = todayTot;
+        _todayNormalWeight = todayNorm;
+        _todaySuperWeight = todaySup;
+        _todaySuppliersCount = todayCustIds.length;
 
         _totalFactoryRevenue = totalFactoryIncome;
         _totalSupplierPayout = finalSupplierCost;
@@ -2393,16 +2437,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
         Widget buildCard1([Key? k]) => _buildKpiCard(
           key: k,
-          title: AppStrings.leafWeightTotal,
-          value: '${weightF.format(_totalWeight)} Kg',
-          badgeText: _totalWeight > 0
-              ? '$_activeSuppliersCount${_totalCustomers > 0 ? "/$_totalCustomers" : ""} ${AppStrings.customers}'
-              : null,
+          title: AppStrings.totalWeightToday,
+          value: '${weightF.format(_todayTotalWeight)} Kg',
+          badgeText: _todayTotalWeight > 0
+              ? '$_todaySuppliersCount ${AppStrings.customers}'
+              : AppStrings.today,
           badgeColor: const Color(0xFF059669),
-          subtitle: _normalLeafWeight > 0 || _superLeafWeight > 0
-              ? '${AppStrings.normalLeaf}: ${weightF.format(_normalLeafWeight)} Kg | ${AppStrings.superLeaf}: ${weightF.format(_superLeafWeight)} Kg'
-              : AppStrings.totalLeafIntake,
-          icon: Icons.eco_rounded,
+          subtitle: _todayTotalWeight > 0
+              ? '${AppStrings.normalLeaf}: ${weightF.format(_todayNormalWeight)} Kg | ${AppStrings.superLeaf}: ${weightF.format(_todaySuperWeight)} Kg'
+              : AppStrings.noEntriesToday,
+          icon: Icons.today_rounded,
           gradientColors: [
             const Color(0xFFECFDF5),
             const Color(0xFFD1FAE5).withValues(alpha: 0.6),
@@ -3385,7 +3429,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Super Leaf Progress & Yield Ratio
+                // Total Leaf Intake & Super Leaf Quality Breakdown
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -3398,34 +3442,63 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.eco_rounded, size: 16, color: Color(0xFF059669)),
-                              const SizedBox(width: 6),
+                              Row(
+                                children: [
+                                  const Icon(Icons.eco_rounded, size: 16, color: Color(0xFF059669)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    AppStrings.leafWeightTotal,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blueGrey.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
                               Text(
-                                AppStrings.superLeafRatio,
+                                '${weightF.format(_totalWeight)} Kg',
                                 style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
                                   color: Color(0xFF1E293B),
+                                  letterSpacing: -0.5,
                                 ),
                               ),
                             ],
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(
-                              '${_superLeafPercentage.toStringAsFixed(1)}%',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF047857),
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${_superLeafPercentage.toStringAsFixed(1)}%',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF047857),
+                                  ),
+                                ),
+                                Text(
+                                  AppStrings.superLeafRatio,
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF047857),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],

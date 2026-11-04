@@ -318,6 +318,7 @@ class AppStrings {
   static String get totalWeightToday => isSinhala ? 'අද දින මුළු බර' : 'Total Weight Today';
   static String get totalWeightMonth => isSinhala ? 'මෙම මස මුළු බර' : 'This Month Total Weight';
   static String get todayEntries => isSinhala ? 'අද දින සටහන්' : "Today's Entries";
+  static String get noEntriesToday => isSinhala ? 'අද දින දළු සටහන් නැත' : 'No leaf entries today';
   static String get recentTransactions => isSinhala ? 'මෑත ගනුදෙනු' : 'Recent Transactions';
 
   // ---------------------------------------------------------------------------
