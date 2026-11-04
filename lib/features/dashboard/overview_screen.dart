@@ -3518,10 +3518,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Row(
                             mainAxisSize: MainAxisSize.min,
@@ -3534,7 +3532,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   shape: BoxShape.circle,
                                 ),
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 6),
                               Text(
                                 '${AppStrings.normalLeaf}: ${weightF.format(_normalLeafWeight)} Kg',
                                 style: TextStyle(
@@ -3556,7 +3554,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   shape: BoxShape.circle,
                                 ),
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 6),
                               Text(
                                 '${AppStrings.superLeaf}: ${weightF.format(_superLeafWeight)} Kg',
                                 style: const TextStyle(
