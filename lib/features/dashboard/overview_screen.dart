@@ -44,24 +44,6 @@ class DashboardItemSummary {
   });
 }
 
-class WeeklyHarvestData {
-  final int weekNumber;
-  final String label;
-  final String dateRange;
-  final double normalWeight;
-  final double superWeight;
-  final double totalWeight;
-
-  const WeeklyHarvestData({
-    required this.weekNumber,
-    required this.label,
-    required this.dateRange,
-    required this.normalWeight,
-    required this.superWeight,
-    required this.totalWeight,
-  });
-}
-
 class OverviewScreen extends StatefulWidget {
   const OverviewScreen({super.key});
 
@@ -128,7 +110,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
   List<Map<String, dynamic>> _allSuppliers = [];
   List<Map<String, dynamic>> _allArrears = [];
 
-  String _chartFilter = 'Monthly';
   bool _isChartLoading = true;
   List<double> _chartIncomeValues = [];
   List<double> _chartExpenseValues = [];
@@ -138,15 +119,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Map<int, double> _heatmapData = {}; // day -> weight
   Map<int, double> _heatmapNormalData = {}; // day -> normal leaf weight
   Map<int, double> _heatmapSuperData = {}; // day -> super leaf weight
-  String _harvestChartMode = 'weekly'; // 'weekly' or 'suppliers'
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
   int get _heatmapMonth => _selectedMonth;
   int get _heatmapYear => _selectedYear;
   bool _isHeatmapLoading = true;
   double _heatmapMaxWeight = 0;
-
-  final List<String> _chartFilterOptions = ['Monthly', 'Yearly'];
 
   final Color primaryAppColor = const Color(0xFF1976D2);
 
@@ -804,61 +782,45 @@ class _OverviewScreenState extends State<OverviewScreen> {
           .select()
           .eq('organization_id', orgId);
 
-      List<double> incVals = [];
-      List<double> expVals = [];
+      List<double> incVals = List.filled(12, 0.0);
+      List<double> expVals = List.filled(12, 0.0);
       List<String> tl = [];
 
-      if (_chartFilter == 'Monthly') {
-        incVals = List.filled(12, 0.0);
-        expVals = List.filled(12, 0.0);
-        for (int i = 11; i >= 0; i--) {
-          DateTime mDate = DateTime(now.year, now.month - i, 1);
-          String lbl = DateFormat('MMM').format(mDate);
-          tl.add(lbl);
+      for (int m = 1; m <= 12; m++) {
+        DateTime mDate = DateTime(_selectedYear, m, 1);
+        String lbl = AppStrings.getMonthShortName(m);
+        tl.add(lbl);
 
-          String fullMonth = DateFormat('MMMM').format(mDate);
-          String expectedId = "${mDate.year}-$fullMonth";
-          String monthKey = "${mDate.year}-${mDate.month.toString().padLeft(2, '0')}";
+        String fullMonth = DateFormat('MMMM').format(mDate);
+        String expectedId = "$_selectedYear-$fullMonth";
+        String monthKey = "$_selectedYear-${m.toString().padLeft(2, '0')}";
 
-          // Supplier leaf cost from monthly_summaries
-          var matchSummary = summarySnapshot.where((s) => s['id'] == expectedId).firstOrNull;
-          double supplierCost = matchSummary != null
-              ? ((matchSummary['totalGross'] ?? 0) as num).toDouble()
-              : 0.0;
+        // Supplier leaf cost from monthly_summaries
+        var matchSummary = summarySnapshot.where((s) => s['id'] == expectedId).firstOrNull;
+        double supplierCost = matchSummary != null
+            ? ((matchSummary['totalGross'] ?? 0) as num).toDouble()
+            : 0.0;
 
-          // Factory revenue from factory_finalized_bills
-          double factoryRev = 0.0;
-          for (var fb in factoryBillsSnapshot) {
-            if (fb['month'] == monthKey) {
-              factoryRev += ((fb['grossIncome'] ?? 0) as num).toDouble();
-            }
+        // Factory revenue from factory_finalized_bills
+        double factoryRev = 0.0;
+        for (var fb in factoryBillsSnapshot) {
+          if (fb['month'] == monthKey) {
+            factoryRev += ((fb['grossIncome'] ?? 0) as num).toDouble();
           }
-
-          incVals[11 - i] = factoryRev;
-          expVals[11 - i] = supplierCost;
         }
-      } else if (_chartFilter == 'Yearly') {
-        incVals = List.filled(5, 0.0);
-        expVals = List.filled(5, 0.0);
-        for (int i = 4; i >= 0; i--) {
-          String yearStr = (now.year - i).toString();
-          tl.add(yearStr);
 
-          double yInc = 0;
-          double yExp = 0;
-          for (var doc in summarySnapshot) {
-            if (doc['id'].toString().startsWith("$yearStr-")) {
-              yExp += ((doc['totalGross'] ?? 0) as num).toDouble();
-            }
+        // Live unfinalized estimate for the active selected month
+        if (m == _selectedMonth && _selectedYear == DateTime.now().year) {
+          if (factoryRev == 0 && _totalFactoryRevenue > 0) {
+            factoryRev = _totalFactoryRevenue;
           }
-          for (var fb in factoryBillsSnapshot) {
-            if (fb['month'].toString().startsWith(yearStr)) {
-              yInc += ((fb['grossIncome'] ?? 0) as num).toDouble();
-            }
+          if (supplierCost == 0 && _totalSupplierPayout > 0) {
+            supplierCost = _totalSupplierPayout;
           }
-          incVals[4 - i] = yInc;
-          expVals[4 - i] = yExp;
         }
+
+        incVals[m - 1] = factoryRev;
+        expVals[m - 1] = supplierCost;
       }
 
       if (mounted) {
@@ -873,310 +835,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
     } catch (e) {
       if (mounted) setState(() => _isChartLoading = false);
     }
-  }
-
-  double _getMaxChartValue() {
-    double mv2 = _chartIncomeValues.isNotEmpty
-        ? _chartIncomeValues.reduce((a, b) => a > b ? a : b)
-        : 0.0;
-    double mv3 = _chartExpenseValues.isNotEmpty
-        ? _chartExpenseValues.reduce((a, b) => a > b ? a : b)
-        : 0.0;
-    double mv = mv2 > mv3 ? mv2 : mv3;
-    return mv == 0 ? 100.0 : mv;
-  }
-
-  LineChartData _getYAxisData() {
-    double mv = _getMaxChartValue();
-    double yInterval = (mv / 5).ceilToDouble();
-    if (yInterval == 0) yInterval = 10;
-
-    return LineChartData(
-      minX: 0,
-      maxX: 1,
-      minY: 0,
-      maxY: mv * 1.2,
-      gridData: const FlGridData(show: false),
-      titlesData: FlTitlesData(
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 60,
-            getTitlesWidget: (v, m) => const SizedBox(),
-          ),
-        ),
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 45,
-            interval: yInterval,
-            getTitlesWidget: (v, m) {
-              if (v == 0) return const SizedBox();
-              String t = v >= 1000000
-                  ? '${(v / 1000000).toStringAsFixed(1)}M'
-                  : (v >= 1000
-                        ? '${(v / 1000).toStringAsFixed(1)}k'
-                        : '${v.toInt()}');
-              return Padding(
-                padding: const EdgeInsets.only(right: 6.0),
-                child: Text(
-                  t,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.blueGrey,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.right,
-                ),
-              );
-            },
-          ),
-        ),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
-        ),
-      ),
-      borderData: FlBorderData(show: false),
-      lineTouchData: const LineTouchData(enabled: false),
-      lineBarsData: [
-        LineChartBarData(
-          spots: const [FlSpot(0, 0), FlSpot(1, 0)],
-          color: Colors.transparent,
-          dotData: const FlDotData(show: false),
-        ),
-      ],
-    );
-  }
-
-  LineChartData _getRealChartData() {
-    double mv = _getMaxChartValue();
-    double yInterval = (mv / 5).ceilToDouble();
-    if (yInterval == 0) yInterval = 10;
-
-    double maxXV = (_chartIncomeValues.length > 1)
-        ? (_chartIncomeValues.length - 1).toDouble()
-        : 1.0;
-
-    List<FlSpot> incSpots = [];
-    List<FlSpot> expSpots = [];
-    if (_chartIncomeValues.isNotEmpty) {
-      incSpots = _chartIncomeValues.length == 1
-          ? [FlSpot(0, _chartIncomeValues[0]), FlSpot(1, _chartIncomeValues[0])]
-          : List.generate(
-              _chartIncomeValues.length,
-              (i) => FlSpot(i.toDouble(), _chartIncomeValues[i]),
-            );
-    }
-    if (_chartExpenseValues.isNotEmpty) {
-      expSpots = _chartExpenseValues.length == 1
-          ? [
-              FlSpot(0, _chartExpenseValues[0]),
-              FlSpot(1, _chartExpenseValues[0]),
-            ]
-          : List.generate(
-              _chartExpenseValues.length,
-              (i) => FlSpot(i.toDouble(), _chartExpenseValues[i]),
-            );
-    }
-
-    return LineChartData(
-      minX: 0,
-      maxX: maxXV,
-      minY: 0,
-      maxY: mv * 1.2,
-      gridData: FlGridData(
-        show: true,
-        drawVerticalLine: false,
-        drawHorizontalLine: true,
-        horizontalInterval: yInterval,
-      ),
-      titlesData: FlTitlesData(
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 60,
-            interval: 1,
-            getTitlesWidget: (v, m) {
-              int idx = v.toInt();
-              if (idx >= 0 && idx < _chartLabels.length) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 15.0),
-                  child: Transform.rotate(
-                    angle: -0.8,
-                    child: Text(
-                      _chartLabels[idx],
-                      style: const TextStyle(
-                        fontSize: 9,
-                        color: Colors.blueGrey,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                );
-              }
-              return const SizedBox();
-            },
-          ),
-        ),
-        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
-        ),
-      ),
-      borderData: FlBorderData(show: false),
-      lineTouchData: const LineTouchData(enabled: true),
-      lineBarsData: [
-        if (incSpots.isNotEmpty)
-          LineChartBarData(
-            spots: incSpots,
-            isCurved: true,
-            color: const Color(0xFF20C997), // Green for Income
-            barWidth: 3.5,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) =>
-                  FlDotCirclePainter(
-                    radius: 4,
-                    color: Colors.white,
-                    strokeWidth: 2,
-                    strokeColor: const Color(0xFF20C997),
-                  ),
-            ),
-            belowBarData: BarAreaData(show: false),
-          ),
-        if (expSpots.isNotEmpty)
-          LineChartBarData(
-            spots: expSpots,
-            isCurved: true,
-            color: const Color(0xFFFF6B6B), // Red for Expense
-            barWidth: 3.5,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) =>
-                  FlDotCirclePainter(
-                    radius: 4,
-                    color: Colors.white,
-                    strokeWidth: 2,
-                    strokeColor: const Color(0xFFFF6B6B),
-                  ),
-            ),
-            belowBarData: BarAreaData(show: false),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildLegendItem(String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Colors.blueGrey.shade700,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChartContainer() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double availableWidthForChart = constraints.maxWidth - 50 - 15;
-        if (availableWidthForChart < 0) availableWidthForChart = 0;
-
-        double chartWidth = _chartFilter == 'Daily' || _chartFilter == 'Monthly'
-            ? (availableWidthForChart > 1200 ? availableWidthForChart : 1200.0)
-            : availableWidthForChart;
-
-        return Container(
-          height: 340,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 20,
-                spreadRadius: 2,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-              child: Container(
-                padding: const EdgeInsets.only(top: 30, bottom: 10, right: 15),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withOpacity(0.4),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.4),
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(width: 50, child: LineChart(_getYAxisData())),
-                    Expanded(
-                      child: ScrollConfiguration(
-                        behavior: MyCustomScrollBehavior(),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          reverse: true,
-                          child: SizedBox(
-                            width: chartWidth,
-                            child: LineChart(_getRealChartData()),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  int _getMonthIndex(String monthName) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    int idx = months.indexOf(monthName);
-    return idx != -1 ? idx + 1 : -1;
   }
 
   Widget _buildHeatMapContainer({Key? key, bool isMobile = false}) {
@@ -2144,12 +1802,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
     final currencyF = NumberFormat('#,##0.00', 'en_US');
     final weightF = NumberFormat('#,##0.##', 'en_US');
 
-    final Map<String, IconData> chartIconMap = {
-      'Daily': Icons.view_day_rounded,
-      'Monthly': Icons.calendar_view_month_rounded,
-      'Yearly': Icons.calendar_today_rounded,
-    };
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: RefreshIndicator(
@@ -2174,7 +1826,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     const SizedBox(height: 24),
                     (_isHeatmapLoading || _isSummaryLoading)
                         ? _buildSkeletonHarvestAndQualitySection(context)
-                        : _buildHarvestAndQualitySection(context, weightF),
+                        : _buildHarvestAndQualitySection(context, currencyF, weightF),
                     const SizedBox(height: 32),
 
                     // Bottom Section: Monthly Financial Settlement & Transit Variance
@@ -2191,51 +1843,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         ? _buildSkeletonDbBusinessSummary(context)
                         : _buildDbBusinessSummary(currencyF, weightF),
                     const SizedBox(height: 32),
-
-                    _buildIconToggleHeader(
-                      AppStrings.factoryRevenueVsCost,
-                      _chartFilter,
-                      _chartFilterOptions,
-                      chartIconMap,
-                      (val) {
-                        setState(() => _chartFilter = val);
-                        _fetchChartData();
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _isChartLoading
-                        ? const SkeletonBox(
-                            height: 340,
-                            width: double.infinity,
-                            borderRadius: 24,
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              _buildChartContainer(),
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 12.0,
-                                  right: 8.0,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    _buildLegendItem(
-                                      AppStrings.factoryRevenue,
-                                      const Color(0xFF20C997),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    _buildLegendItem(
-                                      AppStrings.supplierPayout,
-                                      const Color(0xFFFF6B6B),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                    const SizedBox(height: 40),
 
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2490,6 +2097,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         Navigator.pop(ctx);
                         _fetchDashboardData();
                         _fetchHeatmapData();
+                        _fetchChartData();
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
@@ -3405,7 +3013,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildHarvestAndQualitySection(BuildContext context, NumberFormat weightF) {
+  Widget _buildHarvestAndQualitySection(
+    BuildContext context,
+    NumberFormat currencyF,
+    NumberFormat weightF,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 1020;
@@ -3417,7 +3029,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             children: [
               _buildHeatMapContainer(key: const ValueKey('hm_mobile'), isMobile: true),
               const SizedBox(height: 16),
-              _buildHarvestAnalyticsBarChartCard(context, weightF, key: const ValueKey('q_mobile'), isMobile: true),
+              _buildAnnualIncomeExpenseBarChartCard(context, currencyF, key: const ValueKey('inc_mobile'), isMobile: true),
             ],
           );
         }
@@ -3433,7 +3045,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             const SizedBox(width: 16),
             Expanded(
               flex: 4,
-              child: _buildHarvestAnalyticsBarChartCard(context, weightF, key: const ValueKey('q_desktop'), isMobile: false),
+              child: _buildAnnualIncomeExpenseBarChartCard(context, currencyF, key: const ValueKey('inc_desktop'), isMobile: false),
             ),
           ],
         );
@@ -3441,87 +3053,92 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  List<WeeklyHarvestData> _getWeeklyHarvestData(int daysInMonth) {
-    final List<WeeklyHarvestData> weeks = [];
-    final weekRanges = [
-      (1, 1, 7),
-      (2, 8, 14),
-      (3, 15, 21),
-      (4, 22, 28),
-      if (daysInMonth >= 29) (5, 29, daysInMonth),
-    ];
-
-    for (var range in weekRanges) {
-      final int wNum = range.$1;
-      final int startD = range.$2;
-      final int endD = range.$3;
-
-      double nw = 0.0;
-      double sw = 0.0;
-      for (int d = startD; d <= endD; d++) {
-        nw += _heatmapNormalData[d] ?? 0.0;
-        sw += _heatmapSuperData[d] ?? 0.0;
-      }
-      double tot = nw + sw;
-      // Fallback if _heatmapNormalData is empty but _heatmapData is populated
-      if (tot == 0.0) {
-        for (int d = startD; d <= endD; d++) {
-          tot += _heatmapData[d] ?? 0.0;
-        }
-        nw = tot;
-      }
-
-      final String label = '${AppStrings.weekPrefix} $wNum';
-      final String rangeStr = '$startD - $endD';
-
-      weeks.add(
-        WeeklyHarvestData(
-          weekNumber: wNum,
-          label: label,
-          dateRange: rangeStr,
-          normalWeight: nw,
-          superWeight: sw,
-          totalWeight: tot,
-        ),
-      );
-    }
-    return weeks;
-  }
-
-  Widget _buildHarvestAnalyticsBarChartCard(
+  Widget _buildAnnualIncomeExpenseBarChartCard(
     BuildContext context,
-    NumberFormat weightF, {
+    NumberFormat currencyF, {
     Key? key,
     bool isMobile = false,
   }) {
-    final int daysInMonth = DateTime(_heatmapYear, _heatmapMonth + 1, 0).day;
-    final weeklyData = _getWeeklyHarvestData(daysInMonth);
-
-    // Operational Analytics for Weekly Intake
-    double maxWeekVol = 0.0;
-    WeeklyHarvestData? peakWeek;
-    double sumWeekly = 0.0;
-    for (var w in weeklyData) {
-      sumWeekly += w.totalWeight;
-      if (w.totalWeight > maxWeekVol) {
-        maxWeekVol = w.totalWeight;
-        peakWeek = w;
-      }
+    if (_isChartLoading) {
+      return Container(
+        key: key,
+        height: 360,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.7),
+            width: 1.5,
+          ),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+      );
     }
-    final double avgWeekly =
-        weeklyData.isNotEmpty ? (sumWeekly / weeklyData.length) : 0.0;
 
-    // Operational Analytics for Top Suppliers
-    final top5Suppliers = _topSuppliers.take(5).toList();
-    double maxSupVol = 0.0;
-    double top5Total = 0.0;
-    for (var s in top5Suppliers) {
-      final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
-      top5Total += sw;
-      if (sw > maxSupVol) maxSupVol = sw;
+    // Totals across the 12 months
+    final double annualIncome =
+        _chartIncomeValues.fold(0.0, (sum, val) => sum + val);
+    final double annualExpense =
+        _chartExpenseValues.fold(0.0, (sum, val) => sum + val);
+    final double annualNet = annualIncome - annualExpense;
+
+    // Max value for scaling
+    double maxVal = 0.0;
+    for (int i = 0; i < 12; i++) {
+      final double inc =
+          i < _chartIncomeValues.length ? _chartIncomeValues[i] : 0.0;
+      final double exp =
+          i < _chartExpenseValues.length ? _chartExpenseValues[i] : 0.0;
+      if (inc > maxVal) maxVal = inc;
+      if (exp > maxVal) maxVal = exp;
     }
-    final double top5Share =
-        _totalWeight > 0 ? (top5Total / _totalWeight * 100.0) : 0.0;
+    if (maxVal <= 0) maxVal = 100000.0;
+    final double maxY = maxVal * 1.25;
+    final double yInterval = (maxY / 4) > 0 ? (maxY / 4) : 25000.0;
+
+    // Build 12 month grouped bar data
+    final List<BarChartGroupData> barGroups = [];
+    for (int i = 0; i < 12; i++) {
+      final double inc =
+          i < _chartIncomeValues.length ? _chartIncomeValues[i] : 0.0;
+      final double exp =
+          i < _chartExpenseValues.length ? _chartExpenseValues[i] : 0.0;
+
+      barGroups.add(
+        BarChartGroupData(
+          x: i,
+          barsSpace: 2,
+          barRods: [
+            // Income Rod (Green)
+            BarChartRodData(
+              toY: inc,
+              color: const Color(0xFF10B981),
+              width: isMobile ? 5.5 : 7,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxY,
+                color: Colors.grey.withValues(alpha: 0.04),
+              ),
+            ),
+            // Outcome / Expense Rod (Red)
+            BarChartRodData(
+              toY: exp,
+              color: const Color(0xFFEF4444),
+              width: isMobile ? 5.5 : 7,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxY,
+                color: Colors.grey.withValues(alpha: 0.04),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       key: key,
@@ -3571,12 +3188,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: primaryAppColor.withValues(alpha: 0.1),
+                              color: const Color(0xFF10B981)
+                                  .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Icon(
-                              Icons.leaderboard_rounded,
-                              color: primaryAppColor,
+                            child: const Icon(
+                              Icons.analytics_rounded,
+                              color: Color(0xFF059669),
                               size: 19,
                             ),
                           ),
@@ -3586,9 +3204,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  AppStrings.leafHarvestAnalytics,
+                                  AppStrings.factoryRevenueVsCost,
                                   style: const TextStyle(
-                                    fontSize: 15,
+                                    fontSize: 14.5,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF1E293B),
                                   ),
@@ -3596,9 +3214,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  _harvestChartMode == 'weekly'
-                                      ? AppStrings.weeklyIntakeTrend
-                                      : AppStrings.top5Suppliers,
+                                  '$_selectedYear ${AppStrings.annualIncomeOutcomeTrend}',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.blueGrey.shade600,
@@ -3612,79 +3228,382 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    // Mode Toggle: Weekly vs Top Suppliers
+                    const SizedBox(width: 8),
+                    // Annual Net Margin Badge
                     Container(
-                      padding: const EdgeInsets.all(2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.blueGrey.shade50,
+                        color: (annualNet >= 0
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFEF4444))
+                            .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Colors.blueGrey.shade200.withValues(alpha: 0.5),
+                          color: (annualNet >= 0
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFFEF4444))
+                              .withValues(alpha: 0.25),
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _buildChartModePill(
-                            title: AppStrings.weeklyTrend,
-                            isSelected: _harvestChartMode == 'weekly',
-                            onTap: () {
-                              if (_harvestChartMode != 'weekly') {
-                                setState(() => _harvestChartMode = 'weekly');
-                              }
-                            },
+                          Icon(
+                            annualNet >= 0
+                                ? Icons.trending_up_rounded
+                                : Icons.trending_down_rounded,
+                            size: 14,
+                            color: annualNet >= 0
+                                ? const Color(0xFF047857)
+                                : const Color(0xFFB91C1C),
                           ),
-                          _buildChartModePill(
-                            title: AppStrings.suppliersTrend,
-                            isSelected: _harvestChartMode == 'suppliers',
-                            onTap: () {
-                              if (_harvestChartMode != 'suppliers') {
-                                setState(() => _harvestChartMode = 'suppliers');
-                              }
-                            },
+                          const SizedBox(width: 4),
+                          Text(
+                            annualNet >= 0
+                                ? '+Rs. ${currencyF.format(annualNet)}'
+                                : '-Rs. ${currencyF.format(annualNet.abs())}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: annualNet >= 0
+                                  ? const Color(0xFF047857)
+                                  : const Color(0xFFB91C1C),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    // Jump to Customer Analysis Screen
-                    InkWell(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CustomerAnalysisScreen(),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Main 12-Month Grouped Bar Chart
+                SizedBox(
+                  height: 195,
+                  child: BarChart(
+                    BarChartData(
+                      maxY: maxY,
+                      alignment: BarChartAlignment.spaceAround,
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        touchTooltipData: BarTouchTooltipData(
+                          tooltipRoundedRadius: 8,
+                          tooltipPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                            if (groupIndex < 0 || groupIndex >= 12) return null;
+                            final int m = groupIndex + 1;
+                            final double inc =
+                                groupIndex < _chartIncomeValues.length
+                                    ? _chartIncomeValues[groupIndex]
+                                    : 0.0;
+                            final double exp =
+                                groupIndex < _chartExpenseValues.length
+                                    ? _chartExpenseValues[groupIndex]
+                                    : 0.0;
+                            final double net = inc - exp;
+                            final String monthName = AppStrings.getMonthName(m);
+
+                            return BarTooltipItem(
+                              '$monthName $_selectedYear\n',
+                              const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text:
+                                      '● ${AppStrings.factoryRevenue}: Rs. ${currencyF.format(inc)}\n',
+                                  style: const TextStyle(
+                                    color: Color(0xFF34D399),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text:
+                                      '● ${AppStrings.supplierPayout}: Rs. ${currencyF.format(exp)}\n',
+                                  style: const TextStyle(
+                                    color: Color(0xFFF87171),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text:
+                                      '${AppStrings.netProfitOrMargin}: Rs. ${currencyF.format(net)}',
+                                  style: TextStyle(
+                                    color: net >= 0
+                                        ? const Color(0xFF67E8F9)
+                                        : const Color(0xFFFCA5A5),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
-                      borderRadius: BorderRadius.circular(10),
+                      titlesData: FlTitlesData(
+                        show: true,
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 42,
+                            interval: yInterval,
+                            getTitlesWidget: (value, meta) {
+                              if (value == 0) return const SizedBox();
+                              String text;
+                              if (value >= 1000000) {
+                                text =
+                                    '${(value / 1000000).toStringAsFixed(1)}M';
+                              } else if (value >= 1000) {
+                                text = '${(value / 1000).toStringAsFixed(0)}k';
+                              } else {
+                                text = value.toInt().toString();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Text(
+                                  text,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.blueGrey.shade500,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 24,
+                            getTitlesWidget: (value, meta) {
+                              final idx = value.toInt();
+                              if (idx < 0 || idx >= 12) return const SizedBox();
+                              final bool isCurrentSel =
+                                  (idx + 1) == _selectedMonth;
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 5),
+                                child: Text(
+                                  AppStrings.getMonthShortName(idx + 1),
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: isCurrentSel
+                                        ? FontWeight.w900
+                                        : FontWeight.w600,
+                                    color: isCurrentSel
+                                        ? primaryAppColor
+                                        : Colors.blueGrey.shade700,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: yInterval,
+                        getDrawingHorizontalLine: (value) => FlLine(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      barGroups: barGroups,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Operational Summary Strip Below Bar Chart
+                Row(
+                  children: [
+                    // Total Annual Income
+                    Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
-                          vertical: 5,
+                          vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: primaryAppColor.withValues(alpha: 0.08),
+                          color: Colors.white.withValues(alpha: 0.65),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: primaryAppColor.withValues(alpha: 0.2),
+                            color: Colors.black.withValues(alpha: 0.05),
                           ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              AppStrings.customerAnalysis,
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.bold,
-                                color: primaryAppColor,
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.arrow_upward_rounded,
+                                  size: 13,
+                                  color: Color(0xFF10B981),
+                                ),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    AppStrings.totalIncome,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blueGrey.shade700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Rs. ${currencyF.format(annualIncome)}',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF047857),
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 3),
-                            Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 9,
-                              color: primaryAppColor,
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Total Annual Outcome
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: 0.05),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.arrow_downward_rounded,
+                                  size: 13,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    AppStrings.totalOutcome,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blueGrey.shade700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Rs. ${currencyF.format(annualExpense)}',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Net Annual Margin
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: 0.05),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.account_balance_rounded,
+                                  size: 13,
+                                  color: Color(0xFF2563EB),
+                                ),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    AppStrings.netProfitOrMargin,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blueGrey.shade700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Rs. ${currencyF.format(annualNet)}',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: annualNet >= 0
+                                      ? const Color(0xFF1E293B)
+                                      : const Color(0xFFB91C1C),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -3692,692 +3611,64 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-
-                // Main Bar Chart Body
-                SizedBox(
-                  height: 195,
-                  child: _harvestChartMode == 'weekly'
-                      ? _buildWeeklyHarvestBarChart(
-                          weeklyData,
-                          maxWeekVol,
-                          weightF,
-                        )
-                      : _buildSuppliersHarvestBarChart(
-                          top5Suppliers,
-                          maxSupVol,
-                          weightF,
+                const SizedBox(height: 6),
+                // Legend
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF10B981),
+                            shape: BoxShape.circle,
+                          ),
                         ),
+                        const SizedBox(width: 4),
+                        Text(
+                          AppStrings.factoryRevenue,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 12),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          AppStrings.supplierPayout,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-
-                // Operational Summary Strip Below Bar Chart
-                if (_harvestChartMode == 'weekly') ...[
-                  Row(
-                    children: [
-                      // Peak Week Badge
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.black.withValues(alpha: 0.05),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.military_tech_rounded,
-                                size: 16,
-                                color: Color(0xFFD97706),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      AppStrings.peakHarvestWeek,
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.blueGrey.shade700,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      (peakWeek != null && peakWeek.totalWeight > 0)
-                                          ? '${peakWeek.label}: ${weightF.format(peakWeek.totalWeight)} Kg'
-                                          : '-',
-                                      style: const TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF1E293B),
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Weekly Average Badge
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.black.withValues(alpha: 0.05),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.analytics_rounded,
-                                size: 16,
-                                color: Color(0xFF2563EB),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      AppStrings.weeklyAverageIntake,
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.blueGrey.shade700,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      '${weightF.format(avgWeekly)} Kg / ${AppStrings.isSinhala ? "සතිය" : "week"}',
-                                      style: const TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF1E293B),
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  // Compact Legend
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF2563EB),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            AppStrings.normalLeaf,
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blueGrey.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF10B981),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            AppStrings.superLeaf,
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF047857),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ] else ...[
-                  // Suppliers Mode Operational Badges
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.black.withValues(alpha: 0.05),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.star_rounded,
-                                size: 16,
-                                color: Color(0xFF16A34A),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      AppStrings.topSuppliers,
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.blueGrey.shade700,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      top5Suppliers.isNotEmpty
-                                          ? '${top5Suppliers[0]['name']}: ${weightF.format(top5Suppliers[0]['weight'] ?? 0)} Kg'
-                                          : '-',
-                                      style: const TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF1E293B),
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.black.withValues(alpha: 0.05),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.pie_chart_rounded,
-                                size: 16,
-                                color: Color(0xFF7C3AED),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      AppStrings.topSuppliersShare,
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.blueGrey.shade700,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      '${top5Share.toStringAsFixed(1)}% (${weightF.format(top5Total)} Kg)',
-                                      style: const TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF1E293B),
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
         ),
       ),
     );
-  }
-
-  Widget _buildWeeklyHarvestBarChart(
-    List<WeeklyHarvestData> weeklyData,
-    double maxWeekVol,
-    NumberFormat weightF,
-  ) {
-    if (weeklyData.isEmpty || maxWeekVol <= 0) {
-      return Center(
-        child: Text(
-          AppStrings.noDataFound,
-          style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12),
-        ),
-      );
-    }
-
-    final double maxY = maxWeekVol > 0 ? (maxWeekVol * 1.25) : 100.0;
-    final double yInterval = maxY > 0 ? (maxY / 4) : 25.0;
-
-    final List<BarChartGroupData> barGroups = [];
-    for (int i = 0; i < weeklyData.length; i++) {
-      final w = weeklyData[i];
-      final bool hasSuper = w.superWeight > 0;
-
-      final List<BarChartRodStackItem> stackItems = hasSuper
-          ? [
-              BarChartRodStackItem(0, w.normalWeight, const Color(0xFF2563EB)),
-              BarChartRodStackItem(
-                w.normalWeight,
-                w.totalWeight,
-                const Color(0xFF10B981),
-              ),
-            ]
-          : [];
-
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: w.totalWeight,
-              color: hasSuper ? null : const Color(0xFF2563EB),
-              rodStackItems: stackItems,
-              width: 22,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-              backDrawRodData: BackgroundBarChartRodData(
-                show: true,
-                toY: maxY,
-                color: Colors.grey.withValues(alpha: 0.08),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return BarChart(
-      BarChartData(
-        maxY: maxY,
-        alignment: BarChartAlignment.spaceAround,
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchTooltipData: BarTouchTooltipData(
-            tooltipRoundedRadius: 8,
-            tooltipPadding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 6,
-            ),
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              if (groupIndex < 0 || groupIndex >= weeklyData.length) return null;
-              final w = weeklyData[groupIndex];
-              return BarTooltipItem(
-                '${w.label} (${w.dateRange})\n',
-                const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                ),
-                children: [
-                  TextSpan(
-                    text: '${weightF.format(w.totalWeight)} Kg\n',
-                    style: const TextStyle(
-                      color: Color(0xFF4ADE80),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                    ),
-                  ),
-                  TextSpan(
-                    text:
-                        '${AppStrings.normalLeaf}: ${weightF.format(w.normalWeight)} Kg',
-                    style: const TextStyle(
-                      color: Color(0xFF93C5FD),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 9.5,
-                    ),
-                  ),
-                  if (w.superWeight > 0)
-                    TextSpan(
-                      text:
-                          '\n${AppStrings.superLeaf}: ${weightF.format(w.superWeight)} Kg',
-                      style: const TextStyle(
-                        color: Color(0xFF34D399),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 9.5,
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 42,
-              interval: yInterval,
-              getTitlesWidget: (value, meta) {
-                if (value == 0) return const SizedBox();
-                final text = value >= 1000
-                    ? '${(value / 1000).toStringAsFixed(1)}k'
-                    : '${value.toInt()}';
-                return Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: Colors.blueGrey.shade500,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                );
-              },
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 26,
-              getTitlesWidget: (value, meta) {
-                final idx = value.toInt();
-                if (idx < 0 || idx >= weeklyData.length) return const SizedBox();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    weeklyData[idx].label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey.shade700,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: yInterval,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.black.withValues(alpha: 0.05),
-            strokeWidth: 1,
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: barGroups,
-      ),
-    );
-  }
-
-  Widget _buildSuppliersHarvestBarChart(
-    List<Map<String, dynamic>> top5Suppliers,
-    double maxSupVol,
-    NumberFormat weightF,
-  ) {
-    if (top5Suppliers.isEmpty || maxSupVol <= 0) {
-      return Center(
-        child: Text(
-          AppStrings.noDataFound,
-          style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12),
-        ),
-      );
-    }
-
-    final double maxY = maxSupVol > 0 ? (maxSupVol * 1.25) : 100.0;
-    final double yInterval = maxY > 0 ? (maxY / 4) : 25.0;
-
-    final List<BarChartGroupData> barGroups = [];
-    for (int i = 0; i < top5Suppliers.length; i++) {
-      final s = top5Suppliers[i];
-      final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
-
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: sw,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0D9488), Color(0xFF14B8A6)],
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-              ),
-              width: 22,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-              backDrawRodData: BackgroundBarChartRodData(
-                show: true,
-                toY: maxY,
-                color: Colors.grey.withValues(alpha: 0.08),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return BarChart(
-      BarChartData(
-        maxY: maxY,
-        alignment: BarChartAlignment.spaceAround,
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchTooltipData: BarTouchTooltipData(
-            tooltipRoundedRadius: 8,
-            tooltipPadding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 6,
-            ),
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              if (groupIndex < 0 || groupIndex >= top5Suppliers.length) {
-                return null;
-              }
-              final s = top5Suppliers[groupIndex];
-              final double sw = (s['weight'] as num?)?.toDouble() ?? 0.0;
-              return BarTooltipItem(
-                '${s['name']}\n',
-                const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                ),
-                children: [
-                  TextSpan(
-                    text: '${weightF.format(sw)} Kg',
-                    style: const TextStyle(
-                      color: Color(0xFF2DD4BF),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 42,
-              interval: yInterval,
-              getTitlesWidget: (value, meta) {
-                if (value == 0) return const SizedBox();
-                final text = value >= 1000
-                    ? '${(value / 1000).toStringAsFixed(1)}k'
-                    : '${value.toInt()}';
-                return Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: Colors.blueGrey.shade500,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                );
-              },
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 26,
-              getTitlesWidget: (value, meta) {
-                final idx = value.toInt();
-                if (idx < 0 || idx >= top5Suppliers.length) {
-                  return const SizedBox();
-                }
-                String name =
-                    top5Suppliers[idx]['name']?.toString() ?? '${idx + 1}';
-                if (name.length > 7) name = '${name.substring(0, 6)}..';
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    name,
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey.shade700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: yInterval,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.black.withValues(alpha: 0.05),
-            strokeWidth: 1,
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        barGroups: barGroups,
-      ),
-    );
-  }
-
-  Widget _buildChartModePill({
-    required String title,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ]
-              : null,
-        ),
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected
-                ? const Color(0xFF1E293B)
-                : Colors.blueGrey.shade600,
-          ),
-        ),
-      ),
-    );
-  }
   }
 
   Widget _buildDbBusinessSummary(NumberFormat currencyF, NumberFormat weightF) {
@@ -4980,89 +4271,4 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildIconToggleHeader(
-    String title,
-    String value,
-    List<String> options,
-    Map<String, IconData> iconMap,
-    Function(String) onChanged,
-  ) {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF1F2937),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30), // Pill shape
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: options.map((option) {
-              bool isSelected = value == option;
-              return Tooltip(
-                message: _getFilterLabel(option),
-                child: InkWell(
-                  onTap: () => onChanged(option),
-                  borderRadius: BorderRadius.circular(30), // Pill shape
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16, // slightly wider for a perfect pill look
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? primaryAppColor.withOpacity(0.12)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(30), // Pill shape
-                    ),
-                    child: Icon(
-                      iconMap[option] ?? Icons.filter_alt_rounded,
-                      size: 20,
-                      color: isSelected
-                          ? primaryAppColor
-                          : Colors.blueGrey.shade400,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _getFilterLabel(String option) {
-    switch (option) {
-      case 'Today':
-        return AppStrings.today;
-      case 'This Week':
-        return AppStrings.thisWeek;
-      case 'This Month':
-        return AppStrings.thisMonth;
-      case 'Last 6 Months':
-        return AppStrings.last6Months;
-      case 'Last Year':
-        return AppStrings.lastYear;
-      case 'Monthly':
-        return AppStrings.monthly;
-      case 'Yearly':
-        return AppStrings.yearly;
-      default:
-        return option;
-    }
-  }
 }
