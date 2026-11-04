@@ -2416,7 +2416,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
           context: context,
           currencyF: currencyF,
           weightF: weightF,
-          onTap: () => _showItemsBreakdownDialog(context, currencyF, weightF),
         );
 
         Widget buildCard4([Key? k]) => _buildKpiCard(
@@ -2852,7 +2851,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required BuildContext context,
     required NumberFormat currencyF,
     required NumberFormat weightF,
-    VoidCallback? onTap,
   }) {
     final double totalQty = _totalItemsQty > 0
         ? _totalItemsQty
@@ -2896,17 +2894,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: borderColor, width: 1.5),
             ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(20),
-                child: Column(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // Left Column: Icon, Title, and Value
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
@@ -2916,43 +2914,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           ),
                           child: Icon(Icons.category_rounded, color: accentColor, size: 20),
                         ),
-                        const SizedBox(width: 8),
-                        if (totalQty > 0)
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: accentColor.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '${weightF.format(totalQty)} ඒකක',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: accentColor,
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            size: 14,
-                            color: accentColor.withValues(alpha: 0.6),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                        const SizedBox(height: 8),
                         Text(
                           AppStrings.itemsIssued,
                           style: TextStyle(
@@ -2977,15 +2939,52 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        _buildHorizontalItemBar(totalQty),
-                        const SizedBox(height: 6),
-                        _buildItemSubtitleOrLegends(weightF),
                       ],
+                    ),
+                    const SizedBox(width: 16),
+                    // Right area: Badge at top-right + Item labels in the space indicated by the user
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (totalQty > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: accentColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${weightF.format(totalQty)} ඒකක',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: accentColor,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          _buildItemLabels(weightF),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 10),
+                // Horizontal Segmented Bar at the bottom
+                _buildHorizontalItemBar(totalQty),
+              ],
             ),
           ),
         ),
@@ -3031,7 +3030,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildItemSubtitleOrLegends(NumberFormat weightF) {
+  Widget _buildItemLabels(NumberFormat weightF) {
     if (_activeItemsSummary.isEmpty) {
       return Text(
         'ද්‍රව්‍ය නිකුත් කර නැත',
@@ -3046,7 +3045,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     return Wrap(
       spacing: 12,
-      runSpacing: 4,
+      runSpacing: 5,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: _activeItemsSummary.map((item) {
         return Row(
@@ -3060,232 +3059,18 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 5),
             Text(
               '${item.name}: ${weightF.format(item.qty)}',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Colors.blueGrey.shade700,
+                color: Colors.blueGrey.shade800,
               ),
             ),
           ],
         );
       }).toList(),
-    );
-  }
-
-  void _showItemsBreakdownDialog(
-    BuildContext context,
-    NumberFormat currencyF,
-    NumberFormat weightF,
-  ) {
-    final double totalQty = _totalItemsQty > 0
-        ? _totalItemsQty
-        : (_totalFertilizerQty + _totalTeaPacketQty + _totalOtherItemsQty);
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0284C7).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.category_rounded, color: Color(0xFF0284C7), size: 20),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                AppStrings.itemsIssued,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          content: Container(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_activeItemsSummary.isNotEmpty && totalQty > 0) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        height: 12,
-                        width: double.infinity,
-                        color: Colors.blueGrey.shade100,
-                        child: Row(
-                          children: _activeItemsSummary.map((item) {
-                            final double q = item.qty > 0 ? item.qty : (item.amount > 0 ? item.amount : 1.0);
-                            final double denom = totalQty > 0 ? totalQty : (_totalItemsCost > 0 ? _totalItemsCost : 1.0);
-                            final int flex = math.max(1, ((q / denom) * 1000).round());
-                            return Expanded(
-                              flex: flex,
-                              child: Container(
-                                color: item.color,
-                                margin: _activeItemsSummary.length > 1
-                                    ? const EdgeInsets.symmetric(horizontal: 0.5)
-                                    : EdgeInsets.zero,
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  if (_activeItemsSummary.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                        child: Text(
-                          'මෙම කාලසීමාව තුළ ද්‍රව්‍ය නිකුත් කර නැත',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.blueGrey.shade600,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    ..._activeItemsSummary.map((item) {
-                      final double share = totalQty > 0
-                          ? (item.qty / totalQty * 100.0)
-                          : (_totalItemsCost > 0 ? (item.amount / _totalItemsCost * 100.0) : 0.0);
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: item.color.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: item.color.withValues(alpha: 0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: item.color.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                item.code.isNotEmpty ? item.code : '0${item.slotIndex}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w900,
-                                  color: item.color,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    item.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  if (item.amount > 0)
-                                    Text(
-                                      'Rs. ${currencyF.format(item.amount)}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.blueGrey.shade600,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '${weightF.format(item.qty)} ඒකක',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
-                                    color: item.color,
-                                  ),
-                                ),
-                                if (share > 0)
-                                  Text(
-                                    '${share.toStringAsFixed(1)}%',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.blueGrey.shade500,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  const Divider(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'මුළු ඒකක එකතුව',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                      Text(
-                        '${weightF.format(totalQty)} ඒකක',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'මුළු වටිනාකම',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                      ),
-                      Text(
-                        'Rs. ${currencyF.format(_totalItemsCost)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          color: Color(0xFF0284C7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(AppStrings.close, style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
     );
   }
 
