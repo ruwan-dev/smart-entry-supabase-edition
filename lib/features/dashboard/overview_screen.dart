@@ -1,5 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -2434,6 +2436,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
         final w = constraints.maxWidth;
         final bool isDesktop = w >= 960;
         final bool isTablet = w >= 600 && w < 960;
+        final bool isMobilePlatform = !kIsWeb && Platform.isAndroid;
+        final bool showItemsOnDesktop = isDesktop && !isMobilePlatform;
 
         Widget buildCard1([Key? k]) => _buildKpiCard(
           key: k,
@@ -2455,11 +2459,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
           borderColor: const Color(0xFF10B981).withValues(alpha: 0.25),
         );
 
-        Widget buildCard2([Key? k]) => _buildItemsKpiCard(
+        Widget buildCard2([Key? k, bool showItems = true]) => _buildItemsKpiCard(
           key: k,
           context: context,
           currencyF: currencyF,
           weightF: weightF,
+          showItemBreakdown: showItems,
         );
 
         Widget buildCard4([Key? k]) => _buildKpiCard(
@@ -2493,7 +2498,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               children: [
                 Expanded(flex: 1, child: buildCard1(const ValueKey('c1_d'))),
                 const SizedBox(width: 14),
-                Expanded(flex: 2, child: buildCard2(const ValueKey('c2_d'))),
+                Expanded(flex: 2, child: buildCard2(const ValueKey('c2_d'), showItemsOnDesktop)),
                 const SizedBox(width: 14),
                 Expanded(flex: 1, child: buildCard4(const ValueKey('c4_d'))),
               ],
@@ -2515,7 +2520,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              buildCard2(const ValueKey('c2_t2')),
+              buildCard2(const ValueKey('c2_t2'), false),
             ],
           );
         } else {
@@ -2524,7 +2529,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             children: [
               buildCard1(const ValueKey('c1_m')),
               const SizedBox(height: 12),
-              buildCard2(const ValueKey('c2_m')),
+              buildCard2(const ValueKey('c2_m'), false),
               const SizedBox(height: 12),
               buildCard4(const ValueKey('c4_m')),
             ],
@@ -2895,6 +2900,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required BuildContext context,
     required NumberFormat currencyF,
     required NumberFormat weightF,
+    bool showItemBreakdown = true,
   }) {
     final double totalQty = _totalItemsQty > 0
         ? _totalItemsQty
@@ -2986,7 +2992,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       ],
                     ),
                     const SizedBox(width: 20),
-                    // Right area: Badge at top-right + Vertical List (One item per row)
+                    // Right area: Badge at top-right + 4x2 Item Grid (Desktop only)
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -3013,11 +3019,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                 ),
                               ),
                             ),
-                          const SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: _buildItemLabels(weightF),
-                          ),
+                          if (showItemBreakdown) ...[
+                            const SizedBox(height: 6),
+                            _build4x2ItemGrid(weightF),
+                          ],
                         ],
                       ),
                     ),
@@ -3072,7 +3077,47 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildItemLabels(NumberFormat weightF) {
+  Widget _buildItemRow(DashboardItemSummary item, NumberFormat weightF) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: item.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              '${item.name}:',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: Colors.blueGrey.shade800,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            weightF.format(item.qty),
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _build4x2ItemGrid(NumberFormat weightF) {
     if (_activeItemsSummary.isEmpty) {
       return Text(
         'ද්‍රව්‍ය නිකුත් කර නැත',
@@ -3085,50 +3130,32 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 115),
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: _activeItemsSummary.map((item) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2.0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: item.color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${item.name}: ',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blueGrey.shade800,
-                    ),
-                  ),
-                  Text(
-                    weightF.format(item.qty),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
+    final col1Items = _activeItemsSummary.take(4).toList();
+    final col2Items = _activeItemsSummary.skip(4).take(4).toList();
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Column 1 (Items 1 to 4)
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: col1Items.map((item) => _buildItemRow(item, weightF)).toList(),
+          ),
         ),
-      ),
+        const SizedBox(width: 12),
+        // Column 2 (Items 5 to 8)
+        Expanded(
+          child: col2Items.isEmpty
+              ? const SizedBox()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: col2Items.map((item) => _buildItemRow(item, weightF)).toList(),
+                ),
+        ),
+      ],
     );
   }
 
