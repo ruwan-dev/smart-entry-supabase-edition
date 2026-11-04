@@ -122,7 +122,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   Future<void> _fetchHeatmapData() async {
-    setState(() => _isHeatmapLoading = true);
+    setState(() {
+      _isHeatmapLoading = true;
+      _heatmapData = {};
+      _heatmapMaxWeight = 0;
+    });
     DateTime start = DateTime(_selectedYear, _selectedMonth, 1);
     DateTime end = DateTime(_selectedYear, _selectedMonth + 1, 0, 23, 59, 59);
 
@@ -221,11 +225,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
         String prevExpectedId = "${prevMonthDate.year}-$prevMonthName";
         _previousSummaryData = allSummaries.where((s) => s['id'] == prevExpectedId).firstOrNull;
       } else {
-        var sortedSummaries = List<Map<String, dynamic>>.from(allSummaries)
-          ..sort((a, b) => (b['finalizedAt'] ?? '').toString().compareTo((a['finalizedAt'] ?? '').toString()));
-        _latestSummaryData = sortedSummaries.isNotEmpty ? sortedSummaries.first : null;
-        _latestSummaryId = _latestSummaryData?['id'];
-        _previousSummaryData = sortedSummaries.length > 1 ? sortedSummaries[1] : null;
+        if (_selectedFilter == 'This Month') {
+          _latestSummaryData = null;
+          _latestSummaryId = null;
+          _previousSummaryData = null;
+        } else {
+          var sortedSummaries = List<Map<String, dynamic>>.from(allSummaries)
+            ..sort((a, b) => (b['finalizedAt'] ?? '').toString().compareTo((a['finalizedAt'] ?? '').toString()));
+          _latestSummaryData = sortedSummaries.isNotEmpty ? sortedSummaries.first : null;
+          _latestSummaryId = _latestSummaryData?['id'];
+          _previousSummaryData = sortedSummaries.length > 1 ? sortedSummaries[1] : null;
+        }
       }
 
       final orgItems = await ItemService.getItems(
@@ -1643,105 +1653,175 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildFullSkeletonDashboard() {
+  Widget _buildSkeletonExecutiveKpiStrip(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final w = constraints.maxWidth;
         final bool isDesktop = w >= 960;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        final bool isTablet = w >= 600 && w < 960;
+
+        if (isDesktop) {
+          return Row(
+            children: List.generate(
+              4,
+              (i) => Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: i < 3 ? 14.0 : 0.0),
+                  child: const SkeletonBox(
+                    height: 120,
+                    width: double.infinity,
+                    borderRadius: 20,
+                  ),
+                ),
+              ),
+            ),
+          );
+        } else if (isTablet) {
+          return Column(
             children: [
-              // 4 Executive KPI Skeleton cards
-              if (isDesktop)
-                Row(
-                  children: List.generate(
-                    4,
-                    (i) => Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(right: i < 3 ? 14.0 : 0.0),
-                        child: const SkeletonBox(
-                          height: 120,
-                          width: double.infinity,
-                          borderRadius: 20,
-                        ),
-                      ),
+              Row(
+                children: const [
+                  Expanded(
+                    child: SkeletonBox(
+                      height: 120,
+                      width: double.infinity,
+                      borderRadius: 20,
                     ),
                   ),
-                )
-              else
-                Column(
-                  children: List.generate(
-                    4,
-                    (i) => const Padding(
-                      padding: EdgeInsets.only(bottom: 12.0),
-                      child: SkeletonBox(
-                        height: 110,
-                        width: double.infinity,
-                        borderRadius: 20,
-                      ),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: SkeletonBox(
+                      height: 120,
+                      width: double.infinity,
+                      borderRadius: 20,
                     ),
                   ),
-                ),
-              const SizedBox(height: 24),
-              // Heatmap + Quality Section Skeleton
-              if (isDesktop)
-                const Row(
-                  children: [
-                    Expanded(
-                      flex: 6,
-                      child: SkeletonBox(
-                        height: 362,
-                        width: double.infinity,
-                        borderRadius: 24,
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      flex: 4,
-                      child: SkeletonBox(
-                        height: 362,
-                        width: double.infinity,
-                        borderRadius: 24,
-                      ),
-                    ),
-                  ],
-                )
-              else
-                const Column(
-                  children: [
-                    SkeletonBox(
-                      height: 362,
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: const [
+                  Expanded(
+                    child: SkeletonBox(
+                      height: 120,
                       width: double.infinity,
-                      borderRadius: 24,
+                      borderRadius: 20,
                     ),
-                    SizedBox(height: 16),
-                    SkeletonBox(
-                      height: 362,
+                  ),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: SkeletonBox(
+                      height: 120,
                       width: double.infinity,
-                      borderRadius: 24,
+                      borderRadius: 20,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Column(
+            children: List.generate(
+              4,
+              (i) => const Padding(
+                padding: EdgeInsets.only(bottom: 12.0),
+                child: SkeletonBox(
+                  height: 110,
+                  width: double.infinity,
+                  borderRadius: 20,
                 ),
-              const SizedBox(height: 28),
-              const SkeletonBox(height: 30, width: 150, borderRadius: 8),
-              const SizedBox(height: 16),
-              const SkeletonBox(
-                height: 280,
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildSkeletonHarvestAndQualitySection(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 1020;
+        if (isMobile) {
+          return const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SkeletonBox(
+                height: 360,
                 width: double.infinity,
                 borderRadius: 24,
               ),
-              const SizedBox(height: 32),
-              const SkeletonBox(
-                height: 340,
+              SizedBox(height: 16),
+              SkeletonBox(
+                height: 360,
                 width: double.infinity,
                 borderRadius: 24,
               ),
             ],
-          ),
+          );
+        }
+        return const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 6,
+              child: SkeletonBox(
+                height: 360,
+                width: double.infinity,
+                borderRadius: 24,
+              ),
+            ),
+            SizedBox(width: 16),
+            Expanded(
+              flex: 4,
+              child: SkeletonBox(
+                height: 360,
+                width: double.infinity,
+                borderRadius: 24,
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildSkeletonDbBusinessSummary(BuildContext context) {
+    return const SkeletonBox(
+      height: 70,
+      width: double.infinity,
+      borderRadius: 24,
+    );
+  }
+
+  Widget _buildFullSkeletonDashboard() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16.0,
+        vertical: 20.0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTopMonthNavigatorHeader(context),
+          _buildSkeletonExecutiveKpiStrip(context),
+          const SizedBox(height: 24),
+          _buildSkeletonHarvestAndQualitySection(context),
+          const SizedBox(height: 28),
+          const SkeletonBox(height: 30, width: 150, borderRadius: 8),
+          const SizedBox(height: 16),
+          _buildSkeletonSummaryGrid(context),
+          const SizedBox(height: 32),
+          _buildSkeletonDbBusinessSummary(context),
+          const SizedBox(height: 32),
+          const SkeletonBox(
+            height: 340,
+            width: double.infinity,
+            borderRadius: 24,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1810,9 +1890,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   children: [
                     _buildCriticalAlertBanner(context, currencyF),
                     _buildTopMonthNavigatorHeader(context),
-                    _buildExecutiveKpiStrip(context, currencyF, weightF),
+                    _isSummaryLoading
+                        ? _buildSkeletonExecutiveKpiStrip(context)
+                        : _buildExecutiveKpiStrip(context, currencyF, weightF),
                     const SizedBox(height: 24),
-                    _buildHarvestAndQualitySection(context, weightF),
+                    (_isHeatmapLoading || _isSummaryLoading)
+                        ? _buildSkeletonHarvestAndQualitySection(context)
+                        : _buildHarvestAndQualitySection(context, weightF),
                     const SizedBox(height: 24),
 
                     _buildIconToggleHeader(
@@ -1835,7 +1919,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                     const SizedBox(height: 32),
 
-                    _buildDbBusinessSummary(currencyF, weightF),
+                    _isSummaryLoading
+                        ? _buildSkeletonDbBusinessSummary(context)
+                        : _buildDbBusinessSummary(currencyF, weightF),
                     const SizedBox(height: 32),
 
                     _buildIconToggleHeader(
@@ -1977,6 +2063,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         _selectedMonth = 12;
                         _selectedYear--;
                       }
+                      _isSummaryLoading = true;
+                      _isHeatmapLoading = true;
+                      _heatmapData = {};
+                      _heatmapMaxWeight = 0;
                     });
                     _fetchDashboardData();
                     _fetchHeatmapData();
@@ -2027,6 +2117,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         _selectedMonth = 1;
                         _selectedYear++;
                       }
+                      _isSummaryLoading = true;
+                      _isHeatmapLoading = true;
+                      _heatmapData = {};
+                      _heatmapMaxWeight = 0;
                     });
                     _fetchDashboardData();
                     _fetchHeatmapData();
@@ -2065,14 +2159,26 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       IconButton(
                         icon: const Icon(Icons.chevron_left_rounded),
                         onPressed: () {
-                          setState(() => _selectedYear--);
+                          setState(() {
+                            _selectedYear--;
+                            _isSummaryLoading = true;
+                            _isHeatmapLoading = true;
+                            _heatmapData = {};
+                            _heatmapMaxWeight = 0;
+                          });
                           setDialogState(() {});
                         },
                       ),
                       IconButton(
                         icon: const Icon(Icons.chevron_right_rounded),
                         onPressed: () {
-                          setState(() => _selectedYear++);
+                          setState(() {
+                            _selectedYear++;
+                            _isSummaryLoading = true;
+                            _isHeatmapLoading = true;
+                            _heatmapData = {};
+                            _heatmapMaxWeight = 0;
+                          });
                           setDialogState(() {});
                         },
                       ),
@@ -2093,6 +2199,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         setState(() {
                           _selectedFilter = 'This Month';
                           _selectedMonth = m;
+                          _isSummaryLoading = true;
+                          _isHeatmapLoading = true;
+                          _heatmapData = {};
+                          _heatmapMaxWeight = 0;
                         });
                         Navigator.pop(ctx);
                         _fetchDashboardData();
