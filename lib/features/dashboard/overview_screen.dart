@@ -2726,13 +2726,23 @@ class _OverviewScreenState extends State<OverviewScreen> {
           borderColor: const Color(0xFF10B981).withValues(alpha: 0.25),
         );
 
-        Widget buildCard2([Key? k, bool showItems = true]) => _buildItemsKpiCard(
-          key: k,
-          context: context,
-          currencyF: currencyF,
-          weightF: weightF,
-          showItemBreakdown: showItems,
-        );
+        Widget buildCard2([Key? k, bool showItems = true]) {
+          if (_isSummaryLoading) {
+            return const SkeletonBox(
+              key: ValueKey('items_card_skeleton'),
+              height: 120,
+              width: double.infinity,
+              borderRadius: 20,
+            );
+          }
+          return _buildItemsKpiCard(
+            key: k,
+            context: context,
+            currencyF: currencyF,
+            weightF: weightF,
+            showItemBreakdown: showItems,
+          );
+        }
 
         Widget buildCard4([Key? k]) => _buildKpiCard(
           key: k,
