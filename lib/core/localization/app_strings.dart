@@ -665,6 +665,10 @@ class AppStrings {
   static String get suppliersTrend => isSinhala ? 'සැපයුම්කරුවන්' : 'Suppliers';
   static String get topSuppliersShare => isSinhala ? 'ප්‍රමුඛ 5 දායකත්වය' : 'Top 5 Share';
   static String get weekPrefix => isSinhala ? 'සතිය' : 'Week';
+  static String get annualIncomeOutcomeTrend => isSinhala ? 'වාර්ෂික ආදායම් හා වියදම් ප්‍රවණතාව' : 'Annual Income & Outcome Trend';
+  static String get totalOutcome => isSinhala ? 'මුළු වියදම' : 'Total Outcome';
+  static String get netProfitOrMargin => isSinhala ? 'ශුද්ධ ලාභය' : 'Net Margin';
+  static String get lastAvailableData => isSinhala ? 'නවතම දත්ත' : 'Latest Data';
 
 
 
