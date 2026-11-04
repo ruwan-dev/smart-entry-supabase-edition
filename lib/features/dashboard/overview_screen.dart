@@ -17,6 +17,7 @@ import 'package:smart_entry/core/app_state.dart';
 import '../../core/items/item_service.dart';
 import 'package:smart_entry/core/localization/app_strings.dart';
 import 'package:smart_entry/core/localization/app_language.dart';
+import 'package:smart_entry/services/billing_lock_service.dart';
 
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -695,8 +696,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
             );
 
       // --- Factory Revenue Calculations ---
-      String startDateStr = DateFormat('yyyy-MM-dd').format(start);
-      String endDateStr = DateFormat('yyyy-MM-dd').format(end);
+      final String factoryStartStr = DateFormat('yyyy-MM-dd').format(start);
+      final String factoryEndStr = DateFormat('yyyy-MM-dd').format(end);
 
       List<dynamic> factoryEntries = [];
       offset = 0;
@@ -705,8 +706,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
             .from('factory_entries')
             .select()
             .eq('organization_id', orgId)
-            .gte('date', startDateStr)
-            .lte('date', endDateStr)
+            .gte('date', factoryStartStr)
+            .lte('date', factoryEndStr)
             .range(offset, offset + limit - 1);
         factoryEntries.addAll(chunk);
         if (chunk.length < limit) break;
@@ -2681,7 +2682,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
         );
       },
     );
-  }
   }
 
   Widget _buildRealTimeOperationalKpiStrip(
