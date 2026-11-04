@@ -886,6 +886,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _totalFactoryRevenue = totalFactoryIncome;
         _totalSupplierPayout = finalSupplierCost;
         _netDealerIncome = netIncome;
+        if (_chartIncomeValues.length == 12 && _selectedMonth >= 1 && _selectedMonth <= 12) {
+          if (totalFactoryIncome > 0 && _chartIncomeValues[_selectedMonth - 1] <= 0) {
+            _chartIncomeValues[_selectedMonth - 1] = totalFactoryIncome;
+          }
+          if (finalSupplierCost > 0 && _chartExpenseValues[_selectedMonth - 1] <= 0) {
+            _chartExpenseValues[_selectedMonth - 1] = finalSupplierCost;
+          }
+        }
         _dealerMarginPerKg = marginPerKg;
         _totalFactoryDeliveredWeight = factoryDeliveredWeight;
 
@@ -918,6 +926,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     final orgId = AppState.currentOrganizationId.value ?? '';
 
     try {
+      // 1. Finalized summaries & factory bills
       var summarySnapshot = await Supabase.instance.client
           .from('monthly_summaries')
           .select()
@@ -928,6 +937,181 @@ class _OverviewScreenState extends State<OverviewScreen> {
           .from('factory_finalized_bills')
           .select()
           .eq('organization_id', orgId);
+
+      // 2. Fetch monthly rates (supplier leaf pricing)
+      var ratesSnap = await Supabase.instance.client
+          .from('monthly_rates')
+          .select()
+          .eq('organization_id', orgId);
+      Map<int, double> normalRatesByMonth = {};
+      Map<int, double> superRatesByMonth = {};
+      double fallbackNormalRate = 0.0;
+      double fallbackSuperRate = 0.0;
+
+      for (var doc in ratesSnap) {
+        double r1 = _toDouble(doc['teaRate']);
+        double r2 = _toDouble(doc['teaRate2'] ?? doc['teaRate']);
+        if (r1 > 0) fallbackNormalRate = r1;
+        if (r2 > 0) fallbackSuperRate = r2;
+
+        final parsedDt = BillingLockService.parseMonthYear(doc['id']?.toString());
+        if (parsedDt != null && parsedDt.year == _selectedYear) {
+          normalRatesByMonth[parsedDt.month] = r1;
+          superRatesByMonth[parsedDt.month] = r2;
+        } else {
+          String idStr = doc['id']?.toString().toLowerCase() ?? '';
+          for (int m = 1; m <= 12; m++) {
+            DateTime mDate = DateTime(_selectedYear, m, 1);
+            String fullM = DateFormat('MMMM', 'en_US').format(mDate).toLowerCase();
+            String padM = m.toString().padLeft(2, '0');
+            if (idStr.contains('$_selectedYear-$padM') ||
+                idStr.contains('$_selectedYear-$fullM') ||
+                idStr.contains(fullM)) {
+              normalRatesByMonth[m] = r1;
+              superRatesByMonth[m] = r2;
+            }
+          }
+        }
+      }
+
+      // 3. Fetch factory monthly rates
+      var factoryRatesSnap = await Supabase.instance.client
+          .from('factory_monthly_rates')
+          .select()
+          .eq('organization_id', orgId);
+      Map<String, double> factoryNormalRates = {};
+      Map<String, double> factorySuperRates = {};
+      double fallbackFactoryNormal = 0.0;
+      double fallbackFactorySuper = 0.0;
+
+      for (var r in factoryRatesSnap) {
+        String fId = (r['factoryId'] ?? '').toString();
+        String mStr = (r['month'] ?? '').toString();
+        double nr = _toDouble(r['normalRate']);
+        double sr = _toDouble(r['superRate']);
+        if (nr > 0) fallbackFactoryNormal = nr;
+        if (sr > 0) fallbackFactorySuper = sr;
+        if (fId.isNotEmpty && mStr.isNotEmpty) {
+          factoryNormalRates['${fId}_$mStr'] = nr;
+          factorySuperRates['${fId}_$mStr'] = sr;
+        }
+      }
+
+      // 4. Query daily_entries for the entire selected year
+      final String yrStart = '$_selectedYear-01-01';
+      final String yrEnd = '$_selectedYear-12-31';
+      final DateTime yrStartDt = DateTime(_selectedYear, 1, 1);
+      final DateTime yrEndDt = DateTime(_selectedYear, 12, 31, 23, 59, 59);
+
+      List<dynamic> yearDailyEntries = [];
+      int offset = 0;
+      const int limit = 1000;
+      while (true) {
+        var chunk = await Supabase.instance.client
+            .from('daily_entries')
+            .select('date, timestamp, netWeight, netWeight2')
+            .eq('organization_id', orgId)
+            .gte('date', yrStart)
+            .lte('date', yrEnd)
+            .range(offset, offset + limit - 1);
+        yearDailyEntries.addAll(chunk);
+        if (chunk.length < limit) break;
+        offset += limit;
+      }
+
+      if (yearDailyEntries.isEmpty) {
+        offset = 0;
+        while (true) {
+          var chunk = await Supabase.instance.client
+              .from('daily_entries')
+              .select('date, timestamp, netWeight, netWeight2')
+              .eq('organization_id', orgId)
+              .gte('timestamp', yrStartDt.toIso8601String())
+              .lte('timestamp', yrEndDt.toIso8601String())
+              .range(offset, offset + limit - 1);
+          yearDailyEntries.addAll(chunk);
+          if (chunk.length < limit) break;
+          offset += limit;
+        }
+      }
+
+      // 5. Query factory_entries for the entire selected year
+      List<dynamic> yearFactoryEntries = [];
+      offset = 0;
+      while (true) {
+        var chunk = await Supabase.instance.client
+            .from('factory_entries')
+            .select('factoryId, date, timestamp, netWeight, netWeight2')
+            .eq('organization_id', orgId)
+            .gte('date', yrStart)
+            .lte('date', yrEnd)
+            .range(offset, offset + limit - 1);
+        yearFactoryEntries.addAll(chunk);
+        if (chunk.length < limit) break;
+        offset += limit;
+      }
+
+      if (yearFactoryEntries.isEmpty) {
+        offset = 0;
+        while (true) {
+          var chunk = await Supabase.instance.client
+              .from('factory_entries')
+              .select('factoryId, date, timestamp, netWeight, netWeight2')
+              .eq('organization_id', orgId)
+              .gte('timestamp', yrStartDt.toIso8601String())
+              .lte('timestamp', yrEndDt.toIso8601String())
+              .range(offset, offset + limit - 1);
+          yearFactoryEntries.addAll(chunk);
+          if (chunk.length < limit) break;
+          offset += limit;
+        }
+      }
+
+      int extractDocMonth(dynamic doc) {
+        if (doc == null) return 0;
+        final dVal = doc['date']?.toString().trim();
+        if (dVal != null && dVal.length >= 7) {
+          final parts = dVal.split('-');
+          if (parts.length >= 2) {
+            final parsedM = int.tryParse(parts[1]);
+            if (parsedM != null && parsedM >= 1 && parsedM <= 12) return parsedM;
+          }
+        }
+        final tsVal = doc['timestamp']?.toString().trim();
+        if (tsVal != null && tsVal.isNotEmpty) {
+          final dt = DateTime.tryParse(tsVal);
+          if (dt != null) return dt.month;
+        }
+        return 0;
+      }
+
+      // Aggregate unfinalized supplier leaf costs by month
+      Map<int, double> unfinalizedSupplierCost = {for (int i = 1; i <= 12; i++) i: 0.0};
+      for (var entry in yearDailyEntries) {
+        int m = extractDocMonth(entry);
+        if (m >= 1 && m <= 12) {
+          double w1 = _toDouble(entry['netWeight']);
+          double w2 = _toDouble(entry['netWeight2']);
+          double r1 = normalRatesByMonth[m] ?? fallbackNormalRate;
+          double r2 = superRatesByMonth[m] ?? (fallbackSuperRate > 0 ? fallbackSuperRate : r1);
+          unfinalizedSupplierCost[m] = (unfinalizedSupplierCost[m] ?? 0.0) + (w1 * r1) + (w2 * r2);
+        }
+      }
+
+      // Aggregate unfinalized factory revenue by month
+      Map<int, double> unfinalizedFactoryRev = {for (int i = 1; i <= 12; i++) i: 0.0};
+      for (var fe in yearFactoryEntries) {
+        int m = extractDocMonth(fe);
+        if (m >= 1 && m <= 12) {
+          String fId = (fe['factoryId'] ?? '').toString();
+          String mKey = '$_selectedYear-${m.toString().padLeft(2, '0')}';
+          double fnw = _toDouble(fe['netWeight']);
+          double fsw = _toDouble(fe['netWeight2']);
+          double fnr = factoryNormalRates['${fId}_$mKey'] ?? fallbackFactoryNormal;
+          double fsr = factorySuperRates['${fId}_$mKey'] ?? fallbackFactorySuper;
+          unfinalizedFactoryRev[m] = (unfinalizedFactoryRev[m] ?? 0.0) + (fnw * fnr) + (fsw * fsr);
+        }
+      }
 
       List<double> incVals = List.filled(12, 0.0);
       List<double> expVals = List.filled(12, 0.0);
@@ -942,7 +1126,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         String expectedId = "$_selectedYear-$fullMonth";
         String monthKey = "$_selectedYear-${m.toString().padLeft(2, '0')}";
 
-        // Supplier leaf cost from monthly_summaries
+        // 1. Supplier leaf cost: prefer finalized monthly summary
         var matchSummary = summarySnapshot.where((s) {
           final parsedDt = BillingLockService.parseMonthYear(s['id']?.toString());
           if (parsedDt != null) {
@@ -955,7 +1139,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ? _toDouble(matchSummary['totalGross'])
             : 0.0;
 
-        // Factory revenue from factory_finalized_bills
+        // If no finalized summary, fallback to live unfinalized calculation
+        if (supplierCost <= 0.0) {
+          supplierCost = unfinalizedSupplierCost[m] ?? 0.0;
+        }
+
+        // 2. Factory revenue: prefer finalized factory bill
         double factoryRev = 0.0;
         for (var fb in factoryBillsSnapshot) {
           if (fb['month'] == monthKey) {
@@ -963,12 +1152,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
           }
         }
 
-        // Live unfinalized estimate for the current active month if available
-        if (m == _selectedMonth && _selectedYear == DateTime.now().year) {
-          if (factoryRev == 0 && _totalFactoryRevenue > 0) {
+        // If no finalized bill, fallback to live unfinalized calculation
+        if (factoryRev <= 0.0) {
+          factoryRev = unfinalizedFactoryRev[m] ?? 0.0;
+        }
+
+        // 3. For currently viewed month, synchronize with live telemetry if available
+        if (m == _selectedMonth) {
+          if (factoryRev <= 0.0 && _totalFactoryRevenue > 0) {
             factoryRev = _totalFactoryRevenue;
           }
-          if (supplierCost == 0 && _totalSupplierPayout > 0) {
+          if (supplierCost <= 0.0 && _totalSupplierPayout > 0) {
             supplierCost = _totalSupplierPayout;
           }
         }
@@ -1003,291 +1197,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
       debugPrint("Error fetching chart data: $e");
       if (mounted) setState(() => _isChartLoading = false);
     }
-  }
-
-  double _getMaxChartValue() {
-    double mv2 = _chartIncomeValues.isNotEmpty
-        ? _chartIncomeValues.reduce((a, b) => a > b ? a : b)
-        : 0.0;
-    double mv3 = _chartExpenseValues.isNotEmpty
-        ? _chartExpenseValues.reduce((a, b) => a > b ? a : b)
-        : 0.0;
-    double mv = mv2 > mv3 ? mv2 : mv3;
-    return mv == 0 ? 100.0 : mv;
-  }
-
-  LineChartData _getYAxisData() {
-    double mv = _getMaxChartValue();
-    double yInterval = (mv / 5).ceilToDouble();
-    if (yInterval == 0) yInterval = 10;
-
-    return LineChartData(
-      minX: 0,
-      maxX: 1,
-      minY: 0,
-      maxY: mv * 1.2,
-      gridData: const FlGridData(show: false),
-      titlesData: FlTitlesData(
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 60,
-            getTitlesWidget: (v, m) => const SizedBox(),
-          ),
-        ),
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 45,
-            interval: yInterval,
-            getTitlesWidget: (v, m) {
-              if (v == 0) return const SizedBox();
-              String t = v >= 1000000
-                  ? '${(v / 1000000).toStringAsFixed(1)}M'
-                  : (v >= 1000
-                        ? '${(v / 1000).toStringAsFixed(1)}k'
-                        : '${v.toInt()}');
-              return Padding(
-                padding: const EdgeInsets.only(right: 6.0),
-                child: Text(
-                  t,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.blueGrey,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.right,
-                ),
-              );
-            },
-          ),
-        ),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
-        ),
-      ),
-      borderData: FlBorderData(show: false),
-      lineTouchData: const LineTouchData(enabled: false),
-      lineBarsData: [
-        LineChartBarData(
-          spots: const [FlSpot(0, 0), FlSpot(1, 0)],
-          color: Colors.transparent,
-          dotData: const FlDotData(show: false),
-        ),
-      ],
-    );
-  }
-
-  LineChartData _getRealChartData() {
-    double mv = _getMaxChartValue();
-    double yInterval = (mv / 5).ceilToDouble();
-    if (yInterval == 0) yInterval = 10;
-
-    double maxXV = (_chartIncomeValues.length > 1)
-        ? (_chartIncomeValues.length - 1).toDouble()
-        : 1.0;
-
-    List<FlSpot> incSpots = [];
-    List<FlSpot> expSpots = [];
-    if (_chartIncomeValues.isNotEmpty) {
-      incSpots = _chartIncomeValues.length == 1
-          ? [FlSpot(0, _chartIncomeValues[0]), FlSpot(1, _chartIncomeValues[0])]
-          : List.generate(
-              _chartIncomeValues.length,
-              (i) => FlSpot(i.toDouble(), _chartIncomeValues[i]),
-            );
-    }
-    if (_chartExpenseValues.isNotEmpty) {
-      expSpots = _chartExpenseValues.length == 1
-          ? [
-              FlSpot(0, _chartExpenseValues[0]),
-              FlSpot(1, _chartExpenseValues[0]),
-            ]
-          : List.generate(
-              _chartExpenseValues.length,
-              (i) => FlSpot(i.toDouble(), _chartExpenseValues[i]),
-            );
-    }
-
-    return LineChartData(
-      minX: 0,
-      maxX: maxXV,
-      minY: 0,
-      maxY: mv * 1.2,
-      gridData: FlGridData(
-        show: true,
-        drawVerticalLine: false,
-        drawHorizontalLine: true,
-        horizontalInterval: yInterval,
-      ),
-      titlesData: FlTitlesData(
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 60,
-            interval: 1,
-            getTitlesWidget: (v, m) {
-              int idx = v.toInt();
-              if (idx >= 0 && idx < _chartLabels.length) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 15.0),
-                  child: Transform.rotate(
-                    angle: -0.8,
-                    child: Text(
-                      _chartLabels[idx],
-                      style: const TextStyle(
-                        fontSize: 9,
-                        color: Colors.blueGrey,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                );
-              }
-              return const SizedBox();
-            },
-          ),
-        ),
-        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
-        ),
-      ),
-      borderData: FlBorderData(show: false),
-      lineTouchData: const LineTouchData(enabled: true),
-      lineBarsData: [
-        if (incSpots.isNotEmpty)
-          LineChartBarData(
-            spots: incSpots,
-            isCurved: true,
-            color: const Color(0xFF20C997), // Green for Income
-            barWidth: 3.5,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) =>
-                  FlDotCirclePainter(
-                    radius: 4,
-                    color: Colors.white,
-                    strokeWidth: 2,
-                    strokeColor: const Color(0xFF20C997),
-                  ),
-            ),
-            belowBarData: BarAreaData(show: false),
-          ),
-        if (expSpots.isNotEmpty)
-          LineChartBarData(
-            spots: expSpots,
-            isCurved: true,
-            color: const Color(0xFFFF6B6B), // Red for Expense
-            barWidth: 3.5,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) =>
-                  FlDotCirclePainter(
-                    radius: 4,
-                    color: Colors.white,
-                    strokeWidth: 2,
-                    strokeColor: const Color(0xFFFF6B6B),
-                  ),
-            ),
-            belowBarData: BarAreaData(show: false),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildLegendItem(String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Colors.blueGrey.shade700,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChartContainer() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double availableWidthForChart = constraints.maxWidth - 50 - 15;
-        if (availableWidthForChart < 0) availableWidthForChart = 0;
-
-        double chartWidth = _chartFilter == 'Daily' || _chartFilter == 'Monthly'
-            ? (availableWidthForChart > 1200 ? availableWidthForChart : 1200.0)
-            : availableWidthForChart;
-
-        return Container(
-          height: 340,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 20,
-                spreadRadius: 2,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-              child: Container(
-                padding: const EdgeInsets.only(top: 30, bottom: 10, right: 15),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.4),
-                      Colors.white.withValues(alpha: 0.1),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(width: 50, child: LineChart(_getYAxisData())),
-                    Expanded(
-                      child: ScrollConfiguration(
-                        behavior: MyCustomScrollBehavior(),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          reverse: true,
-                          child: SizedBox(
-                            width: chartWidth,
-                            child: LineChart(_getRealChartData()),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   int _getMonthIndex(String monthName) {
@@ -2506,8 +2415,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       _selectedFilter = 'This Month';
       _selectedYear = year;
       _selectedMonth = month;
+      _graphFocusedMonth = month;
       if (yearChanged) {
-        _graphFocusedMonth = 0;
         _isChartLoading = true;
       }
       _isSummaryLoading = true;
