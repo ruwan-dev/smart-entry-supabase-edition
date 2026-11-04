@@ -1894,39 +1894,33 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   Widget _buildTopMonthNavigatorHeader(BuildContext context) {
     final String currentMonthName = AppStrings.getMonthName(_selectedMonth);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 600;
-
-          final monthNavigator = Container(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            height: 34,
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(14),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.chevron_left_rounded, size: 22),
-                  padding: const EdgeInsets.all(6),
+                  icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   constraints: const BoxConstraints(),
-                  splashRadius: 18,
+                  splashRadius: 16,
                   onPressed: () {
                     setState(() {
                       _selectedFilter = 'This Month';
@@ -1942,28 +1936,27 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
                 InkWell(
                   onTap: () => _showMonthPickerMenu(context),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.calendar_month_rounded,
-                          size: 16,
+                          size: 14,
                           color: primaryAppColor,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         Text(
                           '$_selectedYear $currentMonthName',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.bold,
                             color: Colors.blueGrey.shade900,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 3),
                         Icon(
                           Icons.arrow_drop_down_rounded,
                           size: 18,
@@ -1974,10 +1967,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.chevron_right_rounded, size: 22),
-                  padding: const EdgeInsets.all(6),
+                  icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   constraints: const BoxConstraints(),
-                  splashRadius: 18,
+                  splashRadius: 16,
                   onPressed: () {
                     setState(() {
                       _selectedFilter = 'This Month';
@@ -1993,101 +1986,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
               ],
             ),
-          );
-
-          if (isNarrow) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: primaryAppColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.dashboard_rounded,
-                        color: primaryAppColor,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppStrings.monthlyOverview,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
-                          Text(
-                            '$_selectedYear $currentMonthName ${AppStrings.summary}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.blueGrey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Center(child: monthNavigator),
-              ],
-            );
-          }
-
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: primaryAppColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.dashboard_rounded,
-                      color: primaryAppColor,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        AppStrings.monthlyOverview,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      Text(
-                        '$_selectedYear $currentMonthName ${AppStrings.summary}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.blueGrey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              monthNavigator,
-            ],
-          );
-        },
+          ),
+        ],
       ),
     );
   }
