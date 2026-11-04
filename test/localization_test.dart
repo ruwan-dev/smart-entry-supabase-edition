@@ -98,6 +98,7 @@ void main() {
     expect(AppStrings.totalIncome, 'මුළු ආදායම');
     expect(AppStrings.totalOutcome, 'මුළු වියදම');
     expect(AppStrings.netProfitOrMargin, 'ශුද්ධ ලාභය');
+    expect(AppStrings.lastAvailableData, 'නවතම දත්ත');
 
     await AppLanguageService.setLanguage(AppLanguage.english);
     expect(AppStrings.weeklyIntakeTrend, 'Weekly Intake Trend');
@@ -111,5 +112,6 @@ void main() {
     expect(AppStrings.totalIncome, 'Total Income');
     expect(AppStrings.totalOutcome, 'Total Outcome');
     expect(AppStrings.netProfitOrMargin, 'Net Margin');
+    expect(AppStrings.lastAvailableData, 'Latest Data');
   });
 }

@@ -121,12 +121,32 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Map<int, double> _heatmapSuperData = {}; // day -> super leaf weight
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
+  int _lastAvailableDataMonth = 0;
+  bool _hasUserManuallySelectedMonth = false;
   int get _heatmapMonth => _selectedMonth;
   int get _heatmapYear => _selectedYear;
   bool _isHeatmapLoading = true;
   double _heatmapMaxWeight = 0;
 
   final Color primaryAppColor = const Color(0xFF1976D2);
+
+  void _selectMonth(int month) {
+    if (month == _selectedMonth && _selectedFilter == 'This Month') return;
+    _hasUserManuallySelectedMonth = true;
+    setState(() {
+      _selectedFilter = 'This Month';
+      _selectedMonth = month;
+      _isSummaryLoading = true;
+      _isHeatmapLoading = true;
+      _heatmapData = {};
+      _heatmapNormalData = {};
+      _heatmapSuperData = {};
+      _heatmapMaxWeight = 0;
+    });
+    _fetchDashboardData();
+    _fetchHeatmapData();
+    _fetchChartData();
+  }
 
   @override
   void initState() {
@@ -274,9 +294,48 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _previousSummaryData = allSummaries.where((s) => s['id'] == prevExpectedId).firstOrNull;
       } else {
         if (_selectedFilter == 'This Month') {
-          _latestSummaryData = null;
-          _latestSummaryId = null;
-          _previousSummaryData = null;
+          // If the selected month has no summary and the user has not manually locked a month,
+          // find the last available month in this year that has finalized data!
+          int bestMonth = 0;
+          Map<String, dynamic>? bestSummary;
+          if (!_hasUserManuallySelectedMonth) {
+            const engMonths = [
+              'January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'
+            ];
+            for (var s in allSummaries) {
+              final sid = (s['id'] ?? '').toString();
+              if (sid.startsWith('$_selectedYear-')) {
+                final parts = sid.split('-');
+                if (parts.length >= 2) {
+                  final mIdx = engMonths.indexWhere(
+                    (em) => em.toLowerCase() == parts[1].toLowerCase(),
+                  );
+                  if (mIdx != -1 && (mIdx + 1) > bestMonth) {
+                    bestMonth = mIdx + 1;
+                    bestSummary = s;
+                  }
+                }
+              }
+            }
+          }
+
+          if (bestMonth > 0 && bestSummary != null) {
+            _selectedMonth = bestMonth;
+            _lastAvailableDataMonth = bestMonth;
+            _latestSummaryData = bestSummary;
+            _latestSummaryId = bestSummary['id'];
+            DateTime prevMonthDate = DateTime(_selectedYear, bestMonth - 1, 1);
+            String prevMonthName = DateFormat('MMMM').format(prevMonthDate);
+            String prevExpectedId = "${prevMonthDate.year}-$prevMonthName";
+            _previousSummaryData = allSummaries.where((s) => s['id'] == prevExpectedId).firstOrNull;
+            // Also refresh heatmap for this discovered latest month
+            _fetchHeatmapData();
+          } else {
+            _latestSummaryData = null;
+            _latestSummaryId = null;
+            _previousSummaryData = null;
+          }
         } else {
           var sortedSummaries = List<Map<String, dynamic>>.from(allSummaries)
             ..sort((a, b) => (b['finalizedAt'] ?? '').toString().compareTo((a['finalizedAt'] ?? '').toString()));
@@ -823,14 +882,40 @@ class _OverviewScreenState extends State<OverviewScreen> {
         expVals[m - 1] = supplierCost;
       }
 
+      int lastDataMonth = 0;
+      for (int m = 12; m >= 1; m--) {
+        if (incVals[m - 1] > 0 || expVals[m - 1] > 0) {
+          lastDataMonth = m;
+          break;
+        }
+      }
+
+      int newSelectedMonth = _selectedMonth;
+      if (!_hasUserManuallySelectedMonth && lastDataMonth > 0) {
+        if (incVals[_selectedMonth - 1] == 0 && expVals[_selectedMonth - 1] == 0) {
+          newSelectedMonth = lastDataMonth;
+        }
+      }
+
+      final bool monthSwitched = newSelectedMonth != _selectedMonth;
+
       if (mounted) {
         setState(() {
           _chartIncomeValues = incVals;
           _chartExpenseValues = expVals;
           _chartLabels = tl;
+          _lastAvailableDataMonth = lastDataMonth;
+          if (monthSwitched) {
+            _selectedMonth = newSelectedMonth;
+          }
           _isChartLoading = false;
           _isInitialChartLoad = false;
         });
+
+        if (monthSwitched) {
+          _fetchDashboardData();
+          _fetchHeatmapData();
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _isChartLoading = false);
@@ -2045,6 +2130,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         onPressed: () {
                           setState(() {
                             _selectedYear--;
+                            _hasUserManuallySelectedMonth = false;
                             _isSummaryLoading = true;
                             _isHeatmapLoading = true;
                             _heatmapData = {};
@@ -2060,6 +2146,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         onPressed: () {
                           setState(() {
                             _selectedYear++;
+                            _hasUserManuallySelectedMonth = false;
                             _isSummaryLoading = true;
                             _isHeatmapLoading = true;
                             _heatmapData = {};
@@ -2084,20 +2171,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     final bool isSel = m == _selectedMonth;
                     return InkWell(
                       onTap: () {
-                        setState(() {
-                          _selectedFilter = 'This Month';
-                          _selectedMonth = m;
-                          _isSummaryLoading = true;
-                          _isHeatmapLoading = true;
-                          _heatmapData = {};
-                          _heatmapNormalData = {};
-                          _heatmapSuperData = {};
-                          _heatmapMaxWeight = 0;
-                        });
                         Navigator.pop(ctx);
-                        _fetchDashboardData();
-                        _fetchHeatmapData();
-                        _fetchChartData();
+                        _selectMonth(m);
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
@@ -3095,7 +3170,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       if (exp > maxVal) maxVal = exp;
     }
     if (maxVal <= 0) maxVal = 100000.0;
-    final double maxY = maxVal * 1.25;
+    final double maxY = maxVal * 1.38;
     final double yInterval = (maxY / 4) > 0 ? (maxY / 4) : 25000.0;
 
     // Build 12 month grouped bar data
@@ -3214,7 +3289,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  '$_selectedYear ${AppStrings.annualIncomeOutcomeTrend}',
+                                  _lastAvailableDataMonth > 0
+                                      ? '$_selectedYear ${AppStrings.annualIncomeOutcomeTrend} • ${AppStrings.lastAvailableData}: ${AppStrings.getMonthName(_lastAvailableDataMonth)}'
+                                      : '$_selectedYear ${AppStrings.annualIncomeOutcomeTrend}',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.blueGrey.shade600,
@@ -3282,18 +3359,41 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                 // Main 12-Month Grouped Bar Chart
                 SizedBox(
-                  height: 195,
+                  height: 205,
                   child: BarChart(
                     BarChartData(
                       maxY: maxY,
                       alignment: BarChartAlignment.spaceAround,
                       barTouchData: BarTouchData(
                         enabled: true,
+                        touchCallback: (FlTouchEvent event,
+                            BarTouchResponse? touchResponse) {
+                          if (event is FlTapUpEvent &&
+                              touchResponse != null &&
+                              touchResponse.spot != null) {
+                            final int tappedIndex =
+                                touchResponse.spot!.touchedBarGroupIndex;
+                            if (tappedIndex >= 0 && tappedIndex < 12) {
+                              final int tappedMonth = tappedIndex + 1;
+                              _selectMonth(tappedMonth);
+                            }
+                          }
+                        },
                         touchTooltipData: BarTouchTooltipData(
-                          tooltipRoundedRadius: 8,
+                          tooltipRoundedRadius: 10,
                           tooltipPadding: const EdgeInsets.symmetric(
                             horizontal: 10,
                             vertical: 6,
+                          ),
+                          tooltipMargin: 6,
+                          maxContentWidth: 260,
+                          fitInsideHorizontally: true,
+                          fitInsideVertically: true,
+                          getTooltipColor: (_) => const Color(0xFF0F172A)
+                              .withValues(alpha: 0.95),
+                          tooltipBorder: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            width: 1,
                           ),
                           getTooltipItem: (group, groupIndex, rod, rodIndex) {
                             if (groupIndex < 0 || groupIndex >= 12) return null;
@@ -3314,7 +3414,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 11,
+                                fontSize: 10.5,
                               ),
                               children: [
                                 TextSpan(
@@ -3323,7 +3423,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   style: const TextStyle(
                                     color: Color(0xFF34D399),
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 10,
+                                    fontSize: 9.5,
                                   ),
                                 ),
                                 TextSpan(
@@ -3332,7 +3432,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                   style: const TextStyle(
                                     color: Color(0xFFF87171),
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 10,
+                                    fontSize: 9.5,
                                   ),
                                 ),
                                 TextSpan(
@@ -3343,7 +3443,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                         ? const Color(0xFF67E8F9)
                                         : const Color(0xFFFCA5A5),
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 10.5,
+                                    fontSize: 10,
                                   ),
                                 ),
                               ],
@@ -3393,24 +3493,60 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            reservedSize: 24,
+                            reservedSize: 28,
                             getTitlesWidget: (value, meta) {
                               final idx = value.toInt();
                               if (idx < 0 || idx >= 12) return const SizedBox();
+                              final int m = idx + 1;
                               final bool isCurrentSel =
-                                  (idx + 1) == _selectedMonth;
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 5),
-                                child: Text(
-                                  AppStrings.getMonthShortName(idx + 1),
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: isCurrentSel
-                                        ? FontWeight.w900
-                                        : FontWeight.w600,
-                                    color: isCurrentSel
-                                        ? primaryAppColor
-                                        : Colors.blueGrey.shade700,
+                                  m == _selectedMonth;
+                              final bool isLastDataMonth =
+                                  m == _lastAvailableDataMonth;
+
+                              return GestureDetector(
+                                onTap: () => _selectMonth(m),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: isCurrentSel ? 6 : 2,
+                                          vertical: 1.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isCurrentSel
+                                              ? primaryAppColor
+                                                  .withValues(alpha: 0.14)
+                                              : Colors.transparent,
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          AppStrings.getMonthShortName(m),
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: isCurrentSel
+                                                ? FontWeight.w900
+                                                : FontWeight.w600,
+                                            color: isCurrentSel
+                                                ? primaryAppColor
+                                                : Colors.blueGrey.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isLastDataMonth && !isCurrentSel)
+                                        Container(
+                                          width: 3.5,
+                                          height: 3.5,
+                                          margin: const EdgeInsets.only(top: 2),
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF10B981),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               );
