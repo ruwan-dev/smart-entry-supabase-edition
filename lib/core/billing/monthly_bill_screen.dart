@@ -1806,7 +1806,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
           .from('monthly_summaries')
           .select()
           .eq('organization_id', orgId)
-          .eq('id', diff.ratesDocId)
+          .or('id.eq.${diff.ratesDocId},id.eq.${orgId}_${diff.ratesDocId}')
           .maybeSingle();
 
       if (summaryDoc != null) {
@@ -1826,7 +1826,7 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
               'totalWeight': _parseDouble(summaryDoc['totalWeight']) + deltaWeight,
             })
             .eq('organization_id', orgId)
-            .eq('id', diff.ratesDocId);
+            .eq('id', summaryDoc['id']);
       }
 
       // Dismiss saving dialog

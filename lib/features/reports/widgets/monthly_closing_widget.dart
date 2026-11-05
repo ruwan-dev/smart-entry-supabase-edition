@@ -109,12 +109,25 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
 
       var summaryDoc = await Supabase.instance.client
           .from('monthly_summaries')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
-          .eq('id', ratesDocId)
+          .select()
+          .eq('organization_id', orgId)
+          .or('id.eq.$ratesDocId,id.eq.${orgId}_$ratesDocId')
           .maybeSingle();
+
       if (summaryDoc != null) {
         _isAlreadyFinalized = true;
         _monthlySummaryData = summaryDoc;
+      } else {
+        // Fallback: check if finalized_bills already exist for this month and org
+        final billsCheck = await Supabase.instance.client
+            .from('finalized_bills')
+            .select('id')
+            .eq('organization_id', orgId)
+            .ilike('id', '%_$ratesDocId')
+            .limit(1);
+        if (billsCheck.isNotEmpty) {
+          _isAlreadyFinalized = true;
+        }
       }
 
       var priceDoc = await Supabase.instance.client
@@ -412,8 +425,16 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
       }
 
       if (!_isAlreadyFinalized) {
+        final summaryDocId = '${orgId}_$ratesDocId';
+        // Clean up legacy un-prefixed record for this org if any exists
+        await Supabase.instance.client
+            .from('monthly_summaries')
+            .delete()
+            .eq('organization_id', orgId)
+            .eq('id', ratesDocId);
+
         await Supabase.instance.client.from('monthly_summaries').upsert({
-          'id': ratesDocId,
+          'id': summaryDocId,
           'totalWeight': totalWeight,
           'totalGross': totalGross,
           'totalAdvance': totalAdvance,
@@ -430,7 +451,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           'totalNegativeNet': totalNegativeNet,
           'totalNet': totalNet,
           'finalizedAt': DateTime.now().toIso8601String(),
-          'organization_id': AppState.currentOrganizationId.value ?? '',
+          'organization_id': orgId,
         });
       }
 
