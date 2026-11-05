@@ -80,10 +80,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
   double _totalWeight = 0.0;
   int _totalCustomers = 0;
 
-  // Desktop section scrolling & full-page snapping
-  final ScrollController _dashboardScrollController = ScrollController();
-  bool _isSectionAnimating = false;
-  int _activeDesktopSection = 0;
+  // Desktop section scrolling & full-page PageView (Zero Halfway Scroll)
+  final PageController _desktopPageController = PageController();
+  final ScrollController _sectionTwoScrollController = ScrollController();
+  bool _isPageAnimating = false;
+  int _activeDesktopPage = 0;
 
   // Today's Operational Telemetry
   double _todayTotalWeight = 0.0;
@@ -187,7 +188,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   @override
   void dispose() {
-    _dashboardScrollController.dispose();
+    _desktopPageController.dispose();
+    _sectionTwoScrollController.dispose();
     AppState.refreshTrigger.removeListener(_onRefresh);
     AppLanguageService.currentLanguage.removeListener(_onLanguageChanged);
     super.dispose();
@@ -2249,30 +2251,29 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  void _scrollToSection(int sectionIndex, double viewportHeight) {
-    if (_isSectionAnimating) return;
-    _isSectionAnimating = true;
+  void _goToDesktopPage(int targetPage) {
+    if (_isPageAnimating || _activeDesktopPage == targetPage) return;
+    _isPageAnimating = true;
     setState(() {
-      _activeDesktopSection = sectionIndex;
+      _activeDesktopPage = targetPage;
     });
 
-    final double targetOffset = sectionIndex == 0 ? 0.0 : viewportHeight;
-    if (_dashboardScrollController.hasClients) {
-      _dashboardScrollController
-          .animateTo(
-            targetOffset,
-            duration: const Duration(milliseconds: 450),
+    if (_desktopPageController.hasClients) {
+      _desktopPageController
+          .animateToPage(
+            targetPage,
+            duration: const Duration(milliseconds: 420),
             curve: Curves.easeInOutCubic,
           )
           .then((_) {
-        Future.delayed(const Duration(milliseconds: 150), () {
+        Future.delayed(const Duration(milliseconds: 250), () {
           if (mounted) {
-            _isSectionAnimating = false;
+            _isPageAnimating = false;
           }
         });
       });
     } else {
-      _isSectionAnimating = false;
+      _isPageAnimating = false;
     }
   }
 
@@ -2331,57 +2332,42 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     );
                   }
 
-                  // Desktop / Laptop: Full-Page Section Snapping
+                  // Desktop / Laptop: True Full-Page PageView (Zero Halfway Scroll)
                   return Stack(
                     children: [
                       Listener(
                         onPointerSignal: (pointerSignal) {
-                          if (pointerSignal is PointerScrollEvent && !_isSectionAnimating) {
+                          if (pointerSignal is PointerScrollEvent) {
+                            if (_isPageAnimating) return;
                             final dy = pointerSignal.scrollDelta.dy;
-                            final currentOffset = _dashboardScrollController.hasClients
-                                ? _dashboardScrollController.offset
-                                : 0.0;
 
-                            if (dy > 15) {
-                              // Scrolling down
-                              if (_activeDesktopSection == 0) {
-                                _scrollToSection(1, viewportHeight);
+                            if (_activeDesktopPage == 0) {
+                              if (dy > 15) {
+                                _goToDesktopPage(1);
                               }
-                            } else if (dy < -15) {
-                              // Scrolling up
-                              if (_activeDesktopSection == 1 && currentOffset <= viewportHeight + 40) {
-                                _scrollToSection(0, viewportHeight);
+                            } else if (_activeDesktopPage == 1) {
+                              if (dy < -15) {
+                                if (!_sectionTwoScrollController.hasClients ||
+                                    _sectionTwoScrollController.offset <= 10) {
+                                  _goToDesktopPage(0);
+                                }
                               }
                             }
                           }
                         },
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: (notification) {
-                            if (notification is ScrollEndNotification && !_isSectionAnimating) {
-                              final offset = _dashboardScrollController.hasClients
-                                  ? _dashboardScrollController.offset
-                                  : 0.0;
-                              if (offset > 25 && offset < viewportHeight - 25) {
-                                final target = offset < (viewportHeight / 2) ? 0 : 1;
-                                _scrollToSection(target, viewportHeight);
-                              } else if (offset >= viewportHeight - 25 && _activeDesktopSection != 1) {
-                                setState(() => _activeDesktopSection = 1);
-                              } else if (offset <= 25 && _activeDesktopSection != 0) {
-                                setState(() => _activeDesktopSection = 0);
-                              }
-                            }
-                            return false;
+                        child: PageView(
+                          controller: _desktopPageController,
+                          scrollDirection: Axis.vertical,
+                          physics: const NeverScrollableScrollPhysics(),
+                          onPageChanged: (page) {
+                            setState(() {
+                              _activeDesktopPage = page;
+                            });
                           },
-                          child: SingleChildScrollView(
-                            controller: _dashboardScrollController,
-                            physics: const ClampingScrollPhysics(),
-                            child: Column(
-                              children: [
-                                _buildDesktopSectionOne(context, currencyF, weightF, viewportHeight),
-                                _buildDesktopSectionTwo(context, currencyF, weightF, viewportHeight),
-                              ],
-                            ),
-                          ),
+                          children: [
+                            _buildDesktopSectionOne(context, currencyF, weightF, viewportHeight),
+                            _buildDesktopSectionTwo(context, currencyF, weightF, viewportHeight),
+                          ],
                         ),
                       ),
                       // Floating section indicator on right edge
@@ -2390,7 +2376,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         top: 0,
                         bottom: 0,
                         child: Center(
-                          child: _buildDesktopSectionIndicator(viewportHeight),
+                          child: _buildDesktopSectionIndicator(),
                         ),
                       ),
                     ],
@@ -2458,68 +2444,70 @@ class _OverviewScreenState extends State<OverviewScreen> {
     NumberFormat weightF,
     double viewportHeight,
   ) {
-    return Container(
-      constraints: BoxConstraints(
-        minHeight: viewportHeight,
-        maxHeight: math.max(viewportHeight, 520),
-      ),
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildTopBannerAndMonthHeader(context, currencyF),
-              const SizedBox(height: 6),
-              _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
-              const SizedBox(height: 8),
-              _buildHarvestAndQualitySection(context, currencyF, weightF),
-            ],
-          ),
-          Center(
-            child: InkWell(
-              onTap: () => _scrollToSection(1, viewportHeight),
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3.5),
-                margin: const EdgeInsets.only(top: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade300, width: 0.8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      AppStrings.financialOverview,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: viewportHeight - 16,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildTopBannerAndMonthHeader(context, currencyF),
+                const SizedBox(height: 6),
+                _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
+                const SizedBox(height: 8),
+                _buildHarvestAndQualitySection(context, currencyF, weightF),
+              ],
+            ),
+            Center(
+              child: InkWell(
+                onTap: () => _goToDesktopPage(1),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  margin: const EdgeInsets.only(top: 4, bottom: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade300, width: 0.8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 16,
-                      color: primaryAppColor,
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'මූල්‍ය හා ආදායම් දළු විශ්ලේෂණය',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: primaryAppColor,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2530,102 +2518,106 @@ class _OverviewScreenState extends State<OverviewScreen> {
     NumberFormat weightF,
     double viewportHeight,
   ) {
-    return Container(
-      constraints: BoxConstraints(
-        minHeight: viewportHeight,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: InkWell(
-              onTap: () => _scrollToSection(0, viewportHeight),
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3.5),
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade300, width: 0.8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.keyboard_arrow_up_rounded,
-                      size: 16,
-                      color: primaryAppColor,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'ආපසු ඉහළට',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
+    return SingleChildScrollView(
+      controller: _sectionTwoScrollController,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: viewportHeight - 16,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: InkWell(
+                onTap: () => _goToDesktopPage(0),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3.5),
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade300, width: 0.8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        size: 16,
+                        color: primaryAppColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'ආපසු ඉහළට',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          _isSummaryLoading
-              ? const SkeletonBox(
-                  height: 200,
-                  width: double.infinity,
-                  borderRadius: 20,
-                )
-              : _buildMonthlyFinancialSettlementSection(context, currencyF, weightF),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 7,
-                child: _isSummaryLoading
-                    ? _buildSkeletonDbBusinessSummary(context)
-                    : _buildDbBusinessSummary(currencyF, weightF),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 5,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildTopSuppliersHeader(context),
-                    const SizedBox(height: 12),
-                    _buildTopSuppliersList(weightF),
-                  ],
+            _isSummaryLoading
+                ? const SkeletonBox(
+                    height: 200,
+                    width: double.infinity,
+                    borderRadius: 20,
+                  )
+                : _buildMonthlyFinancialSettlementSection(context, currencyF, weightF),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 7,
+                  child: _isSummaryLoading
+                      ? _buildSkeletonDbBusinessSummary(context)
+                      : _buildDbBusinessSummary(currencyF, weightF),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildTopSuppliersHeader(context),
+                      const SizedBox(height: 12),
+                      _buildTopSuppliersList(weightF),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDesktopSectionIndicator(double viewportHeight) {
+  Widget _buildDesktopSectionIndicator() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.85),
+        color: Colors.white.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -2637,14 +2629,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
           Tooltip(
             message: 'ප්‍රධාන සාරාංශය (Overview)',
             child: InkWell(
-              onTap: () => _scrollToSection(0, viewportHeight),
+              onTap: () => _goToDesktopPage(0),
               borderRadius: BorderRadius.circular(12),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 width: 10,
-                height: _activeDesktopSection == 0 ? 24 : 10,
+                height: _activeDesktopPage == 0 ? 24 : 10,
                 decoration: BoxDecoration(
-                  color: _activeDesktopSection == 0
+                  color: _activeDesktopPage == 0
                       ? primaryAppColor
                       : Colors.grey.shade400,
                   borderRadius: BorderRadius.circular(6),
@@ -2656,14 +2648,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
           Tooltip(
             message: 'මූල්‍ය විශ්ලේෂණය (Settlements)',
             child: InkWell(
-              onTap: () => _scrollToSection(1, viewportHeight),
+              onTap: () => _goToDesktopPage(1),
               borderRadius: BorderRadius.circular(12),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 width: 10,
-                height: _activeDesktopSection == 1 ? 24 : 10,
+                height: _activeDesktopPage == 1 ? 24 : 10,
                 decoration: BoxDecoration(
-                  color: _activeDesktopSection == 1
+                  color: _activeDesktopPage == 1
                       ? primaryAppColor
                       : Colors.grey.shade400,
                   borderRadius: BorderRadius.circular(6),
