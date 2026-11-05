@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'package:smart_entry/core/customer/customer_form_screen.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:smart_entry/core/factory/factory_form_screen.dart';
 import 'package:smart_entry/core/entries/daily_entries_screen.dart';
@@ -132,7 +134,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       valueListenable: AppLanguageService.currentLanguage,
       builder: (context, currentLang, _) {
         final double screenWidth = MediaQuery.of(context).size.width;
-        final bool isMobile = screenWidth < 600;
+        final bool isMobilePlatform =
+            !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+        final bool isMobile = isMobilePlatform || screenWidth < 700;
+        final bool showClock =
+            !kIsWeb && Platform.isWindows && screenWidth >= 850;
 
         // On mobile: only tabs 0, 1, 3 (Overview, Customers, Entries) are supported.
         if (isMobile && (_selectedIndex == 2 || _selectedIndex > 3)) {
@@ -221,7 +227,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (!isMobile) ...[
+                if (showClock) ...[
                   const _SriLankaClockBadge(),
                   const SizedBox(width: 8),
                 ],
