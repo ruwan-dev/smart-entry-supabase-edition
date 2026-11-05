@@ -44,10 +44,12 @@ class _CustomerAnalysisScreenState extends State<CustomerAnalysisScreen> {
     });
     try {
       try {
+        final orgId = AppState.currentOrganizationId.value ?? '';
         var settingDoc = await Supabase.instance.client
             .from('global_settings')
-            .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
-            .eq('id', 'rating_config')
+            .select()
+            .eq('organization_id', orgId)
+            .or('id.eq.rating_config,id.eq.${orgId}_rating_config')
             .maybeSingle();
         if (settingDoc != null && settingDoc['highVolumeThreshold'] != null) {
           _highVolumeThreshold = (settingDoc['highVolumeThreshold'] as num)

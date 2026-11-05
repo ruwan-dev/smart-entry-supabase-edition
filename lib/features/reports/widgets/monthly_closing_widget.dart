@@ -132,8 +132,9 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
 
       var priceDoc = await Supabase.instance.client
           .from('global_settings')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
-          .eq('id', 'prices')
+          .select()
+          .eq('organization_id', orgId)
+          .or('id.eq.prices,id.eq.${orgId}_prices')
           .maybeSingle();
       var pData = priceDoc ?? {};
 

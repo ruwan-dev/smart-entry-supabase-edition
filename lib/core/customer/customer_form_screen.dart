@@ -158,10 +158,12 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
     _isFetching = true;
     try {
       try {
+        final orgId = AppState.currentOrganizationId.value ?? '';
         var settingDoc = await Supabase.instance.client
             .from('global_settings')
             .select()
-            .eq('id', 'rating_config')
+            .eq('organization_id', orgId)
+            .or('id.eq.rating_config,id.eq.${orgId}_rating_config')
             .maybeSingle();
         if (settingDoc != null && settingDoc['highVolumeThreshold'] != null) {
           _highVolumeThreshold = (settingDoc['highVolumeThreshold'] as num)

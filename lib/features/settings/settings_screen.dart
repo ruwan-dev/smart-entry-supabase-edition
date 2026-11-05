@@ -170,10 +170,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadRatingConfig() async {
     try {
+      final orgId = AppState.currentOrganizationId.value ?? '';
       var doc = await Supabase.instance.client
           .from('global_settings')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
-          .eq('id', 'rating_config')
+          .select()
+          .eq('organization_id', orgId)
+          .or('id.eq.rating_config,id.eq.${orgId}_rating_config')
           .maybeSingle();
       if (doc != null) {
         setState(() {
@@ -482,9 +484,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _isLoadingGlobal = true;
     });
     try {
+      final orgId = AppState.currentOrganizationId.value ?? '';
       await Supabase.instance.client.from('global_settings').upsert({
-        'organization_id': AppState.currentOrganizationId.value ?? '',
-          'id': 'rating_config',
+        'organization_id': orgId,
+        'id': '${orgId}_rating_config',
         'highVolumeThreshold':
             double.tryParse(_highVolumeThresholdController.text.trim()) ??
             150.0,
