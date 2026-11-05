@@ -3589,17 +3589,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
       final double exp =
           i < _chartExpenseValues.length ? _chartExpenseValues[i] : 0.0;
 
-      final int m = i + 1;
-      final bool isFocused = m == activeGraphMonth;
-      final bool hasData = inc > 0 || exp > 0;
-      final int rodIndexWithMaxHeight = exp >= inc ? 1 : 0;
-
       barGroups.add(
         BarChartGroupData(
           x: i,
           barsSpace: 2,
-          showingTooltipIndicators:
-              (isFocused && hasData) ? [rodIndexWithMaxHeight] : [],
+          showingTooltipIndicators: const [],
           barRods: [
             // Income Rod (Green)
             BarChartRodData(
