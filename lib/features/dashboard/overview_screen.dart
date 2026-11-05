@@ -3745,7 +3745,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                                 ],
                               ),
                               child: const Icon(
-                                Icons.analytics_rounded,
+                                Icons.people_alt_rounded,
                                 size: 22,
                                 color: Color(0xFF2563EB),
                               ),
