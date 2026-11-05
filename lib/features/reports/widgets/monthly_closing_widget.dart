@@ -92,10 +92,12 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
       ).format(DateTime(prevYear, prevMonth));
       String prevMonthKey = "$prevYear-$prevMonthName";
 
+      final orgId = AppState.currentOrganizationId.value ?? '';
       var ratesDoc = await Supabase.instance.client
           .from('monthly_rates')
-          .select().eq('organization_id', AppState.currentOrganizationId.value ?? '')
-          .eq('id', ratesDocId)
+          .select()
+          .eq('organization_id', orgId)
+          .or('id.eq.$ratesDocId,id.eq.${orgId}_$ratesDocId')
           .maybeSingle();
       if (ratesDoc == null) {
         setState(() {

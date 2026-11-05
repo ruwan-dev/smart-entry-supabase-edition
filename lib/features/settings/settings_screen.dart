@@ -427,12 +427,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isLoadingMonthly = true;
       });
       try {
-        String docId = '$_selectedYear-$_selectedMonth';
+        final orgId = AppState.currentOrganizationId.value ?? '';
+        String rawMonthKey = '$_selectedYear-$_selectedMonth';
+        // Prefix with organization_id to ensure strict multi-tenant isolation across all organizations
+        String docId = '${orgId}_$rawMonthKey';
         String sortValue =
             '$_selectedYear-${(_months.indexOf(_selectedMonth) + 1).toString().padLeft(2, '0')}';
 
+        // Clean up legacy un-prefixed record for this org if any exists
+        await Supabase.instance.client
+            .from('monthly_rates')
+            .delete()
+            .eq('organization_id', orgId)
+            .eq('id', rawMonthKey);
+
         await Supabase.instance.client.from('monthly_rates').upsert({
-          'organization_id': AppState.currentOrganizationId.value ?? '',
+          'organization_id': orgId,
           'id': docId,
           'year': _selectedYear,
           'month': _selectedMonth,
@@ -447,10 +457,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _teaRate2Controller.clear();
         _transportRateController.clear();
 
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(AppStrings.ratesSavedSuccess)),
           );
+        }
       } catch (e) {
         if (mounted)
           ScaffoldMessenger.of(

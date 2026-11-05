@@ -1260,12 +1260,12 @@ class _MonthlyBillScreenState extends State<MonthlyBillScreen> {
     String localizedDisplayMonth = AppStrings.formatDisplayMonth(displayMonth);
     String ratesDocId = "$year-$monthName";
 
-    // 1. Fetch monthly rates
+    // 1. Fetch monthly rates (supports org-prefixed and legacy unprefixed format)
     var ratesDoc = await Supabase.instance.client
         .from('monthly_rates')
         .select()
         .eq('organization_id', orgId)
-        .eq('id', ratesDocId)
+        .or('id.eq.$ratesDocId,id.eq.${orgId}_$ratesDocId')
         .maybeSingle();
 
     double teaRate = _parseDouble(ratesDoc?['teaRate'] ?? currentBill['teaRate']);

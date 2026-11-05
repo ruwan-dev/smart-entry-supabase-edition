@@ -407,10 +407,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
       double fallbackSuperRate = 0.0;
       for (var doc in ratesSnap) {
         String rId = doc['id'].toString();
+        String pureKey = rId.contains('_') ? rId.split('_').last : rId;
+        String ymKey = '${doc['year']}-${doc['month']}';
         double r1 = (doc['teaRate'] ?? 0.0).toDouble();
         double r2 = (doc['teaRate2'] ?? doc['teaRate'] ?? 0.0).toDouble();
         ratesMap[rId] = r1;
+        ratesMap[pureKey] = r1;
+        ratesMap[ymKey] = r1;
         superRatesMap[rId] = r2;
+        superRatesMap[pureKey] = r2;
+        superRatesMap[ymKey] = r2;
         if (r1 > 0) fallbackNormalRate = r1;
         if (r2 > 0) fallbackSuperRate = r2;
       }

@@ -12,11 +12,15 @@ class BillingLockService {
 
   DateTime? get latestFinalizedMonth => _latestFinalizedMonth;
 
-  /// Parses a month-year string such as "2026-August", "2026 August", or "2026-08"
-  /// into a DateTime pointing to the 1st day of that month.
+  /// Parses a month-year string such as "2026-August", "2026 August", "2026-08",
+  /// or org-scoped keys such as "<orgId>_2026-August" into a DateTime pointing to the 1st day of that month.
   static DateTime? parseMonthYear(String? str) {
     if (str == null || str.trim().isEmpty) return null;
-    final clean = str.trim().replaceAll('-', ' ');
+    String toParse = str.trim();
+    if (toParse.contains('_')) {
+      toParse = toParse.split('_').last;
+    }
+    final clean = toParse.replaceAll('-', ' ');
     final parts = clean.split(RegExp(r'\s+'));
     if (parts.length >= 2) {
       int? y = int.tryParse(parts[0]);
