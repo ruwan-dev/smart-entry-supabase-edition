@@ -93,6 +93,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   int _todaySuppliersCount = 0;
 
   double _overallOutstandingAdvances = 0.0;
+  double _monthlyAdvancesGiven = 0.0;
 
   // Organization Financial & Yield Analytics
   double _totalFactoryRevenue = 0.0;
@@ -565,6 +566,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
       double totTeaQty = 0.0;
       double totOtherQty = 0.0;
       double totItemsCost = 0.0;
+      double totAdvancesMonth = 0.0;
+      Map<String, double> supplierIncomeMap = {};
+      Map<String, double> supplierExpenseMap = {};
       Map<String, double> itemBreakdownQ = {};
       Map<String, double> itemBreakdownA = {};
 
@@ -589,7 +593,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
         totFertQty += fQ;
         totTeaQty += tQ;
         totOtherQty += oQ;
-        totItemsCost += (parsed.f1Amt + parsed.f2Amt + parsed.t1Amt + parsed.t2Amt + parsed.otherDynamicAmt);
+
+        double entryItemsCost = (parsed.f1Amt + parsed.f2Amt + parsed.t1Amt + parsed.t2Amt + parsed.otherDynamicAmt);
+        double adv = _toDouble(d['advanceAmount']);
+        totAdvancesMonth += adv;
+        totItemsCost += entryItemsCost;
+        double entryDeductions = entryItemsCost + adv;
 
         for (var item in parsed.itemsList) {
           int slot = int.tryParse(item['slot']?.toString() ?? '0') ?? 0;
@@ -630,6 +639,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         if (cId.isNotEmpty) {
           if (entryWeight > 0) activeSupplierIds.add(cId);
           supplierWeightMap[cId] = (supplierWeightMap[cId] ?? 0.0) + entryWeight;
+          supplierExpenseMap[cId] = (supplierExpenseMap[cId] ?? 0.0) + entryDeductions;
         }
 
         // Calculate supplier payout
@@ -646,7 +656,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
         double sR1 = ratesMap[mKey] ?? fallbackNormalRate;
         double sR2 = superRatesMap[mKey] ?? (fallbackSuperRate > 0 ? fallbackSuperRate : sR1);
-        calcSupplierPayout += (w1 * sR1) + (w2 * sR2);
+        double entryPayout = (w1 * sR1) + (w2 * sR2);
+        calcSupplierPayout += entryPayout;
+        if (cId.isNotEmpty) {
+          supplierIncomeMap[cId] = (supplierIncomeMap[cId] ?? 0.0) + entryPayout;
+        }
       }
 
       var sortedSuppliers = supplierWeightMap.entries.toList()
@@ -654,8 +668,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
       _allSuppliers = sortedSuppliers
           .map(
             (e) => {
+              'id': e.key,
               'name': customerNames[e.key] ?? 'Unknown',
               'weight': e.value,
+              'income': supplierIncomeMap[e.key] ?? 0.0,
+              'expense': supplierExpenseMap[e.key] ?? 0.0,
             },
           )
           .toList();
@@ -916,6 +933,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _totalTeaPacketQty = totTeaQty;
         _totalOtherItemsQty = totOtherQty;
         _totalItemsCost = totItemsCost;
+        _monthlyAdvancesGiven = totAdvancesMonth;
         _totalItemsQty = aggregatedTotalQ;
         _activeItemsSummary = activeItems;
         _itemBreakdownQuantities = itemBreakdownQ;
@@ -2683,8 +2701,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 const SizedBox(width: 8),
                 _buildAnalyticsTabPill(
                   index: 2,
-                  icon: Icons.calendar_month_rounded,
-                  label: 'දෛනික දළු ප්‍රවණතාව',
+                  icon: Icons.balance_rounded,
+                  label: 'ආදායම හා වියදම්',
                 ),
                 const SizedBox(width: 8),
                 _buildAnalyticsTabPill(
@@ -2807,7 +2825,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       case 1:
         return _buildTopSuppliersGridView(weightF);
       case 2:
-        return _buildDailyCollectionBarChart(weightF);
+        return _buildSupplierIncomeVsExpenseBarChart(currencyF);
       case 3:
         return _buildInputsBreakdownBarChart(currencyF);
       default:
@@ -3052,8 +3070,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildDailyCollectionBarChart(NumberFormat weightF) {
-    if (_heatmapData.isEmpty) {
+  Widget _buildSupplierIncomeVsExpenseBarChart(NumberFormat currencyF) {
+    if (_allSuppliers.isEmpty) {
       return SizedBox(
         height: 240,
         child: Center(
@@ -3065,29 +3083,82 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    final int daysInMonth = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
-    double maxDayWeight = 0;
-    int peakDay = 1;
-    double totalMonthWeight = 0;
-    int activeDays = 0;
+    final topSuppliers = _allSuppliers.take(6).toList();
+    double maxVal = 0;
+    double sumIncome = 0;
+    double sumExpense = 0;
 
-    for (int d = 1; d <= daysInMonth; d++) {
-      final w = _heatmapData[d] ?? 0.0;
-      if (w > 0) activeDays++;
-      totalMonthWeight += w;
-      if (w > maxDayWeight) {
-        maxDayWeight = w;
-        peakDay = d;
-      }
+    for (final s in topSuppliers) {
+      final inc = ((s['income'] ?? 0) as num).toDouble();
+      final exp = ((s['expense'] ?? 0) as num).toDouble();
+      if (inc > maxVal) maxVal = inc;
+      if (exp > maxVal) maxVal = exp;
+      sumIncome += inc;
+      sumExpense += exp;
     }
 
-    final double maxY = maxDayWeight > 0 ? (maxDayWeight * 1.25) : 100;
+    final double maxY = maxVal > 0 ? (maxVal * 1.25) : 50000;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF059669),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  const Text(
+                    'දළු ආදායම',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF059669),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  const Text(
+                    'අඩුකිරීම් හා වියදම්',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFD97706),
+                    ),
+                  ),
+                ],
+              ),
+              const Text(
+                'ප්‍රමුඛ සැපයුම්කරුවන් 6 දෙනාගේ සැසඳීම',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
         SizedBox(
-          height: 195,
+          height: 180,
           child: BarChart(
             BarChartData(
               maxY: maxY,
@@ -3106,22 +3177,42 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     width: 1,
                   ),
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final day = groupIndex + 1;
-                    final w = _heatmapData[day] ?? 0.0;
+                    if (groupIndex < 0 || groupIndex >= topSuppliers.length) return null;
+                    final s = topSuppliers[groupIndex];
+                    final inc = ((s['income'] ?? 0) as num).toDouble();
+                    final exp = ((s['expense'] ?? 0) as num).toDouble();
+                    final net = inc - exp;
+                    final rank = groupIndex + 1;
                     return BarTooltipItem(
-                      '$_selectedYear ${AppStrings.getMonthName(_selectedMonth)} $day වන දින\n',
+                      '#$rank ${s['name'] ?? ''}\n',
                       const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 12.5,
+                        fontSize: 12,
                       ),
                       children: [
                         TextSpan(
-                          text: 'දළු බර: ${weightF.format(w)} Kg',
+                          text: 'ආදායම: Rs. ${currencyF.format(inc)}\n',
                           style: const TextStyle(
                             color: Color(0xFF34D399),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'වියදම්: Rs. ${currencyF.format(exp)}\n',
+                          style: const TextStyle(
+                            color: Color(0xFFFBBF24),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'ශුද්ධ ඉතිරිය: Rs. ${currencyF.format(net)}',
+                          style: TextStyle(
+                            color: net >= 0 ? const Color(0xFF38BDF8) : const Color(0xFFF87171),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11.5,
                           ),
                         ),
                       ],
@@ -3136,16 +3227,24 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 45,
+                    reservedSize: 50,
                     getTitlesWidget: (value, meta) {
                       if (value == 0 || value == maxY) return const SizedBox();
+                      if (value >= 1000000) {
+                        return Text(
+                          '${(value / 1000000).toStringAsFixed(1)}M',
+                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                        );
+                      }
+                      if (value >= 1000) {
+                        return Text(
+                          '${(value / 1000).toInt()}K',
+                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                        );
+                      }
                       return Text(
                         '${value.toInt()}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
                       );
                     },
                   ),
@@ -3153,23 +3252,26 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 28,
+                    reservedSize: 30,
                     getTitlesWidget: (value, meta) {
-                      final day = value.toInt() + 1;
-                      if (day == 1 || day % 5 == 0 || day == daysInMonth) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            '$day',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
-                            ),
+                      final idx = value.toInt();
+                      if (idx < 0 || idx >= topSuppliers.length) return const SizedBox();
+                      final s = topSuppliers[idx];
+                      final name = (s['name'] ?? '').toString();
+                      final shortName = name.length > 7 ? '${name.substring(0, 6)}..' : name;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '#${idx + 1} $shortName',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF374151),
                           ),
-                        );
-                      }
-                      return const SizedBox();
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -3177,7 +3279,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
-                horizontalInterval: maxY > 0 ? (maxY / 4) : 25,
+                horizontalInterval: maxY > 0 ? (maxY / 4) : 10000,
                 getDrawingHorizontalLine: (value) => FlLine(
                   color: Colors.grey.shade200,
                   strokeWidth: 1,
@@ -3186,12 +3288,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ),
               borderData: FlBorderData(show: false),
               barGroups: [
-                for (int d = 1; d <= daysInMonth; d++)
+                for (int i = 0; i < topSuppliers.length; i++)
                   BarChartGroupData(
-                    x: d - 1,
+                    x: i,
+                    barsSpace: 4,
                     barRods: [
                       BarChartRodData(
-                        toY: _heatmapData[d] ?? 0.0,
+                        toY: ((topSuppliers[i]['income'] ?? 0) as num).toDouble(),
                         gradient: const LinearGradient(
                           colors: [
                             Color(0xFF059669),
@@ -3200,8 +3303,21 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                         ),
-                        width: daysInMonth > 28 ? 6 : 8,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+                        width: 14,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                      BarChartRodData(
+                        toY: ((topSuppliers[i]['expense'] ?? 0) as num).toDouble(),
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFFD97706),
+                            Color(0xFFFBBF24),
+                          ],
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                        ),
+                        width: 14,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                       ),
                     ],
                   ),
@@ -3209,9 +3325,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
             color: const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(10),
@@ -3222,20 +3338,25 @@ class _OverviewScreenState extends State<OverviewScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.star_rounded, size: 16, color: Colors.amber.shade700),
+                  Icon(Icons.savings_outlined, size: 16, color: Colors.green.shade700),
                   const SizedBox(width: 6),
                   Text(
-                    'වැඩිම අස්වැන්න ලැබූ දිනය: $peakDay වන දින (${weightF.format(maxDayWeight)} Kg)',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                    'මුළු ආදායම: Rs. ${currencyF.format(sumIncome)}',
+                    style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'වියදම: Rs. ${currencyF.format(sumExpense)}',
+                    style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
               Text(
-                'දිනක සාමාන්‍යය: ${activeDays > 0 ? weightF.format(totalMonthWeight / activeDays) : 0} Kg ($activeDays / $daysInMonth දින)',
+                'ශුද්ධ ශේෂය: Rs. ${currencyF.format(sumIncome - sumExpense)}',
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.teal.shade700,
+                  fontWeight: FontWeight.w800,
+                  color: (sumIncome - sumExpense) >= 0 ? Colors.teal.shade700 : Colors.red.shade700,
                 ),
               ),
             ],
@@ -3248,14 +3369,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Widget _buildInputsBreakdownBarChart(NumberFormat currencyF) {
     final double fertCost = _totalFertilizerQty * (fert1Price > 0 ? fert1Price : 15500.0);
     final double teaCost = _totalTeaPacketQty * (teaPkt1Price > 0 ? teaPkt1Price : 500.0);
-    final double advanceVal = _overallOutstandingAdvances;
+    final double advanceVal = _monthlyAdvancesGiven > 0 ? _monthlyAdvancesGiven : _overallOutstandingAdvances;
+    final String advanceLabel = _monthlyAdvancesGiven > 0 ? 'මාසික අත්තිකාරම්' : 'හිඟ මුදල්';
     final double otherVal = _totalItemsCost;
 
     final items = [
-      {'label': 'අත්තිකාරම්', 'value': advanceVal, 'color': const Color(0xFFF59E0B)},
+      {'label': advanceLabel, 'value': advanceVal, 'color': const Color(0xFFF59E0B)},
       {'label': 'පොහොර', 'value': fertCost, 'color': const Color(0xFF10B981)},
       {'label': 'තේ පැකට්', 'value': teaCost, 'color': const Color(0xFF06B6D4)},
       {'label': 'වෙනත් ද්‍රව්‍ය', 'value': otherVal, 'color': const Color(0xFF8B5CF6)},
+      if (_monthlyAdvancesGiven > 0 && _overallOutstandingAdvances > 0)
+        {'label': 'පසුගිය හිඟ', 'value': _overallOutstandingAdvances, 'color': const Color(0xFFEF4444)},
     ];
 
     double maxVal = 0;
