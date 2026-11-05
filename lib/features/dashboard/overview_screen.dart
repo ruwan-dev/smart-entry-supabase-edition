@@ -1390,74 +1390,76 @@ class _OverviewScreenState extends State<OverviewScreen> {
       ],
     );
 
-    // Month badge with previous / next month navigation
-    Widget monthBadge = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left_rounded, size: 20),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-          tooltip: 'Previous Month',
-          onPressed: () {
-            int newM = _selectedMonth - 1;
-            int newY = _selectedYear;
-            if (newM < 1) {
-              newM = 12;
-              newY--;
-            }
-            _changeMonth(newY, newM);
-          },
+    // Month badge
+    Widget monthBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF16A34A).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: const Color(0xFF16A34A).withValues(alpha: 0.2),
         ),
-        InkWell(
-          onTap: () => _showMonthPickerMenu(context),
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFF16A34A).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: const Color(0xFF16A34A).withValues(alpha: 0.2),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$_selectedYear ${AppStrings.getMonthName(_selectedMonth)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF15803D),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.arrow_drop_down_rounded,
-                  size: 16,
-                  color: Color(0xFF15803D),
-                ),
-              ],
+      ),
+      child: Text(
+        '$_selectedYear ${AppStrings.getMonthName(_selectedMonth)}',
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF15803D),
+        ),
+      ),
+    );
+
+    // Density Legend Bar (Color variation grid)
+    Widget densityLegendBar = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${AppStrings.low} (0 Kg)',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.blueGrey.shade600,
+              fontWeight: FontWeight.w500,
             ),
           ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.chevron_right_rounded, size: 20),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-          tooltip: 'Next Month',
-          onPressed: () {
-            int newM = _selectedMonth + 1;
-            int newY = _selectedYear;
-            if (newM > 12) {
-              newM = 1;
-              newY++;
-            }
-            _changeMonth(newY, newM);
-          },
-        ),
-      ],
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(5, (index) {
+              return Container(
+                width: 14,
+                height: 14,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  color: index == 0
+                      ? const Color(0xFFF1F5F9)
+                      : Color.lerp(
+                          const Color(0xFFC8E6C9),
+                          const Color(0xFF1B5E20),
+                          index / 4,
+                        ),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.08),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${AppStrings.high} (${weightF.format(_heatmapMaxWeight)} Kg)',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.blueGrey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
 
     // Right-hand Side: Consolidated Month Performance & Leaf Quality Telemetry Panel
@@ -1686,59 +1688,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 6),
 
-        // 3. Density Legend Bar
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${AppStrings.low} (0 Kg)',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.blueGrey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: List.generate(5, (index) {
-                  return Container(
-                    width: 14,
-                    height: 14,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      color: index == 0
-                          ? const Color(0xFFF1F5F9)
-                          : Color.lerp(
-                              const Color(0xFFC8E6C9),
-                              const Color(0xFF1B5E20),
-                              index / 4,
-                            ),
-                      borderRadius: BorderRadius.circular(3),
-                      border: Border.all(
-                        color: Colors.black.withValues(alpha: 0.08),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${AppStrings.high} (${weightF.format(_heatmapMaxWeight)} Kg)',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.blueGrey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
 
@@ -1835,13 +1785,21 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         key: ValueKey(isMobile ? 'hm_split_mobile' : 'hm_split_desktop'),
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Left: True Squared Calendar Grid (7 columns)
+                          // Left: True Squared Calendar Grid (7 columns) + Color Variation Grid Below
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.center,
                             child: SizedBox(
                               width: 295,
-                              child: calendarMatrix,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  calendarMatrix,
+                                  const SizedBox(height: 10),
+                                  densityLegendBar,
+                                ],
+                              ),
                             ),
                           ),
                           // Divider
@@ -1868,7 +1826,15 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               alignment: Alignment.center,
                               child: SizedBox(
                                 width: 310,
-                                child: calendarMatrix,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    calendarMatrix,
+                                    const SizedBox(height: 10),
+                                    densityLegendBar,
+                                  ],
+                                ),
                               ),
                             ),
                           ),
