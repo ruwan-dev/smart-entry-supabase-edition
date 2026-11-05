@@ -32,8 +32,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     'Daily All Data',
     'Customer Wise',
     'Tea Leaves Only',
-    'Fertilizer Wise',
-    'Tea Packet Wise',
     'Advances & Items',
   ];
 
@@ -162,20 +160,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             .toList();
       } else if (_selectedReportType == 'Tea Leaves Only') {
         entries = entries.where((doc) => (doc['netWeight'] ?? 0) > 0).toList();
-      } else if (_selectedReportType == 'Fertilizer Wise') {
-        entries = entries
-            .where((doc) {
-              final parsed = ItemService.parseDailyEntryItems(doc);
-              return parsed.hasFertilizer || parsed.otherDynamicQty > 0;
-            })
-            .toList();
-      } else if (_selectedReportType == 'Tea Packet Wise') {
-        entries = entries
-            .where((doc) {
-              final parsed = ItemService.parseDailyEntryItems(doc);
-              return parsed.hasTeaPacket;
-            })
-            .toList();
       } else if (_selectedReportType == 'Advances & Items') {
         entries = entries
             .where((doc) {
@@ -697,13 +681,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
       'Daily All Data',
       'Customer Wise',
       'Advances & Items',
-      'Fertilizer Wise',
     ].contains(_selectedReportType);
     bool showTeaPkt = [
       'Daily All Data',
       'Customer Wise',
       'Advances & Items',
-      'Tea Packet Wise',
     ].contains(_selectedReportType);
     bool showTotalDed = [
       'Daily All Data',
