@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'package:smart_entry/core/customer/customer_form_screen.dart';
+import 'dart:async';
+import 'package:intl/intl.dart';
 import 'package:smart_entry/core/factory/factory_form_screen.dart';
 import 'package:smart_entry/core/entries/daily_entries_screen.dart';
 
@@ -219,6 +221,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                if (!isMobile) ...[
+                  const _SriLankaClockBadge(),
+                  const SizedBox(width: 8),
+                ],
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -378,6 +384,76 @@ class _StatusDotState extends State<_StatusDot>
           ),
         );
       },
+    );
+  }
+}
+
+class _SriLankaClockBadge extends StatefulWidget {
+  const _SriLankaClockBadge();
+
+  @override
+  State<_SriLankaClockBadge> createState() => _SriLankaClockBadgeState();
+}
+
+class _SriLankaClockBadgeState extends State<_SriLankaClockBadge> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _formatSriLankaTime() {
+    // Sri Lanka standard time is UTC+05:30
+    final sl = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+    final dayOfWeek = DateFormat('EEE', 'en_US').format(sl);
+    final day = DateFormat('dd').format(sl);
+    final month = DateFormat('MMM', 'en_US').format(sl).toLowerCase();
+    final time = DateFormat('h.mm a', 'en_US').format(sl);
+    return '$dayOfWeek,$day $month  $time';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.access_time_rounded,
+            size: 13,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _formatSriLankaTime(),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
