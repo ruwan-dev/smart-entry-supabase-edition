@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -121,12 +122,75 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
         // Fallback: check if finalized_bills already exist for this month and org
         final billsCheck = await Supabase.instance.client
             .from('finalized_bills')
-            .select('id')
+            .select('billData')
             .eq('organization_id', orgId)
-            .ilike('id', '%_$ratesDocId')
-            .limit(1);
+            .or('id.ilike.%_$ratesDocId,id.ilike.%_${_currentYear}_$monthName,id.ilike.%_${_currentYear} $monthName');
         if (billsCheck.isNotEmpty) {
           _isAlreadyFinalized = true;
+          // Reconstruct monthlySummaryData from finalized bills
+          double totalWeight = 0, totalGross = 0, totalAdvance = 0;
+          double totalF1Qty = 0, totalF1Amt = 0, totalF2Qty = 0, totalF2Amt = 0;
+          double totalT1Qty = 0, totalT1Amt = 0, totalT2Qty = 0, totalT2Amt = 0;
+          double totalTransport = 0,
+              totalPositiveNet = 0,
+              totalNegativeNet = 0,
+              totalNet = 0;
+
+          for (var row in billsCheck) {
+            final b = (row['billData'] as Map<String, dynamic>?) ?? {};
+            double bTeaRate = (b['teaRate'] ?? 0).toDouble();
+            double bGross = (b['grossIncome'] ?? 0).toDouble();
+            double tw = bTeaRate > 0 ? bGross / bTeaRate : 0;
+            totalWeight += tw;
+            totalGross += bGross;
+            totalAdvance += (b['advTotal'] ?? 0).toDouble();
+            totalF1Qty += (b['f1Qty'] ?? 0).toDouble();
+            totalF1Amt += (b['f1Total'] ?? 0).toDouble();
+            totalF2Qty += (b['f2Qty'] ?? 0).toDouble();
+            totalF2Amt += (b['f2Total'] ?? 0).toDouble();
+            totalT1Qty += (b['t1Qty'] ?? 0).toDouble();
+            totalT1Amt += (b['t1Total'] ?? 0).toDouble();
+            totalT2Qty += (b['t2Qty'] ?? 0).toDouble();
+            totalT2Amt += (b['t2Total'] ?? 0).toDouble();
+            totalTransport += (b['transportCost'] ?? 0).toDouble();
+
+            double net = (b['netPayable'] ?? 0).toDouble();
+            totalNet += net;
+            if (net > 0) {
+              totalPositiveNet += net;
+            } else {
+              totalNegativeNet += net.abs();
+            }
+          }
+
+          final reconstructed = {
+            'id': '${orgId}_$ratesDocId',
+            'totalWeight': totalWeight,
+            'totalGross': totalGross,
+            'totalAdvance': totalAdvance,
+            'totalF1Qty': totalF1Qty,
+            'totalF1Amt': totalF1Amt,
+            'totalF2Qty': totalF2Qty,
+            'totalF2Amt': totalF2Amt,
+            'totalT1Qty': totalT1Qty,
+            'totalT1Amt': totalT1Amt,
+            'totalT2Qty': totalT2Qty,
+            'totalT2Amt': totalT2Amt,
+            'totalTransport': totalTransport,
+            'totalPositiveNet': totalPositiveNet,
+            'totalNegativeNet': totalNegativeNet,
+            'totalNet': totalNet,
+            'finalizedAt': DateTime.now().toIso8601String(),
+            'organization_id': orgId,
+          };
+          _monthlySummaryData = reconstructed;
+
+          // Auto-heal by writing the missing summary row to Supabase
+          unawaited(
+            Supabase.instance.client
+                .from('monthly_summaries')
+                .upsert(reconstructed),
+          );
         }
       }
 
