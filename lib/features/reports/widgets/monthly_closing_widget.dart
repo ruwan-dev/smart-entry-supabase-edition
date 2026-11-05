@@ -775,7 +775,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Tooltip(
-            message: 'ගිණුම් අවසන් කිරීම (Closing Controls)',
+            message: 'ගිණුම් අවසන් කිරීම',
             child: InkWell(
               onTap: () => _goToDesktopPage(0),
               borderRadius: BorderRadius.circular(12),
@@ -794,7 +794,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
           ),
           const SizedBox(height: 8),
           Tooltip(
-            message: 'ව්‍යාපාරික සාරාංශය (Business Summary)',
+            message: 'ව්‍යාපාරික සාරාංශය',
             child: InkWell(
               onTap: () => _goToDesktopPage(1),
               borderRadius: BorderRadius.circular(12),
@@ -894,7 +894,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       ),
                       SizedBox(width: 8),
                       Text(
-                        "මාසික ව්‍යාපාරික සාරාංශය බලන්න (Scroll Down)",
+                        "මාසික ව්‍යාපාරික සාරාංශය බලන්න",
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -972,7 +972,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                 onPressed: () => _goToDesktopPage(0),
                 icon: const Icon(Icons.arrow_upward_rounded, size: 16),
                 label: const Text(
-                  "ආපසු ඉහළට (Back to Controls)",
+                  "ආපසු ඉහළට",
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(
@@ -1028,7 +1028,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       const Text(
-                                        "මුළු දළු බර (Total Weight)",
+                                        "මුළු දළු බර",
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.blueGrey,
@@ -1064,7 +1064,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       const Text(
-                                        "මුළු ආදායම (Gross Income)",
+                                        "මුළු ආදායම",
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Color(0xFF166534),
@@ -1088,7 +1088,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                           ),
                           const SizedBox(height: 18),
                           const Text(
-                            "Payments Summary (ගෙවීම් සාරාංශය)",
+                            "ගෙවීම් සාරාංශය",
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -1124,7 +1124,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text(
-                                  "ශුද්ධ ලාභ / අලාභය (Net)",
+                                  "ශුද්ධ ලාභ / අලාභය",
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -1155,7 +1155,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const Text(
-                            "Deductions Breakdown (අඩුකිරීම් විස්තරය)",
+                            "අඩුකිරීම් විස්තරය",
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -1183,7 +1183,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                                       Expanded(
                                         flex: 4,
                                         child: Text(
-                                          "Breakdown",
+                                          "විස්තරය",
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 12,
@@ -1194,7 +1194,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                                       Expanded(
                                         flex: 2,
                                         child: Text(
-                                          "Qty",
+                                          "ප්‍රමාණය",
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
@@ -1206,7 +1206,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                                       Expanded(
                                         flex: 3,
                                         child: Text(
-                                          "Amount",
+                                          "වටිනාකම",
                                           textAlign: TextAlign.right,
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
@@ -1222,32 +1222,32 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                                     height: 10,
                                   ),
                                   _itemRow(
-                                    "Advance (අත්තිකාරම්)",
+                                    "අත්තිකාරම්",
                                     "-",
                                     s['totalAdvance'],
                                   ),
                                   _itemRow(
-                                    "Fertilizer 01 (පොහොර 1)",
+                                    "පොහොර 01",
                                     s['totalF1Qty'],
                                     s['totalF1Amt'],
                                   ),
                                   _itemRow(
-                                    "Fertilizer 02 (පොහොර 2)",
+                                    "පොහොර 02",
                                     s['totalF2Qty'],
                                     s['totalF2Amt'],
                                   ),
                                   _itemRow(
-                                    "Tea Pkt 01 (තේ කොළ 1)",
+                                    "තේ පැකට් 01",
                                     s['totalT1Qty'],
                                     s['totalT1Amt'],
                                   ),
                                   _itemRow(
-                                    "Tea Pkt 02 (තේ කොළ 2)",
+                                    "තේ පැකට් 02",
                                     s['totalT2Qty'],
                                     s['totalT2Amt'],
                                   ),
                                   _itemRow(
-                                    "Transport (ප්‍රවාහන)",
+                                    "ප්‍රවාහන ගාස්තු",
                                     "-",
                                     s['totalTransport'],
                                   ),
@@ -1854,12 +1854,12 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
             ),
             const SizedBox(height: 20),
             _row(
-              "මුළු දළු බර (Total Weight)",
+              "මුළු දළු බර",
               "${(s['totalWeight'] ?? 0).toStringAsFixed(1)} Kg",
               isBold: true,
             ),
             _row(
-              "මුළු ආදායම (Gross Income)",
+              "මුළු ආදායම",
               "Rs. ${(s['totalGross'] ?? 0).toStringAsFixed(2)}",
               isBold: true,
             ),
@@ -1879,7 +1879,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       Expanded(
                         flex: 4,
                         child: Text(
-                          "Breakdown",
+                          "විස්තරය",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
@@ -1890,7 +1890,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       Expanded(
                         flex: 2,
                         child: Text(
-                          "Qty",
+                          "ප්‍රමාණය",
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -1902,7 +1902,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                       Expanded(
                         flex: 3,
                         child: Text(
-                          "Amount",
+                          "වටිනාකම",
                           textAlign: TextAlign.right,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -1914,19 +1914,19 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
                     ],
                   ),
                   const Divider(color: Colors.black12, height: 24),
-                  _itemRow("Advance", "-", s['totalAdvance']),
-                  _itemRow("Fertilizer 01", s['totalF1Qty'], s['totalF1Amt']),
-                  _itemRow("Fertilizer 02", s['totalF2Qty'], s['totalF2Amt']),
-                  _itemRow("Tea Pkt 01", s['totalT1Qty'], s['totalT1Amt']),
-                  _itemRow("Tea Pkt 02", s['totalT2Qty'], s['totalT2Amt']),
-                  _itemRow("Transport", "-", s['totalTransport']),
+                  _itemRow("අත්තිකාරම්", "-", s['totalAdvance']),
+                  _itemRow("පොහොර 01", s['totalF1Qty'], s['totalF1Amt']),
+                  _itemRow("පොහොර 02", s['totalF2Qty'], s['totalF2Amt']),
+                  _itemRow("තේ පැකට් 01", s['totalT1Qty'], s['totalT1Amt']),
+                  _itemRow("තේ පැකට් 02", s['totalT2Qty'], s['totalT2Amt']),
+                  _itemRow("ප්‍රවාහන ගාස්තු", "-", s['totalTransport']),
                 ],
               ),
             ),
 
             const SizedBox(height: 24),
             const Text(
-              "Payments Summary",
+              "ගෙවීම් සාරාංශය",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
