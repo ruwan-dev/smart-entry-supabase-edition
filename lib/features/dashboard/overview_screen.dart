@@ -1294,13 +1294,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
         // Grid Rows
         ...List.generate(rows, (r) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 3.5),
+            padding: EdgeInsets.only(bottom: isMobile ? 3.5 : 5.0),
             child: Row(
               children: List.generate(7, (c) {
                 final int slotIndex = r * 7 + c;
                 final int dayNumber = slotIndex - startOffset + 1;
                 if (slotIndex < startOffset || dayNumber > daysInMonth) {
-                  return const Expanded(child: SizedBox(height: 33));
+                  return Expanded(child: SizedBox(height: isMobile ? 35 : 40));
                 }
 
                 if (_isHeatmapLoading) {
@@ -1309,7 +1309,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       padding: EdgeInsets.symmetric(horizontal: 2.0),
                       child: SkeletonBox(
                         width: double.infinity,
-                        height: 33,
+                        height: isMobile ? 35 : 40,
                         borderRadius: 8,
                       ),
                     ),
@@ -1352,7 +1352,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       message:
                           '$monthName $dayNumber\n${hasHarvest ? "${dayVal.toStringAsFixed(1)} Kg" : (AppStrings.isSinhala ? "දළු නොමැත" : "No harvest")}',
                       child: Container(
-                        height: 33,
+                        height: isMobile ? 35 : 40,
                         decoration: BoxDecoration(
                           color: bgColor,
                           borderRadius: BorderRadius.circular(8),
@@ -1629,7 +1629,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
 
         // 2. 2x2 Operational Telemetry Grid
         Row(
@@ -1659,7 +1659,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 9),
         Row(
           children: [
             // Active Suppliers
@@ -1686,7 +1686,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
 
         // 3. Density Legend Bar
         FittedBox(
@@ -1760,7 +1760,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -1844,7 +1844,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           // Divider
                           Container(
                             width: 1,
-                            height: 250,
+                            height: isMobile ? 250 : 290,
                             color: Colors.black.withValues(alpha: 0.06),
                             margin:
                                 const EdgeInsets.symmetric(horizontal: 14),
@@ -3967,7 +3967,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -4093,7 +4093,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                 // Main 12-Month Grouped Bar Chart
                 SizedBox(
-                  height: isMobile ? 205 : 190,
+                  height: isMobile ? 205 : 234,
                   child: BarChart(
                     BarChartData(
                       maxY: maxY,
