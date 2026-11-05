@@ -418,14 +418,16 @@ class _SriLankaClockBadgeState extends State<_SriLankaClockBadge> {
     super.dispose();
   }
 
+  String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
   String _formatSriLankaTime() {
     // Sri Lanka standard time is UTC+05:30
     final sl = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
-    final dayOfWeek = DateFormat('EEE', 'en_US').format(sl);
+    final dayOfWeek = _capitalize(DateFormat('EEEE', 'en_US').format(sl));
     final day = DateFormat('dd').format(sl);
-    final month = DateFormat('MMM', 'en_US').format(sl).toLowerCase();
+    final month = _capitalize(DateFormat('MMMM', 'en_US').format(sl));
     final time = DateFormat('h.mm a', 'en_US').format(sl);
-    return '$dayOfWeek,$day $month  $time';
+    return '$dayOfWeek, $day $month  $time';
   }
 
   @override
