@@ -1112,198 +1112,246 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildMonthlyRatesTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            AppStrings.monthlyTeaAndTransportRates,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1F2937),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            AppStrings.isSinhala
-                ? (AppStrings.isSinhala ? 'එක් එක් මාසය සඳහා ගෙවන දළු මිල සහ ප්‍රවාහන ගාස්තු මෙතැනින් ඇතුළත් කරන්න.' : 'Enter leaf rates and transport fees paid for each month here.')
-                : 'Enter monthly tea leaf and transport rates here.',
-            style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: _cardDecoration(),
-            child: Form(
-              key: _monthlyFormKey,
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedYear,
-                          decoration: _buildInputDecoration(
-                            AppStrings.year,
-                            Icons.calendar_month_rounded,
-                          ),
-                          icon: const Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            color: Colors.blueGrey,
-                          ),
-                          items: _years
-                              .map(
-                                (y) =>
-                                    DropdownMenuItem(value: y, child: Text(y)),
-                              )
-                              .toList(),
-                          onChanged: (val) =>
-                              setState(() => _selectedYear = val!),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedMonth,
-                          decoration: _buildInputDecoration(
-                            AppStrings.month,
-                            Icons.date_range_rounded,
-                          ),
-                          icon: const Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            color: Colors.blueGrey,
-                          ),
-                          items: _months
-                              .map(
-                                (m) =>
-                                    DropdownMenuItem(value: m, child: Text(m)),
-                              )
-                              .toList(),
-                          onChanged: (val) =>
-                              setState(() => _selectedMonth = val!),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _teaRateController,
-                          decoration: _buildInputDecoration(
-                            AppStrings.normalTeaRate,
-                            Icons.monetization_on_outlined,
-                          ),
-                          inputFormatters: [MaxNumberInputFormatter.currency],
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          validator: (val) =>
-                              val!.isEmpty ? AppStrings.requiredField : null,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _teaRate2Controller,
-                          decoration: _buildInputDecoration(
-                            AppStrings.superTeaRate,
-                            Icons.monetization_on_outlined,
-                          ),
-                          inputFormatters: [MaxNumberInputFormatter.currency],
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _transportRateController,
-                          decoration: _buildInputDecoration(
-                            AppStrings.transportRate,
-                            Icons.local_shipping_outlined,
-                          ),
-                          inputFormatters: [MaxNumberInputFormatter.currency],
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          validator: (val) =>
-                              val!.isEmpty ? AppStrings.requiredField : null,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      const Spacer(),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isLoadingMonthly ? null : _saveMonthlyRates,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryAppColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoadingMonthly
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              AppStrings.saveRates,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isWide = constraints.maxWidth >= 900;
+
+        final headerWidget = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              AppStrings.monthlyTeaAndTransportRates,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1F2937),
               ),
             ),
+            const SizedBox(height: 4),
+            Text(
+              AppStrings.isSinhala
+                  ? 'එක් එක් මාසය සඳහා ගෙවන දළු මිල සහ ප්‍රවාහන ගාස්තු මෙතැනින් ඇතුළත් කරන්න.'
+                  : 'Enter monthly tea leaf and transport rates here.',
+              style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+            ),
+          ],
+        );
+
+        final formCard = Container(
+          padding: const EdgeInsets.all(18),
+          decoration: _cardDecoration(),
+          child: Form(
+            key: _monthlyFormKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedYear,
+                        decoration: _buildInputDecoration(
+                          AppStrings.year,
+                          Icons.calendar_month_rounded,
+                        ),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.blueGrey,
+                        ),
+                        items: _years
+                            .map(
+                              (y) => DropdownMenuItem(value: y, child: Text(y)),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedYear = val!),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedMonth,
+                        decoration: _buildInputDecoration(
+                          AppStrings.month,
+                          Icons.date_range_rounded,
+                        ),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.blueGrey,
+                        ),
+                        items: _months
+                            .map(
+                              (m) => DropdownMenuItem(value: m, child: Text(m)),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedMonth = val!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _teaRateController,
+                        decoration: _buildInputDecoration(
+                          AppStrings.normalTeaRate,
+                          Icons.monetization_on_outlined,
+                        ),
+                        inputFormatters: [MaxNumberInputFormatter.currency],
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        validator: (val) =>
+                            val!.isEmpty ? AppStrings.requiredField : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _teaRate2Controller,
+                        decoration: _buildInputDecoration(
+                          AppStrings.superTeaRate,
+                          Icons.monetization_on_outlined,
+                        ),
+                        inputFormatters: [MaxNumberInputFormatter.currency],
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: TextFormField(
+                        controller: _transportRateController,
+                        decoration: _buildInputDecoration(
+                          AppStrings.transportRate,
+                          Icons.local_shipping_outlined,
+                        ),
+                        inputFormatters: [MaxNumberInputFormatter.currency],
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        validator: (val) =>
+                            val!.isEmpty ? AppStrings.requiredField : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 5,
+                      child: SizedBox(
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: _isLoadingMonthly ? null : _saveMonthlyRates,
+                          icon: _isLoadingMonthly
+                              ? const SizedBox.shrink()
+                              : const Icon(Icons.save_rounded, size: 18),
+                          label: _isLoadingMonthly
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  AppStrings.saveRates,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryAppColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 32),
-          _buildSavedRatesTableSection(),
-        ],
-      ),
+        );
+
+        final tableCard = _buildSavedRatesTableSection();
+
+        if (isWide) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                headerWidget,
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 5, child: formCard),
+                    const SizedBox(width: 20),
+                    Expanded(flex: 6, child: tableCard),
+                  ],
+                ),
+              ],
+            ),
+          );
+        } else {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                headerWidget,
+                const SizedBox(height: 14),
+                formCard,
+                const SizedBox(height: 20),
+                tableCard,
+              ],
+            ),
+          );
+        }
+      },
     );
   }
 
   Widget _buildSavedRatesTableSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-          Text(
-            AppStrings.isSinhala ? 'සුරැකි මාසික ගාස්තු ලැයිස්තුව' : 'Saved Monthly Rates History',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1F2937),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              AppStrings.isSinhala ? 'සුරැකි මාසික ගාස්තු ලැයිස්තුව' : 'Saved Monthly Rates History',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1F2937),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            AppStrings.isSinhala ? 'දැනට පද්ධතියේ සුරකී ඇති සියලුම මාසික ගාස්තු. (පිටුවකට 5 බැගින්)' : 'All monthly rates currently saved in the system. (5 per page)',
-            style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
-          ),
-          const SizedBox(height: 16),
+            Text(
+              AppStrings.isSinhala ? '(පිටුවකට 5 බැගින්)' : '(5 per page)',
+              style: const TextStyle(fontSize: 11.5, color: Colors.blueGrey),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
 
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: Supabase.instance.client
@@ -1442,6 +1490,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           backgroundColor: Colors.white,
                           foregroundColor: primaryAppColor,
                           elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           side: BorderSide(color: Colors.grey.shade300),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -1453,19 +1502,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.blueGrey,
-                          fontSize: 13,
+                          fontSize: 12,
                         ),
                       ),
                       ElevatedButton.icon(
                         onPressed: _currentRatesPage < totalPages - 1
                             ? () => setState(() => _currentRatesPage++)
                             : null,
-                        icon: const Icon(Icons.chevron_right, size: 18),
+                        icon: const Icon(Icons.chevron_right, size: 16),
                         label: Text(AppStrings.next),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: primaryAppColor,
                           elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           side: BorderSide(color: Colors.grey.shade300),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -3229,26 +3279,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildTableHeader(String text) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 4.0),
+    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
     child: Text(
       text,
       textAlign: TextAlign.center,
       style: const TextStyle(
         fontWeight: FontWeight.bold,
         color: Color(0xFF4B5563),
-        fontSize: 12,
+        fontSize: 11.5,
       ),
     ),
   );
   Widget _buildTableCell(String text, {bool isBold = false}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 4.0),
+    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
     child: Text(
       text,
       textAlign: TextAlign.center,
       style: TextStyle(
         fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
         color: const Color(0xFF1F2937),
-        fontSize: 13,
+        fontSize: 12.5,
       ),
     ),
   );
