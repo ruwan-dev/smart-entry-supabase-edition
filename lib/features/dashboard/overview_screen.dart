@@ -1294,13 +1294,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
         // Grid Rows
         ...List.generate(rows, (r) {
           return Padding(
-            padding: EdgeInsets.only(bottom: isMobile ? 3.5 : 5.0),
+            padding: const EdgeInsets.only(bottom: 3.5),
             child: Row(
               children: List.generate(7, (c) {
                 final int slotIndex = r * 7 + c;
                 final int dayNumber = slotIndex - startOffset + 1;
                 if (slotIndex < startOffset || dayNumber > daysInMonth) {
-                  return Expanded(child: SizedBox(height: isMobile ? 35 : 40));
+                  return Expanded(child: SizedBox(height: isMobile ? 33 : 36));
                 }
 
                 if (_isHeatmapLoading) {
@@ -1309,7 +1309,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       padding: EdgeInsets.symmetric(horizontal: 2.0),
                       child: SkeletonBox(
                         width: double.infinity,
-                        height: isMobile ? 35 : 40,
+                        height: isMobile ? 33 : 36,
                         borderRadius: 8,
                       ),
                     ),
@@ -1352,7 +1352,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       message:
                           '$monthName $dayNumber\n${hasHarvest ? "${dayVal.toStringAsFixed(1)} Kg" : (AppStrings.isSinhala ? "දළු නොමැත" : "No harvest")}',
                       child: Container(
-                        height: isMobile ? 35 : 40,
+                        height: isMobile ? 33 : 36,
                         decoration: BoxDecoration(
                           color: bgColor,
                           borderRadius: BorderRadius.circular(8),
@@ -1629,7 +1629,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
 
         // 2. 2x2 Operational Telemetry Grid
         Row(
@@ -1659,7 +1659,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 9),
+        const SizedBox(height: 6),
         Row(
           children: [
             // Active Suppliers
@@ -1686,7 +1686,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
 
         // 3. Density Legend Bar
         FittedBox(
@@ -1744,7 +1744,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     return Container(
       key: key,
-      height: isMobile ? null : 375,
+      height: isMobile ? null : 390,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -1781,10 +1781,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
               builder: (context, constraints) {
                 final bool isSplitView = constraints.maxWidth >= 540;
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                return SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     // Top Header: Title & Month Navigation
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1845,7 +1847,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           // Divider
                           Container(
                             width: 1,
-                            height: isMobile ? 250 : 290,
+                            height: isMobile ? 240 : 265,
                             color: Colors.black.withValues(alpha: 0.06),
                             margin:
                                 const EdgeInsets.symmetric(horizontal: 10),
@@ -1874,7 +1876,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           telemetryPanel,
                         ],
                       ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
@@ -3962,7 +3965,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     return Container(
       key: key,
-      height: isMobile ? null : 375,
+      height: isMobile ? null : 390,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -3995,10 +3998,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 width: 1.5,
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 // Top Header Row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4105,7 +4110,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                 // Main 12-Month Grouped Bar Chart
                 SizedBox(
-                  height: isMobile ? 205 : 234,
+                  height: isMobile ? 205 : 220,
                   child: BarChart(
                     BarChartData(
                       maxY: maxY,
@@ -4548,6 +4553,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
