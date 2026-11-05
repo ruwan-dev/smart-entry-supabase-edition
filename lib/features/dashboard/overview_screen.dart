@@ -1837,7 +1837,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.center,
                             child: SizedBox(
-                              width: 310,
+                              width: 295,
                               child: calendarMatrix,
                             ),
                           ),
@@ -1847,7 +1847,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             height: isMobile ? 250 : 290,
                             color: Colors.black.withValues(alpha: 0.06),
                             margin:
-                                const EdgeInsets.symmetric(horizontal: 14),
+                                const EdgeInsets.symmetric(horizontal: 10),
                           ),
                           // Right: Unused Space Reclaimed for Harvest Telemetry
                           Expanded(child: telemetryPanel),
@@ -2986,12 +2986,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  flex: 6,
+                  flex: 1,
                   child: buildCard2(const ValueKey('c2_d'), showItemsOnDesktop),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  flex: 4,
+                  flex: 1,
                   child: IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3833,25 +3833,27 @@ class _OverviewScreenState extends State<OverviewScreen> {
           );
         }
 
-        return Row(
-          key: const ValueKey('harvest_row_desktop'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 6,
-              child: _buildHeatMapContainer(key: const ValueKey('hm_desktop'), isMobile: false),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              flex: 4,
-              child: _buildAnnualIncomeExpenseBarChartCard(
-                context,
-                currencyF,
-                key: const ValueKey('inc_desktop'),
-                isMobile: false,
+        return IntrinsicHeight(
+          child: Row(
+            key: const ValueKey('harvest_row_desktop'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 1,
+                child: _buildHeatMapContainer(key: const ValueKey('hm_desktop'), isMobile: false),
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 1,
+                child: _buildAnnualIncomeExpenseBarChartCard(
+                  context,
+                  currencyF,
+                  key: const ValueKey('inc_desktop'),
+                  isMobile: false,
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -3917,14 +3919,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
       barGroups.add(
         BarChartGroupData(
           x: i,
-          barsSpace: 2,
+          barsSpace: isMobile ? 2 : 4,
           showingTooltipIndicators: const [],
           barRods: [
             // Income Rod (Green)
             BarChartRodData(
               toY: inc,
               color: const Color(0xFF10B981),
-              width: isMobile ? 5.5 : 7,
+              width: isMobile ? 5.5 : 9.5,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
               backDrawRodData: BackgroundBarChartRodData(
                 show: true,
@@ -3936,7 +3938,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             BarChartRodData(
               toY: exp,
               color: const Color(0xFFEF4444),
-              width: isMobile ? 5.5 : 7,
+              width: isMobile ? 5.5 : 9.5,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
               backDrawRodData: BackgroundBarChartRodData(
                 show: true,
