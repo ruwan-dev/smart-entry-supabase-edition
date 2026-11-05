@@ -1744,6 +1744,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     return Container(
       key: key,
+      height: isMobile ? null : 375,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -3843,27 +3844,25 @@ class _OverviewScreenState extends State<OverviewScreen> {
           );
         }
 
-        return IntrinsicHeight(
-          child: Row(
-            key: const ValueKey('harvest_row_desktop'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 1,
-                child: _buildHeatMapContainer(key: const ValueKey('hm_desktop'), isMobile: false),
+        return Row(
+          key: const ValueKey('harvest_row_desktop'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 1,
+              child: _buildHeatMapContainer(key: const ValueKey('hm_desktop'), isMobile: false),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 1,
+              child: _buildAnnualIncomeExpenseBarChartCard(
+                context,
+                currencyF,
+                key: const ValueKey('inc_desktop'),
+                isMobile: false,
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 1,
-                child: _buildAnnualIncomeExpenseBarChartCard(
-                  context,
-                  currencyF,
-                  key: const ValueKey('inc_desktop'),
-                  isMobile: false,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
@@ -3963,6 +3962,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     return Container(
       key: key,
+      height: isMobile ? null : 375,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
