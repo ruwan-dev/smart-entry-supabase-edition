@@ -403,6 +403,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
         'MMMM',
       ).format(DateTime(_currentYear, _selectedMonth));
       String ratesDocId = "$_currentYear-$monthName";
+      final orgId = AppState.currentOrganizationId.value ?? '';
 
       double totalWeight = 0, totalGross = 0, totalAdvance = 0;
       double totalF1Qty = 0, totalF1Amt = 0, totalF2Qty = 0, totalF2Amt = 0;
