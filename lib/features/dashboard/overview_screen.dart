@@ -1304,7 +1304,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 }
 
                 if (_isHeatmapLoading) {
-                  return const Expanded(
+                  return Expanded(
                     child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 2.0),
                       child: SkeletonBox(
