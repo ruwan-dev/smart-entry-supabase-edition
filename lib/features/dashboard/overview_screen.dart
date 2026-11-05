@@ -2254,27 +2254,31 @@ class _OverviewScreenState extends State<OverviewScreen> {
   void _goToDesktopPage(int targetPage) {
     if (_isPageAnimating || _activeDesktopPage == targetPage) return;
     _isPageAnimating = true;
-    setState(() {
-      _activeDesktopPage = targetPage;
-    });
 
-    if (_desktopPageController.hasClients) {
-      _desktopPageController
-          .animateToPage(
-            targetPage,
-            duration: const Duration(milliseconds: 420),
-            curve: Curves.easeInOutCubic,
-          )
-          .then((_) {
-        Future.delayed(const Duration(milliseconds: 250), () {
-          if (mounted) {
-            _isPageAnimating = false;
-          }
-        });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _activeDesktopPage = targetPage;
       });
-    } else {
-      _isPageAnimating = false;
-    }
+
+      if (_desktopPageController.hasClients) {
+        _desktopPageController
+            .animateToPage(
+              targetPage,
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeInOutCubic,
+            )
+            .then((_) {
+          Future.delayed(const Duration(milliseconds: 250), () {
+            if (mounted) {
+              _isPageAnimating = false;
+            }
+          });
+        });
+      } else {
+        _isPageAnimating = false;
+      }
+    });
   }
 
   @override
@@ -2360,9 +2364,15 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           scrollDirection: Axis.vertical,
                           physics: const NeverScrollableScrollPhysics(),
                           onPageChanged: (page) {
-                            setState(() {
-                              _activeDesktopPage = page;
-                            });
+                            if (_activeDesktopPage != page) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  setState(() {
+                                    _activeDesktopPage = page;
+                                  });
+                                }
+                              });
+                            }
                           },
                           children: [
                             _buildDesktopSectionOne(context, currencyF, weightF, viewportHeight),
