@@ -136,6 +136,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
   List<Map<String, dynamic>> _allSuppliers = [];
   List<Map<String, dynamic>> _allArrears = [];
   int _selectedAnalyticsTab = 0;
+  int _incomeExpensePageIndex = 0;
+  int _topSuppliersChartPageIndex = 0;
 
   String _chartFilter = 'Monthly';
   bool _isChartLoading = true;
@@ -2846,10 +2848,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    final topSuppliers = _allSuppliers.take(8).toList();
+    final int totalSuppliers = _allSuppliers.length;
+    const int pageSize = 8;
+    final int totalPages = (totalSuppliers / pageSize).ceil();
+    final int currentPage = _topSuppliersChartPageIndex.clamp(0, math.max(0, totalPages - 1));
+    final int startIndex = currentPage * pageSize;
+    final int endIndex = math.min(startIndex + pageSize, totalSuppliers);
+    final displayedSuppliers = _allSuppliers.sublist(startIndex, endIndex);
+
     double maxWeight = 0;
     double sumTopSuppliers = 0;
-    for (final s in topSuppliers) {
+    for (final s in displayedSuppliers) {
       final w = ((s['weight'] ?? 0) as num).toDouble();
       if (w > maxWeight) maxWeight = w;
       sumTopSuppliers += w;
@@ -2859,134 +2868,243 @@ class _OverviewScreenState extends State<OverviewScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 195,
-          child: BarChart(
-            BarChartData(
-              maxY: maxY,
-              alignment: BarChartAlignment.spaceAround,
-              barTouchData: BarTouchData(
-                enabled: true,
-                touchTooltipData: BarTouchTooltipData(
-                  tooltipRoundedRadius: 8,
-                  tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  tooltipMargin: 6,
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
-                  tooltipBorder: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    width: 1,
-                  ),
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    if (groupIndex < 0 || groupIndex >= topSuppliers.length) return null;
-                    final s = topSuppliers[groupIndex];
-                    final rank = groupIndex + 1;
-                    return BarTooltipItem(
-                      '#$rank ${s['name'] ?? ''}\n',
-                      const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12.5,
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'වැඩිම දළු සැපයුම්කරුවන් (බර අනුව)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF374151),
+                ),
+              ),
+              if (totalSuppliers > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'සැපයුම්කරුවන් ${startIndex + 1} - $endIndex / $totalSuppliers',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade700,
                       ),
-                      children: [
-                        TextSpan(
-                          text: '${weightF.format(s['weight'] ?? 0)} Kg',
-                          style: const TextStyle(
-                            color: Color(0xFF38BDF8),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: currentPage > 0
+                            ? () {
+                                setState(() {
+                                  _topSuppliersChartPageIndex = currentPage - 1;
+                                });
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: currentPage > 0
+                                ? primaryAppColor.withValues(alpha: 0.12)
+                                : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: currentPage > 0
+                                  ? primaryAppColor.withValues(alpha: 0.35)
+                                  : Colors.grey.shade300,
+                            ),
                           ),
+                          child: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 13,
+                            color: currentPage > 0 ? primaryAppColor : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: endIndex < totalSuppliers
+                            ? () {
+                                setState(() {
+                                  _topSuppliersChartPageIndex = currentPage + 1;
+                                });
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: endIndex < totalSuppliers
+                                ? primaryAppColor.withValues(alpha: 0.12)
+                                : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: endIndex < totalSuppliers
+                                  ? primaryAppColor.withValues(alpha: 0.35)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 13,
+                            color: endIndex < totalSuppliers ? primaryAppColor : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity != null) {
+              if (details.primaryVelocity! < -200 && endIndex < totalSuppliers) {
+                setState(() => _topSuppliersChartPageIndex = currentPage + 1);
+              } else if (details.primaryVelocity! > 200 && currentPage > 0) {
+                setState(() => _topSuppliersChartPageIndex = currentPage - 1);
+              }
+            }
+          },
+          child: SizedBox(
+            height: 180,
+            child: BarChart(
+              BarChartData(
+                maxY: maxY,
+                alignment: BarChartAlignment.spaceAround,
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    tooltipRoundedRadius: 8,
+                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    tooltipMargin: 6,
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
+                    tooltipBorder: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      if (groupIndex < 0 || groupIndex >= displayedSuppliers.length) return null;
+                      final s = displayedSuppliers[groupIndex];
+                      final rank = startIndex + groupIndex + 1;
+                      return BarTooltipItem(
+                        '#$rank ${s['name'] ?? ''}\n',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12.5,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${weightF.format(s['weight'] ?? 0)} Kg',
+                            style: const TextStyle(
+                              color: Color(0xFF38BDF8),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 45,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0 || value == maxY) return const SizedBox();
+                        return Text(
+                          '${value.toInt()}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
+                        final s = displayedSuppliers[idx];
+                        final name = (s['name'] ?? '').toString();
+                        final shortName = name.length > 7 ? '${name.substring(0, 6)}..' : name;
+                        final rank = startIndex + idx + 1;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '#$rank $shortName',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF374151),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: maxY > 0 ? (maxY / 4) : 25,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: [
+                  for (int i = 0; i < displayedSuppliers.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: ((displayedSuppliers[i]['weight'] ?? 0) as num).toDouble(),
+                          gradient: LinearGradient(
+                            colors: [
+                              primaryAppColor,
+                              primaryAppColor.withValues(alpha: 0.72),
+                            ],
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                          ),
+                          width: 24,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                         ),
                       ],
-                    );
-                  },
-                ),
+                    ),
+                ],
               ),
-              titlesData: FlTitlesData(
-                show: true,
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 45,
-                    getTitlesWidget: (value, meta) {
-                      if (value == 0 || value == maxY) return const SizedBox();
-                      return Text(
-                        '${value.toInt()}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 32,
-                    getTitlesWidget: (value, meta) {
-                      final idx = value.toInt();
-                      if (idx < 0 || idx >= topSuppliers.length) return const SizedBox();
-                      final s = topSuppliers[idx];
-                      final name = (s['name'] ?? '').toString();
-                      final shortName = name.length > 7 ? '${name.substring(0, 6)}..' : name;
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          '#${idx + 1} $shortName',
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF374151),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: maxY > 0 ? (maxY / 4) : 25,
-                getDrawingHorizontalLine: (value) => FlLine(
-                  color: Colors.grey.shade200,
-                  strokeWidth: 1,
-                  dashArray: [4, 4],
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              barGroups: [
-                for (int i = 0; i < topSuppliers.length; i++)
-                  BarChartGroupData(
-                    x: i,
-                    barRods: [
-                      BarChartRodData(
-                        toY: ((topSuppliers[i]['weight'] ?? 0) as num).toDouble(),
-                        gradient: LinearGradient(
-                          colors: [
-                            primaryAppColor,
-                            primaryAppColor.withValues(alpha: 0.72),
-                          ],
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                        ),
-                        width: 24,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                      ),
-                    ],
-                  ),
-              ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
@@ -3002,7 +3120,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   Icon(Icons.workspace_premium_rounded, size: 16, color: Colors.amber.shade700),
                   const SizedBox(width: 6),
                   Text(
-                    'ප්‍රමුඛ ${topSuppliers.length} දෙනාගේ එකතුව:',
+                    'ප්‍රමුඛ ${startIndex + 1} - $endIndex දෙනාගේ එකතුව:',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 4),
@@ -3083,12 +3201,19 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    final topSuppliers = _allSuppliers.take(6).toList();
+    final int totalSuppliers = _allSuppliers.length;
+    const int pageSize = 6;
+    final int totalPages = (totalSuppliers / pageSize).ceil();
+    final int currentPage = _incomeExpensePageIndex.clamp(0, math.max(0, totalPages - 1));
+    final int startIndex = currentPage * pageSize;
+    final int endIndex = math.min(startIndex + pageSize, totalSuppliers);
+    final displayedSuppliers = _allSuppliers.sublist(startIndex, endIndex);
+
     double maxVal = 0;
     double sumIncome = 0;
     double sumExpense = 0;
 
-    for (final s in topSuppliers) {
+    for (final s in displayedSuppliers) {
       final inc = ((s['income'] ?? 0) as num).toDouble();
       final exp = ((s['expense'] ?? 0) as num).toDouble();
       if (inc > maxVal) maxVal = inc;
@@ -3146,182 +3271,267 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   ),
                 ],
               ),
-              const Text(
-                'ප්‍රමුඛ සැපයුම්කරුවන් 6 දෙනාගේ සැසඳීම',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey,
+              if (totalSuppliers > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'සැපයුම්කරුවන් ${startIndex + 1} - $endIndex / $totalSuppliers',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: currentPage > 0
+                            ? () {
+                                setState(() {
+                                  _incomeExpensePageIndex = currentPage - 1;
+                                });
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: currentPage > 0
+                                ? primaryAppColor.withValues(alpha: 0.12)
+                                : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: currentPage > 0
+                                  ? primaryAppColor.withValues(alpha: 0.35)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 13,
+                            color: currentPage > 0 ? primaryAppColor : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: endIndex < totalSuppliers
+                            ? () {
+                                setState(() {
+                                  _incomeExpensePageIndex = currentPage + 1;
+                                });
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: endIndex < totalSuppliers
+                                ? primaryAppColor.withValues(alpha: 0.12)
+                                : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: endIndex < totalSuppliers
+                                  ? primaryAppColor.withValues(alpha: 0.35)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 13,
+                            color: endIndex < totalSuppliers ? primaryAppColor : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
             ],
           ),
         ),
-        SizedBox(
-          height: 180,
-          child: BarChart(
-            BarChartData(
-              maxY: maxY,
-              alignment: BarChartAlignment.spaceAround,
-              barTouchData: BarTouchData(
-                enabled: true,
-                touchTooltipData: BarTouchTooltipData(
-                  tooltipRoundedRadius: 8,
-                  tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  tooltipMargin: 6,
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
-                  tooltipBorder: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    width: 1,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity != null) {
+              if (details.primaryVelocity! < -200 && endIndex < totalSuppliers) {
+                setState(() => _incomeExpensePageIndex = currentPage + 1);
+              } else if (details.primaryVelocity! > 200 && currentPage > 0) {
+                setState(() => _incomeExpensePageIndex = currentPage - 1);
+              }
+            }
+          },
+          child: SizedBox(
+            height: 180,
+            child: BarChart(
+              BarChartData(
+                maxY: maxY,
+                alignment: BarChartAlignment.spaceAround,
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    tooltipRoundedRadius: 8,
+                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    tooltipMargin: 6,
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
+                    tooltipBorder: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      if (groupIndex < 0 || groupIndex >= displayedSuppliers.length) return null;
+                      final s = displayedSuppliers[groupIndex];
+                      final inc = ((s['income'] ?? 0) as num).toDouble();
+                      final exp = ((s['expense'] ?? 0) as num).toDouble();
+                      final net = inc - exp;
+                      final rank = startIndex + groupIndex + 1;
+                      return BarTooltipItem(
+                        '#$rank ${s['name'] ?? ''}\n',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: 'ආදායම: Rs. ${currencyF.format(inc)}\n',
+                            style: const TextStyle(
+                              color: Color(0xFF34D399),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'වියදම්: Rs. ${currencyF.format(exp)}\n',
+                            style: const TextStyle(
+                              color: Color(0xFFFBBF24),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'ශුද්ධ ඉතිරිය: Rs. ${currencyF.format(net)}',
+                            style: TextStyle(
+                              color: net >= 0 ? const Color(0xFF38BDF8) : const Color(0xFFF87171),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    if (groupIndex < 0 || groupIndex >= topSuppliers.length) return null;
-                    final s = topSuppliers[groupIndex];
-                    final inc = ((s['income'] ?? 0) as num).toDouble();
-                    final exp = ((s['expense'] ?? 0) as num).toDouble();
-                    final net = inc - exp;
-                    final rank = groupIndex + 1;
-                    return BarTooltipItem(
-                      '#$rank ${s['name'] ?? ''}\n',
-                      const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'ආදායම: Rs. ${currencyF.format(inc)}\n',
-                          style: const TextStyle(
-                            color: Color(0xFF34D399),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11.5,
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 50,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0 || value == maxY) return const SizedBox();
+                        if (value >= 1000000) {
+                          return Text(
+                            '${(value / 1000000).toStringAsFixed(1)}M',
+                            style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                          );
+                        }
+                        if (value >= 1000) {
+                          return Text(
+                            '${(value / 1000).toInt()}K',
+                            style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                          );
+                        }
+                        return Text(
+                          '${value.toInt()}',
+                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
+                        final s = displayedSuppliers[idx];
+                        final name = (s['name'] ?? '').toString();
+                        final shortName = name.length > 7 ? '${name.substring(0, 6)}..' : name;
+                        final rank = startIndex + idx + 1;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '#$rank $shortName',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF374151),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: maxY > 0 ? (maxY / 4) : 10000,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: [
+                  for (int i = 0; i < displayedSuppliers.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barsSpace: 4,
+                      barRods: [
+                        BarChartRodData(
+                          toY: ((displayedSuppliers[i]['income'] ?? 0) as num).toDouble(),
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF059669),
+                              Color(0xFF34D399),
+                            ],
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                          ),
+                          width: 14,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                         ),
-                        TextSpan(
-                          text: 'වියදම්: Rs. ${currencyF.format(exp)}\n',
-                          style: const TextStyle(
-                            color: Color(0xFFFBBF24),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11.5,
+                        BarChartRodData(
+                          toY: ((displayedSuppliers[i]['expense'] ?? 0) as num).toDouble(),
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFFD97706),
+                              Color(0xFFFBBF24),
+                            ],
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
                           ),
-                        ),
-                        TextSpan(
-                          text: 'ශුද්ධ ඉතිරිය: Rs. ${currencyF.format(net)}',
-                          style: TextStyle(
-                            color: net >= 0 ? const Color(0xFF38BDF8) : const Color(0xFFF87171),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11.5,
-                          ),
+                          width: 14,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                         ),
                       ],
-                    );
-                  },
-                ),
+                    ),
+                ],
               ),
-              titlesData: FlTitlesData(
-                show: true,
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 50,
-                    getTitlesWidget: (value, meta) {
-                      if (value == 0 || value == maxY) return const SizedBox();
-                      if (value >= 1000000) {
-                        return Text(
-                          '${(value / 1000000).toStringAsFixed(1)}M',
-                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
-                        );
-                      }
-                      if (value >= 1000) {
-                        return Text(
-                          '${(value / 1000).toInt()}K',
-                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
-                        );
-                      }
-                      return Text(
-                        '${value.toInt()}',
-                        style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 30,
-                    getTitlesWidget: (value, meta) {
-                      final idx = value.toInt();
-                      if (idx < 0 || idx >= topSuppliers.length) return const SizedBox();
-                      final s = topSuppliers[idx];
-                      final name = (s['name'] ?? '').toString();
-                      final shortName = name.length > 7 ? '${name.substring(0, 6)}..' : name;
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          '#${idx + 1} $shortName',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF374151),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: maxY > 0 ? (maxY / 4) : 10000,
-                getDrawingHorizontalLine: (value) => FlLine(
-                  color: Colors.grey.shade200,
-                  strokeWidth: 1,
-                  dashArray: [4, 4],
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              barGroups: [
-                for (int i = 0; i < topSuppliers.length; i++)
-                  BarChartGroupData(
-                    x: i,
-                    barsSpace: 4,
-                    barRods: [
-                      BarChartRodData(
-                        toY: ((topSuppliers[i]['income'] ?? 0) as num).toDouble(),
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFF059669),
-                            Color(0xFF34D399),
-                          ],
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                        ),
-                        width: 14,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                      ),
-                      BarChartRodData(
-                        toY: ((topSuppliers[i]['expense'] ?? 0) as num).toDouble(),
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFFD97706),
-                            Color(0xFFFBBF24),
-                          ],
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                        ),
-                        width: 14,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                      ),
-                    ],
-                  ),
-              ],
             ),
           ),
         ),
@@ -3341,10 +3551,15 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   Icon(Icons.savings_outlined, size: 16, color: Colors.green.shade700),
                   const SizedBox(width: 6),
                   Text(
-                    'මුළු ආදායම: Rs. ${currencyF.format(sumIncome)}',
+                    'ප්‍රමුඛ ${startIndex + 1} - $endIndex එකතුව:',
                     style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 6),
+                  Text(
+                    'ආදායම: Rs. ${currencyF.format(sumIncome)}',
+                    style: TextStyle(fontSize: 11.5, color: primaryAppColor, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(width: 10),
                   Text(
                     'වියදම: Rs. ${currencyF.format(sumExpense)}',
                     style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
