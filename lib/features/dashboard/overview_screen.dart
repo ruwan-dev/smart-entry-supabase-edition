@@ -3734,43 +3734,82 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           ),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Stack(
+                          clipBehavior: Clip.none,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
+                            Align(
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.people_alt_rounded,
+                                      size: 22,
+                                      color: Color(0xFF2563EB),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    AppStrings.isSinhala
+                                        ? 'පාරිභෝගික\nවිශ්ලේෂණය'
+                                        : 'Customer\nAnalysis',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1E3A8A),
+                                      height: 1.2,
+                                    ),
                                   ),
                                 ],
                               ),
-                              child: const Icon(
-                                Icons.people_alt_rounded,
-                                size: 22,
-                                color: Color(0xFF2563EB),
-                              ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              AppStrings.isSinhala
-                                  ? 'පාරිභෝගික\nවිශ්ලේෂණය'
-                                  : 'Customer\nAnalysis',
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3A8A),
-                                height: 1.2,
+                            if (_totalCustomers > 0)
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2563EB),
+                                    borderRadius: BorderRadius.circular(10),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    '$_totalCustomers',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
