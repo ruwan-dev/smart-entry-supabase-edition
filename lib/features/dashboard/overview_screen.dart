@@ -2321,10 +2321,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                               }
                             } else if (_activeDesktopPage == 1) {
                               if (dy < -15) {
-                                if (!_sectionTwoScrollController.hasClients ||
-                                    _sectionTwoScrollController.offset <= 10) {
-                                  _goToDesktopPage(0);
-                                }
+                                _goToDesktopPage(0);
                               }
                             }
                           }
@@ -2500,11 +2497,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
   ) {
     return SingleChildScrollView(
       controller: _sectionTwoScrollController,
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          minHeight: viewportHeight - 16,
+          minHeight: viewportHeight - 12,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2515,7 +2512,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3.5),
-                  margin: const EdgeInsets.only(bottom: 6),
+                  margin: const EdgeInsets.only(bottom: 4),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(20),
@@ -2552,36 +2549,80 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
             _isSummaryLoading
                 ? const SkeletonBox(
-                    height: 200,
+                    height: 180,
                     width: double.infinity,
                     borderRadius: 20,
                   )
                 : _buildMonthlyFinancialSettlementSection(context, currencyF, weightF),
-            const SizedBox(height: 14),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 7,
-                  child: _isSummaryLoading
-                      ? _buildSkeletonDbBusinessSummary(context)
-                      : _buildDbBusinessSummary(currencyF, weightF),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 5,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildTopSuppliersHeader(context),
-                      const SizedBox(height: 12),
-                      _buildTopSuppliersList(weightF),
-                    ],
+            const SizedBox(height: 10),
+            if (_latestSummaryData != null)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 7,
+                    child: _isSummaryLoading
+                        ? _buildSkeletonDbBusinessSummary(context)
+                        : _buildDbBusinessSummary(currencyF, weightF),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 5,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildTopSuppliersHeader(context),
+                        const SizedBox(height: 8),
+                        _buildTopSuppliersList(weightF, compact: true),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildTopSuppliersHeader(context),
+                  const SizedBox(height: 8),
+                  if (_topSuppliers.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          AppStrings.noDataFound,
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              for (int i = 0; i < _topSuppliers.length && i < 2; i++)
+                                _buildCompactSupplierItem(_topSuppliers[i], i + 1, weightF),
+                            ],
+                          ),
+                        ),
+                        if (_topSuppliers.length > 2) ...[
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                for (int i = 2; i < _topSuppliers.length && i < 4; i++)
+                                  _buildCompactSupplierItem(_topSuppliers[i], i + 1, weightF),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                ],
+              ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -2936,28 +2977,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
           );
         }
 
-        Widget buildCard4([Key? k]) => _buildKpiCard(
-          key: k,
-          title: AppStrings.capitalExposure,
-          value: 'Rs. ${currencyF.format(_overallOutstandingAdvances)}',
-          badgeText: _allArrears.isNotEmpty ? '${_allArrears.length} ${AppStrings.customers}' : null,
-          badgeColor: const Color(0xFFDC2626),
-          subtitle: AppStrings.debtOutstanding,
-          icon: Icons.account_balance_wallet_rounded,
-          gradientColors: [
-            const Color(0xFFFEF2F2),
-            const Color(0xFFFEE2E2).withValues(alpha: 0.6),
-          ],
-          accentColor: const Color(0xFFDC2626),
-          borderColor: const Color(0xFFEF4444).withValues(alpha: 0.25),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  TotalOutstandingBalancesScreen(arrearsList: _allArrears),
-            ),
-          ),
-        );
+        Widget buildCustomerActionsCard([Key? k, double? h]) =>
+            _buildCustomerActionsTile(key: k, height: h);
 
         if (isDesktop) {
           return IntrinsicHeight(
@@ -2978,7 +2999,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       children: [
                         Expanded(child: buildCard1(const ValueKey('c1_d'))),
                         const SizedBox(width: 14),
-                        Expanded(child: buildCard4(const ValueKey('c4_d'))),
+                        Expanded(
+                          child: buildCustomerActionsCard(
+                            const ValueKey('c_act_d'),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -2999,7 +3024,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   children: [
                     Expanded(child: buildCard1(const ValueKey('c1_t1'))),
                     const SizedBox(width: 14),
-                    Expanded(child: buildCard4(const ValueKey('c4_t1'))),
+                    Expanded(
+                      child: buildCustomerActionsCard(
+                        const ValueKey('c_act_t1'),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -3013,7 +3042,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               const SizedBox(height: 12),
               buildCard1(const ValueKey('c1_m')),
               const SizedBox(height: 12),
-              buildCard4(const ValueKey('c4_m')),
+              buildCustomerActionsCard(const ValueKey('c_act_m'), 112),
             ],
           );
         }
@@ -3045,6 +3074,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           badgeColor: const Color(0xFF2563EB),
           subtitle: AppStrings.deliveredToFactories,
           icon: Icons.factory_rounded,
+          contentPadding: isDesktop ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10) : null,
           gradientColors: [
             const Color(0xFFEFF6FF),
             const Color(0xFFDBEAFE).withValues(alpha: 0.6),
@@ -3061,6 +3091,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           badgeColor: const Color(0xFF7C3AED),
           subtitle: '${weightF.format(_totalWeight)} Kg ${AppStrings.totalLeafIntake}',
           icon: Icons.energy_savings_leaf_rounded,
+          contentPadding: isDesktop ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10) : null,
           gradientColors: [
             const Color(0xFFF5F3FF),
             const Color(0xFFEDE9FE).withValues(alpha: 0.6),
@@ -3085,6 +3116,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ? AppStrings.pendingFactoryEntry
               : (_netDealerIncome >= 0 ? 'ශුද්ධ ලාභය' : 'ව්‍යාපාරික පාඩුව'),
           icon: Icons.payments_rounded,
+          contentPadding: isDesktop ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10) : null,
           gradientColors: hasNoFactoryData
               ? [
                   const Color(0xFFFFFBEB),
@@ -3191,11 +3223,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     ],
                   ),
                 ),
+                if (isDesktop) _buildTopMonthNavigatorHeader(context),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             cardsRow,
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             _buildTransitVarianceCard(context, weightF, hasDeliveredData, variance, variancePercent),
           ],
         );
@@ -3217,7 +3250,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -3272,7 +3305,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           LayoutBuilder(
             builder: (context, constraints) {
               final bool isSmall = constraints.maxWidth < 500;
@@ -3641,6 +3674,246 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
+  Widget _buildCustomerActionsTile({Key? key, double? height}) {
+    return SizedBox(
+      key: key,
+      height: height,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Button 1: Customer Analysis Screen
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.07),
+                    blurRadius: 16,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CustomerAnalysisScreen(),
+                        ),
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      hoverColor: const Color(0xFF3B82F6).withValues(alpha: 0.08),
+                      splashColor: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xFFEFF6FF),
+                              const Color(0xFFDBEAFE).withValues(alpha: 0.6),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.25),
+                            width: 1.5,
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.analytics_rounded,
+                                size: 22,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              AppStrings.isSinhala
+                                  ? 'පාරිභෝගික\nවිශ්ලේෂණය'
+                                  : 'Customer\nAnalysis',
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E3A8A),
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Button 2: Arrears Customers Screen
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFDC2626).withValues(alpha: 0.07),
+                    blurRadius: 16,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => TotalOutstandingBalancesScreen(
+                            arrearsList: _allArrears,
+                          ),
+                        ),
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      hoverColor: const Color(0xFFEF4444).withValues(alpha: 0.08),
+                      splashColor: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xFFFEF2F2),
+                              const Color(0xFFFEE2E2).withValues(alpha: 0.6),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                            width: 1.5,
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Align(
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.account_balance_wallet_rounded,
+                                      size: 22,
+                                      color: Color(0xFFDC2626),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    AppStrings.isSinhala
+                                        ? 'හිඟ මුදල්\nපාරිභෝගිකයින්'
+                                        : 'Arrears\nCustomers',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF991B1B),
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_allArrears.isNotEmpty)
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDC2626),
+                                    borderRadius: BorderRadius.circular(10),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    '${_allArrears.length}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildKpiCard({
     Key? key,
     required String title,
@@ -3653,6 +3926,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required Color accentColor,
     required Color borderColor,
     VoidCallback? onTap,
+    EdgeInsetsGeometry? contentPadding,
   }) {
     return Container(
       key: key,
@@ -3672,7 +3946,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: contentPadding ?? const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: gradientColors,
@@ -5038,11 +5312,90 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildTopSuppliersList(NumberFormat weightF) {
-    if (_topSuppliers.isEmpty)
+  Widget _buildCompactSupplierItem(
+    Map<String, dynamic> s,
+    int rank,
+    NumberFormat weightF,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.blueGrey.shade100.withValues(alpha: 0.6),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: const BoxDecoration(
+              color: Color(0xFFE3F2FD),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$rank',
+                style: TextStyle(
+                  color: primaryAppColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11.5,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              s['name'] ?? '',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+                color: Color(0xFF374151),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${weightF.format(s['weight'] ?? 0)} Kg',
+            style: TextStyle(
+              color: primaryAppColor,
+              fontWeight: FontWeight.w800,
+              fontSize: 12.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopSuppliersList(NumberFormat weightF, {bool compact = false}) {
+    if (_topSuppliers.isEmpty) {
       return Center(
         child: Text(AppStrings.noDataFound, style: const TextStyle(color: Colors.grey)),
       );
+    }
+    if (compact) {
+      return Column(
+        children: _topSuppliers.take(4).map((s) {
+          final int rank = _topSuppliers.indexOf(s) + 1;
+          return _buildCompactSupplierItem(s, rank, weightF);
+        }).toList(),
+      );
+    }
     return Column(
       children: _topSuppliers
           .map(

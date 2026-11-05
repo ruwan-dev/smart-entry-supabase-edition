@@ -604,6 +604,7 @@ class AppStrings {
   static String get debtOutstanding => isSinhala ? 'හිඟ මුදල (ණය)' : 'Outstanding Debt';
   static String get byRating => isSinhala ? 'ශ්‍රේණිගත කිරීම් අනුව' : 'By Rating';
   static String get customerAnalysis => isSinhala ? 'පාරිභෝගික විශ්ලේෂණය' : 'Customer Analysis';
+  static String get arrearsCustomers => isSinhala ? 'හිඟ පාරිභෝගිකයින්' : 'Arrears Customers';
   static String get overallData => isSinhala ? 'සමස්ත දත්ත' : 'Overall Data';
   static String get withDebt => isSinhala ? 'ණය සහිත අය' : 'With Debt';
   static String get inactiveCustomers => isSinhala ? 'අක්‍රිය පාරිභෝගිකයින්' : 'Inactive Customers';
