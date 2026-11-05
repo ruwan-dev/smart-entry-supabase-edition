@@ -80,6 +80,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
   double _totalWeight = 0.0;
   int _totalCustomers = 0;
 
+  // Desktop section scrolling & full-page snapping
+  final ScrollController _dashboardScrollController = ScrollController();
+  bool _isSectionAnimating = false;
+  int _activeDesktopSection = 0;
+
   // Today's Operational Telemetry
   double _todayTotalWeight = 0.0;
   double _todayNormalWeight = 0.0;
@@ -182,6 +187,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   @override
   void dispose() {
+    _dashboardScrollController.dispose();
     AppState.refreshTrigger.removeListener(_onRefresh);
     AppLanguageService.currentLanguage.removeListener(_onLanguageChanged);
     super.dispose();
@@ -1286,13 +1292,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
         // Grid Rows
         ...List.generate(rows, (r) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 5.0),
+            padding: const EdgeInsets.only(bottom: 3.5),
             child: Row(
               children: List.generate(7, (c) {
                 final int slotIndex = r * 7 + c;
                 final int dayNumber = slotIndex - startOffset + 1;
                 if (slotIndex < startOffset || dayNumber > daysInMonth) {
-                  return const Expanded(child: SizedBox(height: 36));
+                  return const Expanded(child: SizedBox(height: 33));
                 }
 
                 if (_isHeatmapLoading) {
@@ -1301,7 +1307,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       padding: EdgeInsets.symmetric(horizontal: 2.0),
                       child: SkeletonBox(
                         width: double.infinity,
-                        height: 36,
+                        height: 33,
                         borderRadius: 8,
                       ),
                     ),
@@ -1344,7 +1350,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       message:
                           '$monthName $dayNumber\n${hasHarvest ? "${dayVal.toStringAsFixed(1)} Kg" : (AppStrings.isSinhala ? "දළු නොමැත" : "No harvest")}',
                       child: Container(
-                        height: 36,
+                        height: 33,
                         decoration: BoxDecoration(
                           color: bgColor,
                           borderRadius: BorderRadius.circular(8),
@@ -1752,7 +1758,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -1836,7 +1842,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           // Divider
                           Container(
                             width: 1,
-                            height: 280,
+                            height: 250,
                             color: Colors.black.withValues(alpha: 0.06),
                             margin:
                                 const EdgeInsets.symmetric(horizontal: 14),
@@ -1965,7 +1971,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 14,
+                  vertical: 10,
                 ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -2243,6 +2249,33 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
+  void _scrollToSection(int sectionIndex, double viewportHeight) {
+    if (_isSectionAnimating) return;
+    _isSectionAnimating = true;
+    setState(() {
+      _activeDesktopSection = sectionIndex;
+    });
+
+    final double targetOffset = sectionIndex == 0 ? 0.0 : viewportHeight;
+    if (_dashboardScrollController.hasClients) {
+      _dashboardScrollController
+          .animateTo(
+            targetOffset,
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeInOutCubic,
+          )
+          .then((_) {
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (mounted) {
+            _isSectionAnimating = false;
+          }
+        });
+      });
+    } else {
+      _isSectionAnimating = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currencyF = NumberFormat('#,##0.00', 'en_US');
@@ -2257,88 +2290,388 @@ class _OverviewScreenState extends State<OverviewScreen> {
         },
         child: _isLoading
             ? _buildFullSkeletonDashboard(currencyF)
-            : SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 20.0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTopBannerAndMonthHeader(context, currencyF),
-                    _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
-                    const SizedBox(height: 24),
-                    _buildHarvestAndQualitySection(context, currencyF, weightF),
-                    const SizedBox(height: 32),
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final bool isDesktop = constraints.maxWidth >= 1020 && !kIsWeb && Platform.isWindows;
+                  final double viewportHeight = constraints.maxHeight;
 
-                    // Bottom Section: Monthly Financial Settlement & Transit Variance
-                    _isSummaryLoading
-                        ? const SkeletonBox(
-                            height: 220,
-                            width: double.infinity,
-                            borderRadius: 20,
-                          )
-                        : _buildMonthlyFinancialSettlementSection(context, currencyF, weightF),
-                    const SizedBox(height: 28),
+                  if (!isDesktop) {
+                    // Mobile / Tablet standard continuous scroll
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 20.0,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildTopBannerAndMonthHeader(context, currencyF),
+                          _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
+                          const SizedBox(height: 24),
+                          _buildHarvestAndQualitySection(context, currencyF, weightF),
+                          const SizedBox(height: 32),
+                          _isSummaryLoading
+                              ? const SkeletonBox(
+                                  height: 220,
+                                  width: double.infinity,
+                                  borderRadius: 20,
+                                )
+                              : _buildMonthlyFinancialSettlementSection(context, currencyF, weightF),
+                          const SizedBox(height: 28),
+                          _isSummaryLoading
+                              ? _buildSkeletonDbBusinessSummary(context)
+                              : _buildDbBusinessSummary(currencyF, weightF),
+                          const SizedBox(height: 36),
+                          _buildTopSuppliersHeader(context),
+                          const SizedBox(height: 16),
+                          _buildTopSuppliersList(weightF),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    );
+                  }
 
-                    _isSummaryLoading
-                        ? _buildSkeletonDbBusinessSummary(context)
-                        : _buildDbBusinessSummary(currencyF, weightF),
-                    const SizedBox(height: 36),
+                  // Desktop / Laptop: Full-Page Section Snapping
+                  return Stack(
+                    children: [
+                      Listener(
+                        onPointerSignal: (pointerSignal) {
+                          if (pointerSignal is PointerScrollEvent && !_isSectionAnimating) {
+                            final dy = pointerSignal.scrollDelta.dy;
+                            final currentOffset = _dashboardScrollController.hasClients
+                                ? _dashboardScrollController.offset
+                                : 0.0;
 
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            AppStrings.topSuppliers,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF1F2937),
-                            ),
-                          ),
-                        ),
-                        if (_allSuppliers.length > 5)
-                          TextButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => TopSuppliersScreen(
-                                    allSuppliers: _allSuppliers,
-                                  ),
-                                ),
-                              );
-                            },
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                            if (dy > 15) {
+                              // Scrolling down
+                              if (_activeDesktopSection == 0) {
+                                _scrollToSection(1, viewportHeight);
+                              }
+                            } else if (dy < -15) {
+                              // Scrolling up
+                              if (_activeDesktopSection == 1 && currentOffset <= viewportHeight + 40) {
+                                _scrollToSection(0, viewportHeight);
+                              }
+                            }
+                          }
+                        },
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: (notification) {
+                            if (notification is ScrollEndNotification && !_isSectionAnimating) {
+                              final offset = _dashboardScrollController.hasClients
+                                  ? _dashboardScrollController.offset
+                                  : 0.0;
+                              if (offset > 25 && offset < viewportHeight - 25) {
+                                final target = offset < (viewportHeight / 2) ? 0 : 1;
+                                _scrollToSection(target, viewportHeight);
+                              } else if (offset >= viewportHeight - 25 && _activeDesktopSection != 1) {
+                                setState(() => _activeDesktopSection = 1);
+                              } else if (offset <= 25 && _activeDesktopSection != 0) {
+                                setState(() => _activeDesktopSection = 0);
+                              }
+                            }
+                            return false;
+                          },
+                          child: SingleChildScrollView(
+                            controller: _dashboardScrollController,
+                            physics: const ClampingScrollPhysics(),
+                            child: Column(
                               children: [
-                                Text(
-                                  AppStrings.viewAll,
-                                  style: TextStyle(
-                                    color: primaryAppColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  size: 12,
-                                  color: primaryAppColor,
-                                ),
+                                _buildDesktopSectionOne(context, currencyF, weightF, viewportHeight),
+                                _buildDesktopSectionTwo(context, currencyF, weightF, viewportHeight),
                               ],
                             ),
                           ),
-                      ],
+                        ),
+                      ),
+                      // Floating section indicator on right edge
+                      Positioned(
+                        right: 14,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _buildDesktopSectionIndicator(viewportHeight),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+
+  Widget _buildTopSuppliersHeader(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            AppStrings.topSuppliers,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1F2937),
+            ),
+          ),
+        ),
+        if (_allSuppliers.length > 5)
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TopSuppliersScreen(
+                    allSuppliers: _allSuppliers,
+                  ),
+                ),
+              );
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  AppStrings.viewAll,
+                  style: TextStyle(
+                    color: primaryAppColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 12,
+                  color: primaryAppColor,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopSectionOne(
+    BuildContext context,
+    NumberFormat currencyF,
+    NumberFormat weightF,
+    double viewportHeight,
+  ) {
+    return Container(
+      constraints: BoxConstraints(
+        minHeight: viewportHeight,
+        maxHeight: math.max(viewportHeight, 520),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTopBannerAndMonthHeader(context, currencyF),
+              const SizedBox(height: 6),
+              _buildRealTimeOperationalKpiStrip(context, currencyF, weightF),
+              const SizedBox(height: 8),
+              _buildHarvestAndQualitySection(context, currencyF, weightF),
+            ],
+          ),
+          Center(
+            child: InkWell(
+              onTap: () => _scrollToSection(1, viewportHeight),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3.5),
+                margin: const EdgeInsets.only(top: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade300, width: 0.8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                    const SizedBox(height: 16),
-                    _buildTopSuppliersList(weightF),
-                    const SizedBox(height: 20),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      AppStrings.financialOverview,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 16,
+                      color: primaryAppColor,
+                    ),
                   ],
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopSectionTwo(
+    BuildContext context,
+    NumberFormat currencyF,
+    NumberFormat weightF,
+    double viewportHeight,
+  ) {
+    return Container(
+      constraints: BoxConstraints(
+        minHeight: viewportHeight,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: InkWell(
+              onTap: () => _scrollToSection(0, viewportHeight),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3.5),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade300, width: 0.8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      size: 16,
+                      color: primaryAppColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'ආපසු ඉහළට',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _isSummaryLoading
+              ? const SkeletonBox(
+                  height: 200,
+                  width: double.infinity,
+                  borderRadius: 20,
+                )
+              : _buildMonthlyFinancialSettlementSection(context, currencyF, weightF),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 7,
+                child: _isSummaryLoading
+                    ? _buildSkeletonDbBusinessSummary(context)
+                    : _buildDbBusinessSummary(currencyF, weightF),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildTopSuppliersHeader(context),
+                    const SizedBox(height: 12),
+                    _buildTopSuppliersList(weightF),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopSectionIndicator(double viewportHeight) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: 'ප්‍රධාන සාරාංශය (Overview)',
+            child: InkWell(
+              onTap: () => _scrollToSection(0, viewportHeight),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 10,
+                height: _activeDesktopSection == 0 ? 24 : 10,
+                decoration: BoxDecoration(
+                  color: _activeDesktopSection == 0
+                      ? primaryAppColor
+                      : Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Tooltip(
+            message: 'මූල්‍ය විශ්ලේෂණය (Settlements)',
+            child: InkWell(
+              onTap: () => _scrollToSection(1, viewportHeight),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 10,
+                height: _activeDesktopSection == 1 ? 24 : 10,
+                decoration: BoxDecoration(
+                  color: _activeDesktopSection == 1
+                      ? primaryAppColor
+                      : Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3642,7 +3975,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -3768,7 +4101,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                 // Main 12-Month Grouped Bar Chart
                 SizedBox(
-                  height: 205,
+                  height: isMobile ? 205 : 190,
                   child: BarChart(
                     BarChartData(
                       maxY: maxY,
