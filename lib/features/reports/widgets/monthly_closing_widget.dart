@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -34,6 +37,39 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
   double? _progressValue;
 
   final GlobalKey _monthSelectorKey = GlobalKey();
+  final PageController _desktopPageController = PageController();
+  int _activeDesktopPage = 0;
+  bool _isPageAnimating = false;
+
+  void _goToDesktopPage(int targetPage) {
+    if (_isPageAnimating || _activeDesktopPage == targetPage) return;
+    _isPageAnimating = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _activeDesktopPage = targetPage;
+      });
+
+      if (_desktopPageController.hasClients) {
+        _desktopPageController
+            .animateToPage(
+              targetPage,
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeInOutCubic,
+            )
+            .then((_) {
+          Future.delayed(const Duration(milliseconds: 250), () {
+            if (mounted) {
+              _isPageAnimating = false;
+            }
+          });
+        });
+      } else {
+        _isPageAnimating = false;
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -50,6 +86,9 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
         setState(() {
           _selectedMonth = SharedReportState.selectedMonth.value;
         });
+        if (_activeDesktopPage != 0 && _desktopPageController.hasClients) {
+          _goToDesktopPage(0);
+        }
         _checkStatusAndCalculate();
       }
     }
@@ -57,6 +96,7 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
 
   @override
   void dispose() {
+    _desktopPageController.dispose();
     SharedReportState.selectedMonth.removeListener(_onSharedMonthChanged);
     super.dispose();
   }
@@ -559,81 +599,670 @@ class _MonthlyClosingWidgetState extends State<MonthlyClosingWidget> {
   // ===========================================================================
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isDesktop =
+            constraints.maxWidth >= 900 && !kIsWeb && Platform.isWindows;
+        final double viewportHeight = constraints.maxHeight;
+
+        if (!isDesktop) {
+          // Mobile / Tablet continuous scroll
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 16),
+                _buildControlsCard(),
+                const SizedBox(height: 20),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/closing_bg.jpg',
+                    fit: BoxFit.cover,
+                    height: 240,
+                  ),
+                ),
+                if (_isAlreadyFinalized && _monthlySummaryData != null) ...[
+                  const SizedBox(height: 20),
+                  _buildSummaryCard(),
+                ],
+              ],
+            ),
+          );
+        }
+
+        final bool hasSummary =
+            _isAlreadyFinalized && _monthlySummaryData != null;
+
+        // Desktop: Full-page PageView (Zero Halfway Scroll)
+        return Stack(
+          children: [
+            Listener(
+              onPointerSignal: (pointerSignal) {
+                if (pointerSignal is PointerScrollEvent) {
+                  if (_isPageAnimating || !hasSummary) return;
+                  final dy = pointerSignal.scrollDelta.dy;
+                  if (_activeDesktopPage == 0 && dy > 15) {
+                    _goToDesktopPage(1);
+                  } else if (_activeDesktopPage == 1 && dy < -15) {
+                    _goToDesktopPage(0);
+                  }
+                }
+              },
+              child: PageView(
+                controller: _desktopPageController,
+                scrollDirection: Axis.vertical,
+                physics: const NeverScrollableScrollPhysics(),
+                onPageChanged: (page) {
+                  if (_activeDesktopPage != page) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() {
+                          _activeDesktopPage = page;
+                        });
+                      }
+                    });
+                  }
+                },
+                children: [
+                  _buildDesktopSectionOne(context, viewportHeight),
+                  if (hasSummary)
+                    _buildDesktopSectionTwo(context, viewportHeight),
+                ],
+              ),
+            ),
+            if (hasSummary)
+              Positioned(
+                right: 14,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: _buildDesktopSectionIndicator(),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          AppStrings.monthlyClosingTitle,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF1F2937),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          AppStrings.monthlyClosingSubtitle,
+          style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildControlsCard() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF8B9CB2).withValues(alpha: 0.3),
+                const Color(0xFF8B9CB2).withValues(alpha: 0.1),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.5),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF8B9CB2).withValues(alpha: 0.1),
+                blurRadius: 20,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildMonthSelector(),
+              const SizedBox(height: 20),
+              _buildStatusTile(),
+              if (!(_ratesMissing && !_isAlreadyFinalized)) ...[
+                const SizedBox(height: 20),
+                _buildActionButton(),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopSectionIndicator() {
+    const primaryColor = Color(0xFF0096C7);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: 'ගිණුම් අවසන් කිරීම (Closing Controls)',
+            child: InkWell(
+              onTap: () => _goToDesktopPage(0),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 10,
+                height: _activeDesktopPage == 0 ? 24 : 10,
+                decoration: BoxDecoration(
+                  color: _activeDesktopPage == 0
+                      ? primaryColor
+                      : Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Tooltip(
+            message: 'ව්‍යාපාරික සාරාංශය (Business Summary)',
+            child: InkWell(
+              onTap: () => _goToDesktopPage(1),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 10,
+                height: _activeDesktopPage == 1 ? 24 : 10,
+                decoration: BoxDecoration(
+                  color: _activeDesktopPage == 1
+                      ? primaryColor
+                      : Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopSectionOne(BuildContext context, double viewportHeight) {
+    final bool hasSummary =
+        _isAlreadyFinalized && _monthlySummaryData != null;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32.0, 20.0, 48.0, 20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                flex: 5,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Container(
-                      height: 360,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF8B9CB2).withValues(alpha: 0.3),
-                            const Color(0xFF8B9CB2).withValues(alpha: 0.1),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+          _buildHeader(),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 380),
+                      child: _buildControlsCard(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  flex: 4,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 380),
+                      child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF8B9CB2).withValues(alpha: 0.1),
-                            blurRadius: 20,
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildMonthSelector(),
-                            const SizedBox(height: 24),
-                            _buildStatusTile(),
-                            if (!(_ratesMissing && !_isAlreadyFinalized)) ...[
-                              const SizedBox(height: 24),
-                              _buildActionButton(),
-                            ],
-                          ],
+                        child: Image.asset(
+                          'assets/closing_bg.jpg',
+                          fit: BoxFit.cover,
+                          height: 380,
+                          width: double.infinity,
                         ),
                       ),
                     ),
                   ),
                 ),
+              ],
+            ),
+          ),
+          if (hasSummary) ...[
+            const SizedBox(height: 12),
+            Center(
+              child: InkWell(
+                onTap: () => _goToDesktopPage(1),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF0096C7).withValues(alpha: 0.3),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.insights_rounded,
+                        size: 16,
+                        color: Color(0xFF0096C7),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        "මාසික ව්‍යාපාරික සාරාංශය බලන්න (Scroll Down)",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0096C7),
+                        ),
+                      ),
+                      SizedBox(width: 6),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: Color(0xFF0096C7),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(width: 24),
-              Expanded(
-                flex: 4,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(
-                    'assets/closing_bg.jpg',
-                    fit: BoxFit.cover,
-                    height: 360,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopSectionTwo(BuildContext context, double viewportHeight) {
+    if (!_isAlreadyFinalized || _monthlySummaryData == null) {
+      return const SizedBox.shrink();
+    }
+    final s = _monthlySummaryData!;
+    final monthName = _fullMonthNames[(_selectedMonth - 1).clamp(0, 11)];
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32.0, 20.0, 48.0, 20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0096C7).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.analytics_outlined,
+                      color: Color(0xFF0096C7),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "මාසික ව්‍යාපාරික සාරාංශය ($_currentYear $monthName)",
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        "අදාළ මාසයේ සියලුම ලැබීම් සහ අඩුකිරීම් සාරාංශය මෙහි දැක්වේ.",
+                        style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _goToDesktopPage(0),
+                icon: const Icon(Icons.arrow_upward_rounded, size: 16),
+                label: const Text(
+                  "ආපසු ඉහළට (Back to Controls)",
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0096C7),
+                  side: BorderSide(
+                    color: const Color(0xFF0096C7).withValues(alpha: 0.4),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
                   ),
                 ),
               ),
             ],
           ),
-          if (_isAlreadyFinalized && _monthlySummaryData != null) ...[
-            const SizedBox(height: 20),
-            _buildSummaryCard(),
-          ],
+          const SizedBox(height: 16),
+          Expanded(
+            child: Card(
+              color: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(22.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Left Column: Key Metrics & Payments
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "මුළු දළු බර (Total Weight)",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.blueGrey,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        "${(s['totalWeight'] ?? 0).toStringAsFixed(1)} Kg",
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF0FDF4),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: const Color(0xFFDCFCE7),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "මුළු ආදායම (Gross Income)",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF166534),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        "Rs. ${(s['totalGross'] ?? 0).toStringAsFixed(2)}",
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF15803D),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            "Payments Summary (ගෙවීම් සාරාංශය)",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _row(
+                            "ගෙවීමට ඇති (+) ",
+                            "Rs. ${(s['totalPositiveNet'] ?? 0).toStringAsFixed(2)}",
+                            color: Colors.blue.shade700,
+                          ),
+                          _row(
+                            "අයවීමට ඇති (-) ",
+                            "Rs. ${(s['totalNegativeNet'] ?? 0).toStringAsFixed(2)}",
+                            color: Colors.red.shade700,
+                          ),
+                          const Spacer(),
+                          const Divider(height: 16, color: Colors.black12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0096C7).withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF0096C7).withValues(alpha: 0.25),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  "ශුද්ධ ලාභ / අලාභය (Net)",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                                Text(
+                                  "Rs. ${(s['totalNet'] ?? 0).toStringAsFixed(2)}",
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0096C7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    const VerticalDivider(width: 1, color: Colors.black12),
+                    const SizedBox(width: 24),
+                    // Right Column: Deductions Breakdown
+                    Expanded(
+                      flex: 6,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            "Deductions Breakdown (අඩුකිරීම් විස්තරය)",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Column(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 4,
+                                        child: Text(
+                                          "Breakdown",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          "Qty",
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          "Amount",
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const Divider(
+                                    color: Colors.black12,
+                                    height: 10,
+                                  ),
+                                  _itemRow(
+                                    "Advance (අත්තිකාරම්)",
+                                    "-",
+                                    s['totalAdvance'],
+                                  ),
+                                  _itemRow(
+                                    "Fertilizer 01 (පොහොර 1)",
+                                    s['totalF1Qty'],
+                                    s['totalF1Amt'],
+                                  ),
+                                  _itemRow(
+                                    "Fertilizer 02 (පොහොර 2)",
+                                    s['totalF2Qty'],
+                                    s['totalF2Amt'],
+                                  ),
+                                  _itemRow(
+                                    "Tea Pkt 01 (තේ කොළ 1)",
+                                    s['totalT1Qty'],
+                                    s['totalT1Amt'],
+                                  ),
+                                  _itemRow(
+                                    "Tea Pkt 02 (තේ කොළ 2)",
+                                    s['totalT2Qty'],
+                                    s['totalT2Amt'],
+                                  ),
+                                  _itemRow(
+                                    "Transport (ප්‍රවාහන)",
+                                    "-",
+                                    s['totalTransport'],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

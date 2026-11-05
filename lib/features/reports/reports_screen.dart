@@ -621,30 +621,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildClosingTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            AppStrings.monthlyClosingTitle,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1F2937),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            AppStrings.monthlyClosingSubtitle,
-            style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
-          ),
-          const SizedBox(height: 24),
-
-          const MonthlyClosingWidget(),
-        ],
-      ),
-    );
+    return const MonthlyClosingWidget();
   }
 
   Widget _buildAnalysisTab() {
