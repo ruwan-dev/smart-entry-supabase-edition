@@ -139,6 +139,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   int _selectedAnalyticsTab = 0;
   int _incomeExpensePageIndex = 0;
   int _topSuppliersChartPageIndex = 0;
+  int _inputsChartPageIndex = 0;
 
   String _chartFilter = 'Monthly';
   bool _isChartLoading = true;
@@ -572,6 +573,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
       double totAdvancesMonth = 0.0;
       Map<String, double> supplierIncomeMap = {};
       Map<String, double> supplierExpenseMap = {};
+      Map<String, double> supplierAdvMap = {};
+      Map<String, double> supplierFertMap = {};
+      Map<String, double> supplierTeaMap = {};
+      Map<String, double> supplierOtherMap = {};
       Map<String, double> itemBreakdownQ = {};
       Map<String, double> itemBreakdownA = {};
 
@@ -643,6 +648,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
           if (entryWeight > 0) activeSupplierIds.add(cId);
           supplierWeightMap[cId] = (supplierWeightMap[cId] ?? 0.0) + entryWeight;
           supplierExpenseMap[cId] = (supplierExpenseMap[cId] ?? 0.0) + entryDeductions;
+          supplierAdvMap[cId] = (supplierAdvMap[cId] ?? 0.0) + adv;
+          supplierFertMap[cId] = (supplierFertMap[cId] ?? 0.0) + (parsed.f1Amt + parsed.f2Amt);
+          supplierTeaMap[cId] = (supplierTeaMap[cId] ?? 0.0) + (parsed.t1Amt + parsed.t2Amt);
+          supplierOtherMap[cId] = (supplierOtherMap[cId] ?? 0.0) + parsed.otherDynamicAmt;
         }
 
         // Calculate supplier payout
@@ -766,6 +775,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
       Map<String, double> customerYearWeight = {};
       Map<String, double> customerYearIncome = {};
       Map<String, double> customerYearExpense = {};
+      Map<String, double> customerYearAdv = {};
+      Map<String, double> customerYearFert = {};
+      Map<String, double> customerYearTea = {};
+      Map<String, double> customerYearOther = {};
 
       for (var bill in allBills) {
         if (extractBillYear(bill) == _selectedYear) {
@@ -787,6 +800,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
             customerYearWeight[cId] = (customerYearWeight[cId] ?? 0.0) + tw;
             customerYearIncome[cId] = (customerYearIncome[cId] ?? 0.0) + bGross;
             customerYearExpense[cId] = (customerYearExpense[cId] ?? 0.0) + exp;
+            customerYearAdv[cId] = (customerYearAdv[cId] ?? 0.0) + adv;
+            customerYearFert[cId] = (customerYearFert[cId] ?? 0.0) + fert;
+            customerYearTea[cId] = (customerYearTea[cId] ?? 0.0) + tea;
+            customerYearOther[cId] = (customerYearOther[cId] ?? 0.0) + oth;
           }
         }
       }
@@ -802,6 +819,18 @@ class _OverviewScreenState extends State<OverviewScreen> {
         supplierExpenseMap.forEach((cId, exp) {
           customerYearExpense[cId] = (customerYearExpense[cId] ?? 0.0) + exp;
         });
+        supplierAdvMap.forEach((cId, a) {
+          customerYearAdv[cId] = (customerYearAdv[cId] ?? 0.0) + a;
+        });
+        supplierFertMap.forEach((cId, f) {
+          customerYearFert[cId] = (customerYearFert[cId] ?? 0.0) + f;
+        });
+        supplierTeaMap.forEach((cId, t) {
+          customerYearTea[cId] = (customerYearTea[cId] ?? 0.0) + t;
+        });
+        supplierOtherMap.forEach((cId, o) {
+          customerYearOther[cId] = (customerYearOther[cId] ?? 0.0) + o;
+        });
       }
 
       // Build comprehensive list of ALL customers (including arrears customers)
@@ -813,6 +842,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
         double yrWeight = customerYearWeight[cId] ?? 0.0;
         double yrIncome = customerYearIncome[cId] ?? 0.0;
         double yrExpense = customerYearExpense[cId] ?? 0.0;
+        double yrAdv = customerYearAdv[cId] ?? 0.0;
+        double yrFert = customerYearFert[cId] ?? 0.0;
+        double yrTea = customerYearTea[cId] ?? 0.0;
+        double yrOther = customerYearOther[cId] ?? 0.0;
         double arrears = arrearsMap[cId] ?? 0.0;
 
         if (arrears > 0 && yrExpense < arrears) {
@@ -826,6 +859,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
           'weight': yrWeight,
           'income': yrIncome,
           'expense': yrExpense,
+          'adv': yrAdv,
+          'fert': yrFert,
+          'tea': yrTea,
+          'other': yrOther,
           'arrears': arrears,
           'hasArrears': arrears > 0,
         });
@@ -3663,163 +3700,375 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   Widget _buildInputsBreakdownBarChart(NumberFormat currencyF) {
-    final double fertCost = _totalFertilizerQty * (fert1Price > 0 ? fert1Price : 15500.0);
-    final double teaCost = _totalTeaPacketQty * (teaPkt1Price > 0 ? teaPkt1Price : 500.0);
-    final double advanceVal = _monthlyAdvancesGiven > 0 ? _monthlyAdvancesGiven : _overallOutstandingAdvances;
-    final String advanceLabel = _monthlyAdvancesGiven > 0 ? 'මාසික අත්තිකාරම්' : 'හිඟ මුදල්';
-    final double otherVal = _totalItemsCost;
+    if (_allSuppliers.isEmpty) {
+      return SizedBox(
+        height: 240,
+        child: Center(
+          child: Text(
+            AppStrings.noDataFound,
+            style: const TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
 
-    final items = [
-      {'label': advanceLabel, 'value': advanceVal, 'color': const Color(0xFFF59E0B)},
-      {'label': 'පොහොර', 'value': fertCost, 'color': const Color(0xFF10B981)},
-      {'label': 'තේ පැකට්', 'value': teaCost, 'color': const Color(0xFF06B6D4)},
-      {'label': 'වෙනත් ද්‍රව්‍ය', 'value': otherVal, 'color': const Color(0xFF8B5CF6)},
-      if (_monthlyAdvancesGiven > 0 && _overallOutstandingAdvances > 0)
-        {'label': 'පසුගිය හිඟ', 'value': _overallOutstandingAdvances, 'color': const Color(0xFFEF4444)},
-    ];
+    final sortedSuppliers = List<Map<String, dynamic>>.from(_allSuppliers)
+      ..sort((a, b) {
+        final totA = (((a['adv'] ?? 0) as num) +
+                ((a['fert'] ?? 0) as num) +
+                ((a['tea'] ?? 0) as num) +
+                ((a['other'] ?? 0) as num))
+            .toDouble();
+        final totB = (((b['adv'] ?? 0) as num) +
+                ((b['fert'] ?? 0) as num) +
+                ((b['tea'] ?? 0) as num) +
+                ((b['other'] ?? 0) as num))
+            .toDouble();
+        if (totA != totB) return totB.compareTo(totA);
+        final incA = ((a['income'] ?? 0) as num).toDouble();
+        final incB = ((b['income'] ?? 0) as num).toDouble();
+        return incB.compareTo(incA);
+      });
+
+    final int totalSuppliers = sortedSuppliers.length;
+    const int pageSize = 16;
+    final int totalPages = (totalSuppliers / pageSize).ceil();
+    final int currentPage = _inputsChartPageIndex.clamp(0, math.max(0, totalPages - 1));
+    final int startIndex = currentPage * pageSize;
+    final int endIndex = math.min(startIndex + pageSize, totalSuppliers);
+    final displayedSuppliers = sortedSuppliers.sublist(startIndex, endIndex);
 
     double maxVal = 0;
-    double totalDeductions = 0;
-    for (final it in items) {
-      final v = (it['value'] as double);
-      if (v > maxVal) maxVal = v;
-      totalDeductions += v;
+    for (final s in displayedSuppliers) {
+      final a = ((s['adv'] ?? 0) as num).toDouble();
+      final f = ((s['fert'] ?? 0) as num).toDouble();
+      final t = ((s['tea'] ?? 0) as num).toDouble();
+      final o = ((s['other'] ?? 0) as num).toDouble();
+      if (a > maxVal) maxVal = a;
+      if (f > maxVal) maxVal = f;
+      if (t > maxVal) maxVal = t;
+      if (o > maxVal) maxVal = o;
     }
     final double maxY = maxVal > 0 ? (maxVal * 1.25) : 10000;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: math.max(380.0, items.length * 85.0 + 80.0),
-            ),
-            child: SizedBox(
-              height: 195,
-              child: BarChart(
-            BarChartData(
-              maxY: maxY,
-              alignment: BarChartAlignment.spaceAround,
-              barTouchData: BarTouchData(
-                enabled: true,
-                touchTooltipData: BarTouchTooltipData(
-                  tooltipRoundedRadius: 8,
-                  tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  tooltipMargin: 6,
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
-                  tooltipBorder: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    width: 1,
-                  ),
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    if (groupIndex < 0 || groupIndex >= items.length) return null;
-                    final it = items[groupIndex];
-                    return BarTooltipItem(
-                      '${it['label']}\n',
-                      const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12.5,
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'පාරිභෝගික ද්‍රව්‍ය හා අත්තිකාරම් ($_selectedYear වාර්ෂික)',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF374151),
+                ),
+              ),
+              if (totalSuppliers > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'සැපයුම්කරුවන් ${startIndex + 1} - $endIndex / $totalSuppliers',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade700,
                       ),
-                      children: [
-                        TextSpan(
-                          text: 'Rs. ${currencyF.format(it['value'])}',
-                          style: TextStyle(
-                            color: it['color'] as Color,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: currentPage > 0
+                            ? () {
+                                setState(() {
+                                  _inputsChartPageIndex = currentPage - 1;
+                                });
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: currentPage > 0
+                                ? primaryAppColor.withValues(alpha: 0.12)
+                                : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: currentPage > 0
+                                  ? primaryAppColor.withValues(alpha: 0.35)
+                                  : Colors.grey.shade300,
+                            ),
                           ),
+                          child: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 13,
+                            color: currentPage > 0 ? primaryAppColor : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: endIndex < totalSuppliers
+                            ? () {
+                                setState(() {
+                                  _inputsChartPageIndex = currentPage + 1;
+                                });
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: endIndex < totalSuppliers
+                                ? primaryAppColor.withValues(alpha: 0.12)
+                                : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: endIndex < totalSuppliers
+                                  ? primaryAppColor.withValues(alpha: 0.35)
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 13,
+                            color: endIndex < totalSuppliers ? primaryAppColor : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity != null) {
+              if (details.primaryVelocity! < -200 && endIndex < totalSuppliers) {
+                setState(() => _inputsChartPageIndex = currentPage + 1);
+              } else if (details.primaryVelocity! > 200 && currentPage > 0) {
+                setState(() => _inputsChartPageIndex = currentPage - 1);
+              }
+            }
+          },
+          child: SizedBox(
+            height: 220,
+            child: BarChart(
+              BarChartData(
+                maxY: maxY,
+                alignment: BarChartAlignment.spaceAround,
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    tooltipRoundedRadius: 8,
+                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    tooltipMargin: 8,
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
+                    tooltipBorder: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      if (groupIndex < 0 || groupIndex >= displayedSuppliers.length) return null;
+                      final s = displayedSuppliers[groupIndex];
+                      final rank = startIndex + groupIndex + 1;
+                      final name = (s['name'] ?? 'නොදනී').toString();
+                      final ref = (s['refNumber'] ?? '').toString();
+                      final displayName = ref.isNotEmpty ? '#$rank $name ($ref)' : '#$rank $name';
+                      final adv = ((s['adv'] ?? 0) as num).toDouble();
+                      final fert = ((s['fert'] ?? 0) as num).toDouble();
+                      final tea = ((s['tea'] ?? 0) as num).toDouble();
+                      final other = ((s['other'] ?? 0) as num).toDouble();
+                      final tot = adv + fert + tea + other;
+                      final arrears = ((s['arrears'] ?? 0) as num).toDouble();
+
+                      return BarTooltipItem(
+                        '$displayName\n',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12.5,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: 'අත්තිකාරම්: Rs. ${currencyF.format(adv)}\n',
+                            style: const TextStyle(
+                              color: Color(0xFFFBBF24),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'පොහොර: Rs. ${currencyF.format(fert)}\n',
+                            style: const TextStyle(
+                              color: Color(0xFF34D399),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'තේ පැකට්: Rs. ${currencyF.format(tea)}\n',
+                            style: const TextStyle(
+                              color: Color(0xFF38BDF8),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'වෙනත් ද්‍රව්‍ය: Rs. ${currencyF.format(other)}\n',
+                            style: const TextStyle(
+                              color: Color(0xFFA78BFA),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'මුළු එකතුව: Rs. ${currencyF.format(tot)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          if (arrears > 0)
+                            TextSpan(
+                              text: '\nපසුගිය හිඟ: Rs. ${currencyF.format(arrears)}',
+                              style: const TextStyle(
+                                color: Color(0xFFEF4444),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 50,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0 || value == maxY) return const SizedBox();
+                        if (value >= 1000000) {
+                          return Text(
+                            '${(value / 1000000).toStringAsFixed(1)}M',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        }
+                        if (value >= 1000) {
+                          return Text(
+                            '${(value / 1000).toInt()}K',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        }
+                        return Text(
+                          '${value.toInt()}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
+                        final rank = startIndex + idx + 1;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '#$rank',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF374151),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: maxY > 0 ? (maxY / 4) : 2500,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: [
+                  for (int i = 0; i < displayedSuppliers.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barsSpace: 2,
+                      barRods: [
+                        BarChartRodData(
+                          toY: ((displayedSuppliers[i]['adv'] ?? 0) as num).toDouble(),
+                          color: const Color(0xFFF59E0B),
+                          width: 6,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                        ),
+                        BarChartRodData(
+                          toY: ((displayedSuppliers[i]['fert'] ?? 0) as num).toDouble(),
+                          color: const Color(0xFF10B981),
+                          width: 6,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                        ),
+                        BarChartRodData(
+                          toY: ((displayedSuppliers[i]['tea'] ?? 0) as num).toDouble(),
+                          color: const Color(0xFF06B6D4),
+                          width: 6,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                        ),
+                        BarChartRodData(
+                          toY: ((displayedSuppliers[i]['other'] ?? 0) as num).toDouble(),
+                          color: const Color(0xFF8B5CF6),
+                          width: 6,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
                         ),
                       ],
-                    );
-                  },
-                ),
+                    ),
+                ],
               ),
-              titlesData: FlTitlesData(
-                show: true,
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 55,
-                    getTitlesWidget: (value, meta) {
-                      if (value == 0 || value == maxY) return const SizedBox();
-                      if (value >= 1000000) {
-                        return Text(
-                          '${(value / 1000000).toStringAsFixed(1)}M',
-                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                        );
-                      }
-                      if (value >= 1000) {
-                        return Text(
-                          '${(value / 1000).toInt()}K',
-                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                        );
-                      }
-                      return Text(
-                        '${value.toInt()}',
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 30,
-                    getTitlesWidget: (value, meta) {
-                      final idx = value.toInt();
-                      if (idx < 0 || idx >= items.length) return const SizedBox();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          items[idx]['label'] as String,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF374151),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: maxY > 0 ? (maxY / 4) : 2500,
-                getDrawingHorizontalLine: (value) => FlLine(
-                  color: Colors.grey.shade200,
-                  strokeWidth: 1,
-                  dashArray: [4, 4],
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              barGroups: [
-                for (int i = 0; i < items.length; i++)
-                  BarChartGroupData(
-                    x: i,
-                    barRods: [
-                      BarChartRodData(
-                        toY: items[i]['value'] as double,
-                        color: items[i]['color'] as Color,
-                        width: 32,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                      ),
-                    ],
-                  ),
-              ],
             ),
           ),
         ),
-      ),
-    ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
@@ -3828,32 +4077,41 @@ class _OverviewScreenState extends State<OverviewScreen> {
             border: Border.all(color: Colors.blueGrey.shade50),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.payments_outlined, size: 16, color: Colors.blue.shade700),
-                  const SizedBox(width: 6),
-                  Text(
-                    'සමස්ත අයවීම් / අඩුකිරීම්:',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Rs. ${currencyF.format(totalDeductions)}',
-                    style: TextStyle(fontSize: 12.5, color: primaryAppColor, fontWeight: FontWeight.w800),
-                  ),
-                ],
-              ),
-              Text(
-                'ද්‍රව්‍ය හා අත්තිකාරම් සංසන්දනය',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
-                ),
-              ),
+              _buildInputsLegendItem(const Color(0xFFF59E0B), 'අත්තිකාරම් (Advances)'),
+              const SizedBox(width: 24),
+              _buildInputsLegendItem(const Color(0xFF10B981), 'පොහොර (Fertilizer)'),
+              const SizedBox(width: 24),
+              _buildInputsLegendItem(const Color(0xFF06B6D4), 'තේ පැකට් (Tea Packets)'),
+              const SizedBox(width: 24),
+              _buildInputsLegendItem(const Color(0xFF8B5CF6), 'වෙනත් ද්‍රව්‍ය (Other Items)'),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInputsLegendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF374151),
           ),
         ),
       ],
