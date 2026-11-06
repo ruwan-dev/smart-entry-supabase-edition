@@ -139,7 +139,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
   int _selectedAnalyticsTab = 0;
   int _incomeExpensePageIndex = 0;
   int _topSuppliersChartPageIndex = 0;
-  int _inputsChartPageIndex = 0;
 
   String _chartFilter = 'Monthly';
   bool _isChartLoading = true;
@@ -2944,8 +2943,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 const SizedBox(width: 8),
                 _buildAnalyticsTabPill(
                   index: 2,
-                  icon: Icons.inventory_2_outlined,
-                  label: 'ද්‍රව්‍ය හා අත්තිකාරම්',
+                  icon: Icons.donut_small_rounded,
+                  label: 'ද්‍රව්‍ය හා මුදල් බෙදීයාම',
                 ),
               ],
             ),
@@ -3023,7 +3022,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       case 1:
         return _buildLeafWeightBarChart(weightF);
       case 2:
-        return _buildInputsBreakdownBarChart(currencyF);
+        return _buildInputsBreakdownDonutChart(currencyF);
       default:
         return _buildTopSuppliersBarChart(currencyF, weightF);
     }
@@ -3725,7 +3724,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildInputsBreakdownBarChart(NumberFormat currencyF) {
+  Widget _buildInputsBreakdownDonutChart(NumberFormat currencyF) {
     if (_allSuppliers.isEmpty) {
       return SizedBox(
         height: 240,
@@ -3738,44 +3737,117 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    final sortedSuppliers = List<Map<String, dynamic>>.from(_allSuppliers)
-      ..sort((a, b) {
-        final totA = (((a['adv'] ?? 0) as num) +
-                ((a['fert'] ?? 0) as num) +
-                ((a['tea'] ?? 0) as num) +
-                ((a['other'] ?? 0) as num))
-            .toDouble();
-        final totB = (((b['adv'] ?? 0) as num) +
-                ((b['fert'] ?? 0) as num) +
-                ((b['tea'] ?? 0) as num) +
-                ((b['other'] ?? 0) as num))
-            .toDouble();
-        if (totA != totB) return totB.compareTo(totA);
-        final incA = ((a['income'] ?? 0) as num).toDouble();
-        final incB = ((b['income'] ?? 0) as num).toDouble();
-        return incB.compareTo(incA);
-      });
+    double totalAdv = 0;
+    double totalFert = 0;
+    double totalTea = 0;
+    double totalOther = 0;
 
-    final int totalSuppliers = sortedSuppliers.length;
-    const int pageSize = 16;
-    final int totalPages = (totalSuppliers / pageSize).ceil();
-    final int currentPage = _inputsChartPageIndex.clamp(0, math.max(0, totalPages - 1));
-    final int startIndex = currentPage * pageSize;
-    final int endIndex = math.min(startIndex + pageSize, totalSuppliers);
-    final displayedSuppliers = sortedSuppliers.sublist(startIndex, endIndex);
-
-    double maxVal = 0;
-    for (final s in displayedSuppliers) {
-      final a = ((s['adv'] ?? 0) as num).toDouble();
-      final f = ((s['fert'] ?? 0) as num).toDouble();
-      final t = ((s['tea'] ?? 0) as num).toDouble();
-      final o = ((s['other'] ?? 0) as num).toDouble();
-      if (a > maxVal) maxVal = a;
-      if (f > maxVal) maxVal = f;
-      if (t > maxVal) maxVal = t;
-      if (o > maxVal) maxVal = o;
+    for (final s in _allSuppliers) {
+      totalAdv += ((s['adv'] ?? 0) as num).toDouble();
+      totalFert += ((s['fert'] ?? 0) as num).toDouble();
+      totalTea += ((s['tea'] ?? 0) as num).toDouble();
+      totalOther += ((s['other'] ?? 0) as num).toDouble();
     }
-    final double maxY = maxVal > 0 ? (maxVal * 1.25) : 10000;
+
+    final double totalDeductions = totalAdv + totalFert + totalTea + totalOther;
+
+    if (totalDeductions <= 0) {
+      return SizedBox(
+        height: 240,
+        child: Center(
+          child: Text(
+            'ද්‍රව්‍ය හෝ අත්තිකාරම් දත්ත හමු නොවීය',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+        ),
+      );
+    }
+
+    // Top 5 recipients for Fertilizer
+    final topFert = List<Map<String, dynamic>>.from(_allSuppliers)
+        .where((s) => ((s['fert'] ?? 0) as num).toDouble() > 0)
+        .toList()
+      ..sort((a, b) => ((b['fert'] ?? 0) as num).compareTo((a['fert'] ?? 0) as num));
+    final topFert5 = topFert.take(5).toList();
+
+    // Top 5 recipients for Tea & Other Items
+    final topTeaItems = List<Map<String, dynamic>>.from(_allSuppliers)
+        .where((s) =>
+            (((s['tea'] ?? 0) as num) + ((s['other'] ?? 0) as num)).toDouble() > 0)
+        .toList()
+      ..sort((a, b) {
+        final totA = ((a['tea'] ?? 0) as num) + ((a['other'] ?? 0) as num);
+        final totB = ((b['tea'] ?? 0) as num) + ((b['other'] ?? 0) as num);
+        return totB.compareTo(totA);
+      });
+    final topTeaItems5 = topTeaItems.take(5).toList();
+
+    // Donut sections
+    final List<PieChartSectionData> sections = [];
+    if (totalAdv > 0) {
+      final double pct = (totalAdv / totalDeductions) * 100;
+      sections.add(
+        PieChartSectionData(
+          color: const Color(0xFFF59E0B),
+          value: totalAdv,
+          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
+          radius: 28,
+          titleStyle: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+    if (totalFert > 0) {
+      final double pct = (totalFert / totalDeductions) * 100;
+      sections.add(
+        PieChartSectionData(
+          color: const Color(0xFF10B981),
+          value: totalFert,
+          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
+          radius: 28,
+          titleStyle: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+    if (totalTea > 0) {
+      final double pct = (totalTea / totalDeductions) * 100;
+      sections.add(
+        PieChartSectionData(
+          color: const Color(0xFF06B6D4),
+          value: totalTea,
+          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
+          radius: 28,
+          titleStyle: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+    if (totalOther > 0) {
+      final double pct = (totalOther / totalDeductions) * 100;
+      sections.add(
+        PieChartSectionData(
+          color: const Color(0xFF8B5CF6),
+          value: totalOther,
+          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
+          radius: 28,
+          titleStyle: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3786,336 +3858,291 @@ class _OverviewScreenState extends State<OverviewScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'පාරිභෝගික ද්‍රව්‍ය හා අත්තිකාරම් ($_selectedYear වාර්ෂික)',
+                'ද්‍රව්‍ය හා මුදල් බෙදීයාමේ විශ්ලේෂණය ($_selectedYear වාර්ෂික)',
                 style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF374151),
                 ),
               ),
-              if (totalSuppliers > 0)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'සැපයුම්කරුවන් ${startIndex + 1} - $endIndex / $totalSuppliers',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: currentPage > 0
-                            ? () {
-                                setState(() {
-                                  _inputsChartPageIndex = currentPage - 1;
-                                });
-                              }
-                            : null,
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: currentPage > 0
-                                ? primaryAppColor.withValues(alpha: 0.12)
-                                : Colors.grey.shade100,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: currentPage > 0
-                                  ? primaryAppColor.withValues(alpha: 0.35)
-                                  : Colors.grey.shade300,
+              Text(
+                'මුළු වියදම්: Rs. ${currencyF.format(totalDeductions)}',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 220,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Left: Donut Chart + Legend Badges
+              Expanded(
+                flex: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blueGrey.shade50),
+                  ),
+                  child: Row(
+                    children: [
+                      // Donut with center text
+                      Expanded(
+                        flex: 5,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            PieChart(
+                              PieChartData(
+                                sectionsSpace: 2,
+                                centerSpaceRadius: 42,
+                                sections: sections,
+                              ),
                             ),
-                          ),
-                          child: Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            size: 13,
-                            color: currentPage > 0 ? primaryAppColor : Colors.grey.shade400,
-                          ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'මුළු අඩුකිරීම්',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  totalDeductions >= 1000000
+                                      ? 'Rs. ${(totalDeductions / 1000000).toStringAsFixed(2)}M'
+                                      : totalDeductions >= 1000
+                                          ? 'Rs. ${(totalDeductions / 1000).toStringAsFixed(0)}K'
+                                          : 'Rs. ${totalDeductions.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Legend stats column
+                      Expanded(
+                        flex: 6,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildDonutStatRow(
+                              color: const Color(0xFFF59E0B),
+                              label: 'අත්තිකාරම්',
+                              amount: totalAdv,
+                              total: totalDeductions,
+                              currencyF: currencyF,
+                            ),
+                            const SizedBox(height: 6),
+                            _buildDonutStatRow(
+                              color: const Color(0xFF10B981),
+                              label: 'පොහොර',
+                              amount: totalFert,
+                              total: totalDeductions,
+                              currencyF: currencyF,
+                            ),
+                            const SizedBox(height: 6),
+                            _buildDonutStatRow(
+                              color: const Color(0xFF06B6D4),
+                              label: 'තේ පැකට්',
+                              amount: totalTea,
+                              total: totalDeductions,
+                              currencyF: currencyF,
+                            ),
+                            const SizedBox(height: 6),
+                            _buildDonutStatRow(
+                              color: const Color(0xFF8B5CF6),
+                              label: 'වෙනත් ද්‍රව්‍ය',
+                              amount: totalOther,
+                              total: totalDeductions,
+                              currencyF: currencyF,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Right: 2 ranking lists (Fertilizer Top 5 + Tea/Items Top 5)
+              Expanded(
+                flex: 5,
+                child: Row(
+                  children: [
+                    // Card 1: Top 5 Fertilizer
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Icon(
+                                    Icons.eco_rounded,
+                                    size: 13,
+                                    color: Color(0xFF10B981),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'වැඩිම පොහොර (Top 5)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1F2937),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 12, thickness: 0.6),
+                            Expanded(
+                              child: topFert5.isEmpty
+                                  ? Center(
+                                      child: Text(
+                                        'පොහොර ලබාගත් අය නැත',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                    )
+                                  : ListView.separated(
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      padding: EdgeInsets.zero,
+                                      itemCount: topFert5.length,
+                                      separatorBuilder: (ctx, i) => const SizedBox(height: 4),
+                                      itemBuilder: (context, idx) {
+                                        final item = topFert5[idx];
+                                        final ref = (item['refNumber'] ?? '').toString().trim();
+                                        final name = (item['name'] ?? '').toString();
+                                        final fertAmt = ((item['fert'] ?? 0) as num).toDouble();
+                                        final label = ref.isNotEmpty
+                                            ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
+                                            : name;
+                                        return _buildCompactRecipientRow(
+                                          rank: idx + 1,
+                                          title: label,
+                                          amount: 'Rs. ${currencyF.format(fertAmt)}',
+                                          badgeColor: const Color(0xFF10B981),
+                                        );
+                                      },
+                                    ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: endIndex < totalSuppliers
-                            ? () {
-                                setState(() {
-                                  _inputsChartPageIndex = currentPage + 1;
-                                });
-                              }
-                            : null,
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: endIndex < totalSuppliers
-                                ? primaryAppColor.withValues(alpha: 0.12)
-                                : Colors.grey.shade100,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: endIndex < totalSuppliers
-                                  ? primaryAppColor.withValues(alpha: 0.35)
-                                  : Colors.grey.shade300,
+                    const SizedBox(width: 10),
+                    // Card 2: Top 5 Tea Packets & Other Items
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF06B6D4).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Icon(
+                                    Icons.inventory_2_rounded,
+                                    size: 13,
+                                    color: Color(0xFF06B6D4),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'තේ පැකට් / ද්‍රව්‍ය (Top 5)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1F2937),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          child: Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            size: 13,
-                            color: endIndex < totalSuppliers ? primaryAppColor : Colors.grey.shade400,
-                          ),
+                            const Divider(height: 12, thickness: 0.6),
+                            Expanded(
+                              child: topTeaItems5.isEmpty
+                                  ? Center(
+                                      child: Text(
+                                        'ද්‍රව්‍ය ලබාගත් අය නැත',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                    )
+                                  : ListView.separated(
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      padding: EdgeInsets.zero,
+                                      itemCount: topTeaItems5.length,
+                                      separatorBuilder: (ctx, i) => const SizedBox(height: 4),
+                                      itemBuilder: (context, idx) {
+                                        final item = topTeaItems5[idx];
+                                        final ref = (item['refNumber'] ?? '').toString().trim();
+                                        final name = (item['name'] ?? '').toString();
+                                        final teaOth = (((item['tea'] ?? 0) as num) +
+                                                ((item['other'] ?? 0) as num))
+                                            .toDouble();
+                                        final label = ref.isNotEmpty
+                                            ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
+                                            : name;
+                                        return _buildCompactRecipientRow(
+                                          rank: idx + 1,
+                                          title: label,
+                                          amount: 'Rs. ${currencyF.format(teaOth)}',
+                                          badgeColor: const Color(0xFF06B6D4),
+                                        );
+                                      },
+                                    ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
-            ],
-          ),
-        ),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragEnd: (details) {
-            if (details.primaryVelocity != null) {
-              if (details.primaryVelocity! < -200 && endIndex < totalSuppliers) {
-                setState(() => _inputsChartPageIndex = currentPage + 1);
-              } else if (details.primaryVelocity! > 200 && currentPage > 0) {
-                setState(() => _inputsChartPageIndex = currentPage - 1);
-              }
-            }
-          },
-          child: SizedBox(
-            height: 220,
-            child: BarChart(
-              BarChartData(
-                maxY: maxY,
-                alignment: BarChartAlignment.spaceAround,
-                barTouchData: BarTouchData(
-                  enabled: true,
-                  touchTooltipData: BarTouchTooltipData(
-                    tooltipRoundedRadius: 8,
-                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    tooltipMargin: 8,
-                    fitInsideHorizontally: true,
-                    fitInsideVertically: true,
-                    getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
-                    tooltipBorder: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      width: 1,
-                    ),
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      if (groupIndex < 0 || groupIndex >= displayedSuppliers.length) return null;
-                      final s = displayedSuppliers[groupIndex];
-                      final rank = startIndex + groupIndex + 1;
-                      final name = (s['name'] ?? 'නොදනී').toString();
-                      final ref = (s['refNumber'] ?? '').toString().trim();
-                      final custNumber = ref.isNotEmpty ? (ref.startsWith('#') ? ref : '#$ref') : '#$rank';
-                      final displayName = '$custNumber $name';
-                      final adv = ((s['adv'] ?? 0) as num).toDouble();
-                      final fert = ((s['fert'] ?? 0) as num).toDouble();
-                      final tea = ((s['tea'] ?? 0) as num).toDouble();
-                      final other = ((s['other'] ?? 0) as num).toDouble();
-                      final tot = adv + fert + tea + other;
-                      final arrears = ((s['arrears'] ?? 0) as num).toDouble();
-
-                      return BarTooltipItem(
-                        '$displayName\n',
-                        const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12.5,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: 'අත්තිකාරම්: Rs. ${currencyF.format(adv)}\n',
-                            style: const TextStyle(
-                              color: Color(0xFFFBBF24),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          TextSpan(
-                            text: 'පොහොර: Rs. ${currencyF.format(fert)}\n',
-                            style: const TextStyle(
-                              color: Color(0xFF34D399),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          TextSpan(
-                            text: 'තේ පැකට්: Rs. ${currencyF.format(tea)}\n',
-                            style: const TextStyle(
-                              color: Color(0xFF38BDF8),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          TextSpan(
-                            text: 'වෙනත් ද්‍රව්‍ය: Rs. ${currencyF.format(other)}\n',
-                            style: const TextStyle(
-                              color: Color(0xFFA78BFA),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          TextSpan(
-                            text: 'මුළු එකතුව: Rs. ${currencyF.format(tot)}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          if (arrears > 0)
-                            TextSpan(
-                              text: '\nපසුගිය හිඟ: Rs. ${currencyF.format(arrears)}',
-                              style: const TextStyle(
-                                color: Color(0xFFEF4444),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 50,
-                      getTitlesWidget: (value, meta) {
-                        if (value == 0 || value == maxY) return const SizedBox();
-                        if (value >= 1000000) {
-                          return Text(
-                            '${(value / 1000000).toStringAsFixed(1)}M',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          );
-                        }
-                        if (value >= 1000) {
-                          return Text(
-                            '${(value / 1000).toInt()}K',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          );
-                        }
-                        return Text(
-                          '${value.toInt()}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 28,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
-                        final s = displayedSuppliers[idx];
-                        final ref = (s['refNumber'] ?? '').toString().trim();
-                        final custNumber = ref.isNotEmpty ? ref : (startIndex + idx + 1).toString();
-                        final label = custNumber.startsWith('#') ? custNumber : '#$custNumber';
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            label,
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF374151),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: maxY > 0 ? (maxY / 4) : 2500,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.grey.shade200,
-                    strokeWidth: 1,
-                    dashArray: [4, 4],
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: [
-                  for (int i = 0; i < displayedSuppliers.length; i++)
-                    BarChartGroupData(
-                      x: i,
-                      barsSpace: 2,
-                      barRods: [
-                        BarChartRodData(
-                          toY: ((displayedSuppliers[i]['adv'] ?? 0) as num).toDouble(),
-                          color: const Color(0xFFF59E0B),
-                          width: 6,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                        BarChartRodData(
-                          toY: ((displayedSuppliers[i]['fert'] ?? 0) as num).toDouble(),
-                          color: const Color(0xFF10B981),
-                          width: 6,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                        BarChartRodData(
-                          toY: ((displayedSuppliers[i]['tea'] ?? 0) as num).toDouble(),
-                          color: const Color(0xFF06B6D4),
-                          width: 6,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                        BarChartRodData(
-                          toY: ((displayedSuppliers[i]['other'] ?? 0) as num).toDouble(),
-                          color: const Color(0xFF8B5CF6),
-                          width: 6,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                      ],
-                    ),
-                ],
               ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.blueGrey.shade50),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildInputsLegendItem(const Color(0xFFF59E0B), 'අත්තිකාරම් (Advances)'),
-              const SizedBox(width: 24),
-              _buildInputsLegendItem(const Color(0xFF10B981), 'පොහොර (Fertilizer)'),
-              const SizedBox(width: 24),
-              _buildInputsLegendItem(const Color(0xFF06B6D4), 'තේ පැකට් (Tea Packets)'),
-              const SizedBox(width: 24),
-              _buildInputsLegendItem(const Color(0xFF8B5CF6), 'වෙනත් ද්‍රව්‍ය (Other Items)'),
             ],
           ),
         ),
@@ -4123,28 +4150,103 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildInputsLegendItem(Color color, String label) {
+  Widget _buildDonutStatRow({
+    required Color color,
+    required String label,
+    required double amount,
+    required double total,
+    required NumberFormat currencyF,
+  }) {
+    final double pct = total > 0 ? (amount / total) * 100 : 0;
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 12,
-          height: 12,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(3),
+            shape: BoxShape.circle,
           ),
         ),
         const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
         Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF374151),
+          '${pct.toStringAsFixed(1)}%',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            color: color,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCompactRecipientRow({
+    required int rank,
+    required String title,
+    required String amount,
+    required Color badgeColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: badgeColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$rank',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: badgeColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF334155),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            amount,
+            style: const TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
