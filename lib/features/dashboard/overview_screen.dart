@@ -126,6 +126,26 @@ class _OverviewScreenState extends State<OverviewScreen> {
     Color(0xFFEF4444), // Slot 8: Rose Red
   ];
 
+  Map<int, String> _orgSlotNames = {};
+
+  String _getSlotDisplayName(int slot) {
+    if (_orgSlotNames.containsKey(slot) && _orgSlotNames[slot]!.trim().isNotEmpty) {
+      return _orgSlotNames[slot]!;
+    }
+    switch (slot) {
+      case 1:
+        return AppStrings.fertilizer1;
+      case 2:
+        return AppStrings.fertilizer2;
+      case 3:
+        return AppStrings.teaPacket1;
+      case 4:
+        return AppStrings.teaPacket2;
+      default:
+        return 'ද්‍රව්‍ය $slot';
+    }
+  }
+
   Map<String, dynamic>? _latestSummaryData;
   String? _latestSummaryId;
   Map<String, dynamic>? _previousSummaryData;
@@ -396,6 +416,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
       final orgItems = await ItemService.getItems(
         organizationId: orgId,
       );
+      final Map<int, String> currentOrgSlotNames = {};
+      for (var it in orgItems) {
+        if (it.name.trim().isNotEmpty) {
+          currentOrgSlotNames[it.slotIndex] = it.name.trim();
+        }
+      }
       fert1Price = orgItems.where((it) => it.slotIndex == 1).firstOrNull?.unitPrice ?? 15500.0;
       fert2Price = orgItems.where((it) => it.slotIndex == 2).firstOrNull?.unitPrice ?? 18000.0;
       teaPkt1Price = orgItems.where((it) => it.slotIndex == 3).firstOrNull?.unitPrice ?? 650.0;
@@ -594,6 +620,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       Map<String, double> supplierFertMap = {};
       Map<String, double> supplierTeaMap = {};
       Map<String, double> supplierOtherMap = {};
+      Map<String, Map<int, double>> supplierSlotAmounts = {};
       Map<String, double> itemBreakdownQ = {};
       Map<String, double> itemBreakdownA = {};
 
@@ -625,6 +652,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
         totItemsCost += entryItemsCost;
         double entryDeductions = entryItemsCost + adv;
 
+        String cId = (d['customerId'] ?? '').toString();
+
         for (var item in parsed.itemsList) {
           int slot = int.tryParse(item['slot']?.toString() ?? '0') ?? 0;
           String code = (item['code'] ?? '').toString();
@@ -654,13 +683,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
           slotQuantities[slot] = (slotQuantities[slot] ?? 0.0) + q;
           slotAmounts[slot] = (slotAmounts[slot] ?? 0.0) + a;
 
+          if (cId.isNotEmpty && a > 0 && slot >= 1 && slot <= 8) {
+            supplierSlotAmounts.putIfAbsent(cId, () => {})[slot] =
+                (supplierSlotAmounts[cId]?[slot] ?? 0.0) + a;
+          }
+
           if (name.isNotEmpty && (q > 0 || a > 0)) {
             itemBreakdownQ[name] = (itemBreakdownQ[name] ?? 0.0) + q;
             itemBreakdownA[name] = (itemBreakdownA[name] ?? 0.0) + a;
           }
         }
 
-        String cId = d['customerId'] ?? '';
         if (cId.isNotEmpty) {
           if (entryWeight > 0) activeSupplierIds.add(cId);
           supplierWeightMap[cId] = (supplierWeightMap[cId] ?? 0.0) + entryWeight;
@@ -802,6 +835,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       Map<String, double> customerYearFert = {};
       Map<String, double> customerYearTea = {};
       Map<String, double> customerYearOther = {};
+      Map<String, Map<int, double>> customerYearSlotMap = {};
 
       for (var bill in allBills) {
         if (extractBillYear(bill) == _selectedYear) {
@@ -825,6 +859,23 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
             double oth = _toDouble(bData['otherTotal']) + _toDouble(bData['otherItemsTotal']);
 
+            if (f1 > 0) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[1] =
+                  (customerYearSlotMap[cId]?[1] ?? 0.0) + f1;
+            }
+            if (f2 > 0) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[2] =
+                  (customerYearSlotMap[cId]?[2] ?? 0.0) + f2;
+            }
+            if (t1 > 0) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[3] =
+                  (customerYearSlotMap[cId]?[3] ?? 0.0) + t1;
+            }
+            if (t2 > 0) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[4] =
+                  (customerYearSlotMap[cId]?[4] ?? 0.0) + t2;
+            }
+
             // If tableRows exist, inspect tableRows to pick up items if totals were not in top level
             if (bData['tableRows'] is List) {
               double rowFert = 0;
@@ -836,16 +887,54 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   List items = (row['items'] as List?) ?? (row['deductions'] as List?) ?? [];
                   for (var it in items) {
                     if (it is Map) {
-                      String desc = (it['desc'] ?? it['name'] ?? '').toString().toLowerCase();
+                      String desc = (it['desc'] ?? it['name'] ?? '').toString();
+                      String code = (it['code'] ?? '').toString().toUpperCase();
+                      int slot = int.tryParse(it['slot']?.toString() ?? '0') ?? 0;
                       double amt = _toDouble(it['amt']);
-                      if (desc.contains('advance') || desc.contains('අත්තිකාරම්') || desc.contains('w;a;sldrï')) {
+                      if (amt <= 0) continue;
+
+                      if (slot < 1 || slot > 8) {
+                        final matched = orgItems.where((x) =>
+                            (x.code.isNotEmpty && x.code.toUpperCase() == code) ||
+                            (x.name.isNotEmpty && x.name.trim().toLowerCase() == desc.trim().toLowerCase())
+                        ).firstOrNull;
+                        if (matched != null && matched.slotIndex >= 1 && matched.slotIndex <= 8) {
+                          slot = matched.slotIndex;
+                        }
+                      }
+
+                      String descLower = desc.toLowerCase();
+                      if (descLower.contains('advance') || descLower.contains('අත්තිකාරම්') || descLower.contains('w;a;sldrï')) {
                         rowAdv += amt;
-                      } else if (desc.contains('fert') || desc.contains('fmdfydr') || desc.contains('පොහොර')) {
+                      } else if (slot >= 1 && slot <= 8) {
+                        if (slot == 1 || slot == 2) {
+                          rowFert += amt;
+                        } else if (slot == 3 || slot == 4) {
+                          rowTea += amt;
+                        } else {
+                          rowOth += amt;
+                        }
+
+                        if (slot >= 5 || (slot == 1 && f1 == 0) || (slot == 2 && f2 == 0) || (slot == 3 && t1 == 0) || (slot == 4 && t2 == 0)) {
+                          customerYearSlotMap.putIfAbsent(cId, () => {})[slot] =
+                              (customerYearSlotMap[cId]?[slot] ?? 0.0) + amt;
+                        }
+                      } else if (descLower.contains('fert') || descLower.contains('fmdfydr') || descLower.contains('පොහොර')) {
                         rowFert += amt;
-                      } else if (desc.contains('tea pkt') || desc.contains('tea packet') || desc.contains('f;a fld<') || desc.contains('තේ පැකට්') || desc.contains('තේ කොළ')) {
+                        if (f1 == 0 && f2 == 0) {
+                          customerYearSlotMap.putIfAbsent(cId, () => {})[1] =
+                              (customerYearSlotMap[cId]?[1] ?? 0.0) + amt;
+                        }
+                      } else if (descLower.contains('tea pkt') || descLower.contains('tea packet') || descLower.contains('f;a fld<') || descLower.contains('තේ පැකට්') || descLower.contains('තේ කොළ')) {
                         rowTea += amt;
+                        if (t1 == 0 && t2 == 0) {
+                          customerYearSlotMap.putIfAbsent(cId, () => {})[3] =
+                              (customerYearSlotMap[cId]?[3] ?? 0.0) + amt;
+                        }
                       } else {
                         rowOth += amt;
+                        customerYearSlotMap.putIfAbsent(cId, () => {})[5] =
+                            (customerYearSlotMap[cId]?[5] ?? 0.0) + amt;
                       }
                     }
                   }
@@ -864,6 +953,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
               if (otherCosts > knownDeductions) {
                 oth = otherCosts - knownDeductions;
               }
+            }
+
+            if (fert > 0 && customerYearSlotMap[cId]?[1] == null && customerYearSlotMap[cId]?[2] == null) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[1] = fert;
+            }
+            if (tea > 0 && customerYearSlotMap[cId]?[3] == null && customerYearSlotMap[cId]?[4] == null) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[3] = tea;
+            }
+            if (oth > 0 && customerYearSlotMap[cId]?[5] == null) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[5] = oth;
             }
 
             double exp = _toDouble(bData['otherCosts'] ?? (adv + fert + tea + oth));
@@ -933,6 +1032,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
             customerYearOther[cId] = (customerYearOther[cId] ?? 0.0) + o;
           }
         });
+        supplierSlotAmounts.forEach((cId, sMap) {
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            sMap.forEach((slot, a) {
+              customerYearSlotMap.putIfAbsent(cId, () => {})[slot] =
+                  (customerYearSlotMap[cId]?[slot] ?? 0.0) + a;
+            });
+          }
+        });
       }
 
       // Build comprehensive list of ALL customers (including arrears customers)
@@ -965,6 +1072,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           'fert': yrFert,
           'tea': yrTea,
           'other': yrOther,
+          'slotAmounts': customerYearSlotMap[cId] ?? <int, double>{},
           'arrears': arrears,
           'hasArrears': arrears > 0,
         });
@@ -1180,6 +1288,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _activeItemsSummary = activeItems;
         _itemBreakdownQuantities = itemBreakdownQ;
         _itemBreakdownAmounts = itemBreakdownA;
+        _orgSlotNames = currentOrgSlotNames;
 
         _isLoading = false;
         _isInitialLoad = false;
@@ -3724,6 +3833,94 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
+  Widget _buildTop5RecipientCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<Map<String, dynamic>> items,
+    required String emptyMessage,
+    required double Function(Map<String, dynamic>) getAmount,
+    required NumberFormat currencyF,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  icon,
+                  size: 13,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 12, thickness: 0.6),
+          Expanded(
+            child: items.isEmpty
+                ? Center(
+                    child: Text(
+                      emptyMessage,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade400,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : ListView.separated(
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    itemCount: items.length,
+                    separatorBuilder: (ctx, i) => const SizedBox(height: 4),
+                    itemBuilder: (context, idx) {
+                      final item = items[idx];
+                      final ref = (item['refNumber'] ?? '').toString().trim();
+                      final name = (item['name'] ?? '').toString();
+                      final amt = getAmount(item);
+                      final label = ref.isNotEmpty
+                          ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
+                          : name;
+                      return _buildCompactRecipientRow(
+                        rank: idx + 1,
+                        title: label,
+                        amount: 'Rs. ${currencyF.format(amt)}',
+                        badgeColor: color,
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInputsBreakdownDonutChart(NumberFormat currencyF) {
     if (_allSuppliers.isEmpty) {
       return SizedBox(
@@ -3738,18 +3935,37 @@ class _OverviewScreenState extends State<OverviewScreen> {
     }
 
     double totalAdv = 0;
-    double totalFert = 0;
-    double totalTea = 0;
-    double totalOther = 0;
+    final Map<int, double> slotTotals = {};
 
     for (final s in _allSuppliers) {
       totalAdv += ((s['adv'] ?? 0) as num).toDouble();
-      totalFert += ((s['fert'] ?? 0) as num).toDouble();
-      totalTea += ((s['tea'] ?? 0) as num).toDouble();
-      totalOther += ((s['other'] ?? 0) as num).toDouble();
+      final Map sSlots = (s['slotAmounts'] as Map?) ?? {};
+      sSlots.forEach((k, v) {
+        final int slot = (k as num).toInt();
+        final double amt = (v as num).toDouble();
+        if (slot >= 1 && slot <= 8 && amt > 0) {
+          slotTotals[slot] = (slotTotals[slot] ?? 0.0) + amt;
+        }
+      });
     }
 
-    final double totalDeductions = totalAdv + totalFert + totalTea + totalOther;
+    // Fallback if slotAmounts was empty but legacy totals were present
+    if (slotTotals.isEmpty) {
+      double totalFert = 0;
+      double totalTea = 0;
+      double totalOther = 0;
+      for (final s in _allSuppliers) {
+        totalFert += ((s['fert'] ?? 0) as num).toDouble();
+        totalTea += ((s['tea'] ?? 0) as num).toDouble();
+        totalOther += ((s['other'] ?? 0) as num).toDouble();
+      }
+      if (totalFert > 0) slotTotals[1] = totalFert;
+      if (totalTea > 0) slotTotals[3] = totalTea;
+      if (totalOther > 0) slotTotals[5] = totalOther;
+    }
+
+    final double totalItems = slotTotals.values.fold(0.0, (sum, val) => sum + val);
+    final double totalDeductions = totalAdv + totalItems;
 
     if (totalDeductions <= 0) {
       return SizedBox(
@@ -3763,26 +3979,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    // Top 5 recipients for Fertilizer
-    final topFert = List<Map<String, dynamic>>.from(_allSuppliers)
-        .where((s) => ((s['fert'] ?? 0) as num).toDouble() > 0)
-        .toList()
-      ..sort((a, b) => ((b['fert'] ?? 0) as num).compareTo((a['fert'] ?? 0) as num));
-    final topFert5 = topFert.take(5).toList();
-
-    // Top 5 recipients for Tea & Other Items
-    final topTeaItems = List<Map<String, dynamic>>.from(_allSuppliers)
-        .where((s) =>
-            (((s['tea'] ?? 0) as num) + ((s['other'] ?? 0) as num)).toDouble() > 0)
-        .toList()
-      ..sort((a, b) {
-        final totA = ((a['tea'] ?? 0) as num) + ((a['other'] ?? 0) as num);
-        final totB = ((b['tea'] ?? 0) as num) + ((b['other'] ?? 0) as num);
-        return totB.compareTo(totA);
-      });
-    final topTeaItems5 = topTeaItems.take(5).toList();
-
-    // Donut sections
+    // Build Donut sections
     final List<PieChartSectionData> sections = [];
     if (totalAdv > 0) {
       final double pct = (totalAdv / totalDeductions) * 100;
@@ -3800,53 +3997,128 @@ class _OverviewScreenState extends State<OverviewScreen> {
         ),
       );
     }
-    if (totalFert > 0) {
-      final double pct = (totalFert / totalDeductions) * 100;
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFF10B981),
-          value: totalFert,
-          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
-          radius: 28,
-          titleStyle: const TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+    for (int s = 1; s <= 8; s++) {
+      final amt = slotTotals[s] ?? 0.0;
+      if (amt > 0) {
+        final double pct = (amt / totalDeductions) * 100;
+        sections.add(
+          PieChartSectionData(
+            color: _itemSlotColors[s - 1],
+            value: amt,
+            title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
+            radius: 28,
+            titleStyle: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
-    if (totalTea > 0) {
-      final double pct = (totalTea / totalDeductions) * 100;
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFF06B6D4),
-          value: totalTea,
-          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
-          radius: 28,
-          titleStyle: const TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+
+    // Build dynamic legend rows
+    final List<Widget> legendRows = [];
+    for (int s = 1; s <= 8; s++) {
+      final amt = slotTotals[s] ?? 0.0;
+      if (amt > 0) {
+        if (legendRows.isNotEmpty) {
+          legendRows.add(const SizedBox(height: 5));
+        }
+        legendRows.add(
+          _buildDonutStatRow(
+            color: _itemSlotColors[s - 1],
+            label: _getSlotDisplayName(s),
+            amount: amt,
+            total: totalDeductions,
+            currencyF: currencyF,
           ),
-        ),
-      );
+        );
+      }
     }
-    if (totalOther > 0) {
-      final double pct = (totalOther / totalDeductions) * 100;
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFF8B5CF6),
-          value: totalOther,
-          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
-          radius: 28,
-          titleStyle: const TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      );
+
+    // Rank active item categories by total expenditure to dynamically configure Top 5 cards
+    final activeSlots = slotTotals.entries
+        .where((e) => e.value > 0)
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    String card1Title = 'වැඩිම ද්‍රව්‍ය (Top 5)';
+    IconData card1Icon = Icons.eco_rounded;
+    Color card1Color = const Color(0xFF10B981);
+    String card1Empty = 'ද්‍රව්‍ය ලබාගත් අය නැත';
+    List<Map<String, dynamic>> card1Top5 = [];
+    double Function(Map<String, dynamic>) card1GetAmount = (m) => 0.0;
+
+    String card2Title = 'වැඩිම ද්‍රව්‍ය (Top 5)';
+    IconData card2Icon = Icons.inventory_2_rounded;
+    Color card2Color = const Color(0xFF06B6D4);
+    String card2Empty = 'ද්‍රව්‍ය ලබාගත් අය නැත';
+    List<Map<String, dynamic>> card2Top5 = [];
+    double Function(Map<String, dynamic>) card2GetAmount = (m) => 0.0;
+
+    if (activeSlots.isNotEmpty) {
+      final slot1 = activeSlots[0].key;
+      final name1 = _getSlotDisplayName(slot1);
+      card1Title = 'වැඩිම $name1 (Top 5)';
+      card1Icon = slot1 <= 2 ? Icons.eco_rounded : Icons.inventory_2_rounded;
+      card1Color = _itemSlotColors[slot1 - 1];
+      card1Empty = '$name1 ලබාගත් අය නැත';
+      card1GetAmount = (m) {
+        final Map slots = (m['slotAmounts'] as Map?) ?? {};
+        return ((slots[slot1] ?? 0) as num).toDouble();
+      };
+      card1Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
+          .where((s) => card1GetAmount(s) > 0)
+          .toList()
+        ..sort((a, b) => card1GetAmount(b).compareTo(card1GetAmount(a)));
+      card1Top5 = card1Top5.take(5).toList();
+
+      if (activeSlots.length >= 2) {
+        final slot2 = activeSlots[1].key;
+        final name2 = _getSlotDisplayName(slot2);
+        card2Title = 'වැඩිම $name2 (Top 5)';
+        card2Icon = slot2 <= 2 ? Icons.eco_rounded : Icons.inventory_2_rounded;
+        card2Color = _itemSlotColors[slot2 - 1];
+        card2Empty = '$name2 ලබාගත් අය නැත';
+        card2GetAmount = (m) {
+          final Map slots = (m['slotAmounts'] as Map?) ?? {};
+          return ((slots[slot2] ?? 0) as num).toDouble();
+        };
+        card2Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
+            .where((s) => card2GetAmount(s) > 0)
+            .toList()
+          ..sort((a, b) => card2GetAmount(b).compareTo(card2GetAmount(a)));
+        card2Top5 = card2Top5.take(5).toList();
+      } else {
+        card2Title = 'වැඩිම අත්තිකාරම් (Top 5)';
+        card2Icon = Icons.payments_rounded;
+        card2Color = const Color(0xFFF59E0B);
+        card2Empty = 'අත්තිකාරම් ලබාගත් අය නැත';
+        card2GetAmount = (m) => ((m['adv'] ?? 0) as num).toDouble();
+        card2Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
+            .where((s) => card2GetAmount(s) > 0)
+            .toList()
+          ..sort((a, b) => card2GetAmount(b).compareTo(card2GetAmount(a)));
+        card2Top5 = card2Top5.take(5).toList();
+      }
+    } else {
+      card1Title = 'වැඩිම අත්තිකාරම් (Top 5)';
+      card1Icon = Icons.payments_rounded;
+      card1Color = const Color(0xFFF59E0B);
+      card1Empty = 'අත්තිකාරම් ලබාගත් අය නැත';
+      card1GetAmount = (m) => ((m['adv'] ?? 0) as num).toDouble();
+      card1Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
+          .where((s) => card1GetAmount(s) > 0)
+          .toList()
+        ..sort((a, b) => card1GetAmount(b).compareTo(card1GetAmount(a)));
+      card1Top5 = card1Top5.take(5).toList();
+
+      card2Title = 'අමතර ද්‍රව්‍ය (Top 5)';
+      card2Icon = Icons.inventory_2_rounded;
+      card2Color = Colors.grey;
+      card2Empty = 'ද්‍රව්‍ය දත්ත නොමැත';
+      card2Top5 = [];
     }
 
     return Column(
@@ -3939,42 +4211,25 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       // Legend stats column
                       Expanded(
                         flex: 6,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildDonutStatRow(
-                              color: const Color(0xFFF59E0B),
-                              label: 'අත්තිකාරම්',
-                              amount: totalAdv,
-                              total: totalDeductions,
-                              currencyF: currencyF,
-                            ),
-                            const SizedBox(height: 6),
-                            _buildDonutStatRow(
-                              color: const Color(0xFF10B981),
-                              label: 'පොහොර',
-                              amount: totalFert,
-                              total: totalDeductions,
-                              currencyF: currencyF,
-                            ),
-                            const SizedBox(height: 6),
-                            _buildDonutStatRow(
-                              color: const Color(0xFF06B6D4),
-                              label: 'තේ පැකට්',
-                              amount: totalTea,
-                              total: totalDeductions,
-                              currencyF: currencyF,
-                            ),
-                            const SizedBox(height: 6),
-                            _buildDonutStatRow(
-                              color: const Color(0xFF8B5CF6),
-                              label: 'වෙනත් ද්‍රව්‍ය',
-                              amount: totalOther,
-                              total: totalDeductions,
-                              currencyF: currencyF,
-                            ),
-                          ],
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (totalAdv > 0) ...[
+                                _buildDonutStatRow(
+                                  color: const Color(0xFFF59E0B),
+                                  label: 'අත්තිකාරම්',
+                                  amount: totalAdv,
+                                  total: totalDeductions,
+                                  currencyF: currencyF,
+                                ),
+                                if (legendRows.isNotEmpty) const SizedBox(height: 5),
+                              ],
+                              ...legendRows,
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -3982,162 +4237,32 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              // Right: 2 ranking lists (Fertilizer Top 5 + Tea/Items Top 5)
+              // Right: 2 dynamic ranking lists
               Expanded(
                 flex: 5,
                 child: Row(
                   children: [
-                    // Card 1: Top 5 Fertilizer
                     Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Icon(
-                                    Icons.eco_rounded,
-                                    size: 13,
-                                    color: Color(0xFF10B981),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'වැඩිම පොහොර (Top 5)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF1F2937),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 12, thickness: 0.6),
-                            Expanded(
-                              child: topFert5.isEmpty
-                                  ? Center(
-                                      child: Text(
-                                        'පොහොර ලබාගත් අය නැත',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey.shade400,
-                                        ),
-                                      ),
-                                    )
-                                  : ListView.separated(
-                                      physics: const NeverScrollableScrollPhysics(),
-                                      padding: EdgeInsets.zero,
-                                      itemCount: topFert5.length,
-                                      separatorBuilder: (ctx, i) => const SizedBox(height: 4),
-                                      itemBuilder: (context, idx) {
-                                        final item = topFert5[idx];
-                                        final ref = (item['refNumber'] ?? '').toString().trim();
-                                        final name = (item['name'] ?? '').toString();
-                                        final fertAmt = ((item['fert'] ?? 0) as num).toDouble();
-                                        final label = ref.isNotEmpty
-                                            ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
-                                            : name;
-                                        return _buildCompactRecipientRow(
-                                          rank: idx + 1,
-                                          title: label,
-                                          amount: 'Rs. ${currencyF.format(fertAmt)}',
-                                          badgeColor: const Color(0xFF10B981),
-                                        );
-                                      },
-                                    ),
-                            ),
-                          ],
-                        ),
+                      child: _buildTop5RecipientCard(
+                        title: card1Title,
+                        icon: card1Icon,
+                        color: card1Color,
+                        items: card1Top5,
+                        emptyMessage: card1Empty,
+                        getAmount: card1GetAmount,
+                        currencyF: currencyF,
                       ),
                     ),
                     const SizedBox(width: 10),
-                    // Card 2: Top 5 Tea Packets & Other Items
                     Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF06B6D4).withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Icon(
-                                    Icons.inventory_2_rounded,
-                                    size: 13,
-                                    color: Color(0xFF06B6D4),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'තේ පැකට් / ද්‍රව්‍ය (Top 5)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF1F2937),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 12, thickness: 0.6),
-                            Expanded(
-                              child: topTeaItems5.isEmpty
-                                  ? Center(
-                                      child: Text(
-                                        'ද්‍රව්‍ය ලබාගත් අය නැත',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey.shade400,
-                                        ),
-                                      ),
-                                    )
-                                  : ListView.separated(
-                                      physics: const NeverScrollableScrollPhysics(),
-                                      padding: EdgeInsets.zero,
-                                      itemCount: topTeaItems5.length,
-                                      separatorBuilder: (ctx, i) => const SizedBox(height: 4),
-                                      itemBuilder: (context, idx) {
-                                        final item = topTeaItems5[idx];
-                                        final ref = (item['refNumber'] ?? '').toString().trim();
-                                        final name = (item['name'] ?? '').toString();
-                                        final teaOth = (((item['tea'] ?? 0) as num) +
-                                                ((item['other'] ?? 0) as num))
-                                            .toDouble();
-                                        final label = ref.isNotEmpty
-                                            ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
-                                            : name;
-                                        return _buildCompactRecipientRow(
-                                          rank: idx + 1,
-                                          title: label,
-                                          amount: 'Rs. ${currencyF.format(teaOth)}',
-                                          badgeColor: const Color(0xFF06B6D4),
-                                        );
-                                      },
-                                    ),
-                            ),
-                          ],
-                        ),
+                      child: _buildTop5RecipientCard(
+                        title: card2Title,
+                        icon: card2Icon,
+                        color: card2Color,
+                        items: card2Top5,
+                        emptyMessage: card2Empty,
+                        getAmount: card2GetAmount,
+                        currencyF: currencyF,
                       ),
                     ),
                   ],
