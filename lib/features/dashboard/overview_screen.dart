@@ -832,12 +832,15 @@ class _OverviewScreenState extends State<OverviewScreen> {
       }
 
       yearCustomerList.sort((a, b) {
+        double incA = (a['income'] as num).toDouble();
+        double incB = (b['income'] as num).toDouble();
+        if (incA != incB) return incB.compareTo(incA);
+        double expA = (a['expense'] as num).toDouble();
+        double expB = (b['expense'] as num).toDouble();
+        if (expA != expB) return expB.compareTo(expA);
         double wA = (a['weight'] as num).toDouble();
         double wB = (b['weight'] as num).toDouble();
-        if (wA != wB) return wB.compareTo(wA);
-        double eA = (a['expense'] as num).toDouble();
-        double eB = (b['expense'] as num).toDouble();
-        return eB.compareTo(eA);
+        return wB.compareTo(wA);
       });
 
       _allSuppliers = yearCustomerList;
@@ -2949,13 +2952,23 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    final int totalSuppliers = _allSuppliers.length;
+    final sortedSuppliers = List<Map<String, dynamic>>.from(_allSuppliers)
+      ..sort((a, b) {
+        final incA = ((a['income'] ?? 0) as num).toDouble();
+        final incB = ((b['income'] ?? 0) as num).toDouble();
+        if (incA != incB) return incB.compareTo(incA);
+        final expA = ((a['expense'] ?? 0) as num).toDouble();
+        final expB = ((b['expense'] ?? 0) as num).toDouble();
+        return expB.compareTo(expA);
+      });
+
+    final int totalSuppliers = sortedSuppliers.length;
     const int pageSize = 22;
     final int totalPages = (totalSuppliers / pageSize).ceil();
     final int currentPage = _topSuppliersChartPageIndex.clamp(0, math.max(0, totalPages - 1));
     final int startIndex = currentPage * pageSize;
     final int endIndex = math.min(startIndex + pageSize, totalSuppliers);
-    final displayedSuppliers = _allSuppliers.sublist(startIndex, endIndex);
+    final displayedSuppliers = sortedSuppliers.sublist(startIndex, endIndex);
 
     double maxVal = 0;
     for (final s in displayedSuppliers) {
@@ -3382,13 +3395,23 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    final int totalSuppliers = _allSuppliers.length;
+    final sortedSuppliers = List<Map<String, dynamic>>.from(_allSuppliers)
+      ..sort((a, b) {
+        final wA = ((a['weight'] ?? 0) as num).toDouble();
+        final wB = ((b['weight'] ?? 0) as num).toDouble();
+        if (wA != wB) return wB.compareTo(wA);
+        final incA = ((a['income'] ?? 0) as num).toDouble();
+        final incB = ((b['income'] ?? 0) as num).toDouble();
+        return incB.compareTo(incA);
+      });
+
+    final int totalSuppliers = sortedSuppliers.length;
     const int pageSize = 22;
     final int totalPages = (totalSuppliers / pageSize).ceil();
     final int currentPage = _incomeExpensePageIndex.clamp(0, math.max(0, totalPages - 1));
     final int startIndex = currentPage * pageSize;
     final int endIndex = math.min(startIndex + pageSize, totalSuppliers);
-    final displayedSuppliers = _allSuppliers.sublist(startIndex, endIndex);
+    final displayedSuppliers = sortedSuppliers.sublist(startIndex, endIndex);
 
     double maxWeight = 0;
     for (final s in displayedSuppliers) {
