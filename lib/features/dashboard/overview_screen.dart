@@ -402,6 +402,24 @@ class _OverviewScreenState extends State<OverviewScreen> {
       teaPkt1Price = orgItems.where((it) => it.slotIndex == 3).firstOrNull?.unitPrice ?? 650.0;
       teaPkt2Price = orgItems.where((it) => it.slotIndex == 4).firstOrNull?.unitPrice ?? 0.0;
 
+      try {
+        var gSettings = await Supabase.instance.client
+            .from('global_settings')
+            .select()
+            .eq('organization_id', orgId)
+            .maybeSingle();
+        if (gSettings != null) {
+          final gf1 = (gSettings['fertilizer1Price'] as num?)?.toDouble();
+          final gf2 = (gSettings['fertilizer2Price'] as num?)?.toDouble();
+          final gt1 = (gSettings['teaPacket1Price'] as num?)?.toDouble();
+          final gt2 = (gSettings['teaPacket2Price'] as num?)?.toDouble();
+          if (gf1 != null && gf1 > 0 && fert1Price == 15500.0) fert1Price = gf1;
+          if (gf2 != null && gf2 > 0 && fert2Price == 18000.0) fert2Price = gf2;
+          if (gt1 != null && gt1 > 0 && teaPkt1Price == 650.0) teaPkt1Price = gt1;
+          if (gt2 != null && gt2 > 0 && teaPkt2Price == 0.0) teaPkt2Price = gt2;
+        }
+      } catch (_) {}
+
       // Supplier rates
       var ratesSnap = await Supabase.instance.client
           .from('monthly_rates')
@@ -745,20 +763,21 @@ class _OverviewScreenState extends State<OverviewScreen> {
       // --- Annual Customer Aggregation for $_selectedYear (All Customers + Arrears) ---
       int extractBillYear(dynamic bill) {
         if (bill == null) return 0;
-        final fAt = bill['finalizedAt']?.toString() ?? '';
-        if (fAt.isNotEmpty) {
-          final dt = DateTime.tryParse(fAt);
-          if (dt != null) return dt.year;
-        }
         final bData = bill['billData'];
         if (bData is Map) {
+          final dm = (bData['displayMonth'] ?? '').toString();
+          final parts = dm.split(' ');
+          for (var p in parts) {
+            final y = int.tryParse(p);
+            if (y != null && y > 2000 && y < 2100) return y;
+          }
           final y = int.tryParse(bData['year']?.toString() ?? '');
-          if (y != null && y > 2000) return y;
+          if (y != null && y > 2000 && y < 2100) return y;
           final mStr = bData['month']?.toString() ?? '';
           final mParts = mStr.split('-');
           if (mParts.isNotEmpty) {
             final y2 = int.tryParse(mParts[0]);
-            if (y2 != null && y2 > 2000) return y2;
+            if (y2 != null && y2 > 2000 && y2 < 2100) return y2;
           }
         }
         final id = bill['id']?.toString() ?? '';
@@ -768,6 +787,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
             final y3 = int.tryParse(p.substring(0, 4));
             if (y3 != null && y3 > 2000 && y3 < 2100) return y3;
           }
+        }
+        final fAt = bill['finalizedAt']?.toString() ?? '';
+        if (fAt.isNotEmpty) {
+          final dt = DateTime.tryParse(fAt);
+          if (dt != null) return dt.year;
         }
         return 0;
       }
@@ -791,11 +815,62 @@ class _OverviewScreenState extends State<OverviewScreen> {
             if (tw <= 0 && bTeaRate > 0 && bGross > 0) {
               tw = bGross / bTeaRate;
             }
-            double adv = _toDouble(bData['advTotal']);
-            double fert = _toDouble(bData['fertTotal']);
-            double tea = _toDouble(bData['teaTotal']);
-            double oth = _toDouble(bData['otherTotal']);
-            double exp = adv + fert + tea + oth;
+            double adv = _toDouble(bData['advTotal'] ?? bData['advances'] ?? bData['advance']);
+            double f1 = _toDouble(bData['f1Total']);
+            double f2 = _toDouble(bData['f2Total']);
+            double fert = f1 + f2 + _toDouble(bData['fertTotal']) + _toDouble(bData['fertilizerTotal']);
+
+            double t1 = _toDouble(bData['t1Total']);
+            double t2 = _toDouble(bData['t2Total']);
+            double tea = t1 + t2 + _toDouble(bData['teaTotal']) + _toDouble(bData['teaPacketTotal']);
+
+            double oth = _toDouble(bData['otherTotal']) + _toDouble(bData['otherItemsTotal']);
+
+            // If tableRows exist, inspect tableRows to pick up items if totals were not in top level
+            if (bData['tableRows'] is List) {
+              double rowFert = 0;
+              double rowTea = 0;
+              double rowAdv = 0;
+              double rowOth = 0;
+              for (var row in (bData['tableRows'] as List)) {
+                if (row is Map) {
+                  List items = (row['items'] as List?) ?? (row['deductions'] as List?) ?? [];
+                  for (var it in items) {
+                    if (it is Map) {
+                      String desc = (it['desc'] ?? it['name'] ?? '').toString().toLowerCase();
+                      double amt = _toDouble(it['amt']);
+                      if (desc.contains('advance') || desc.contains('අත්තිකාරම්') || desc.contains('w;a;sldrï')) {
+                        rowAdv += amt;
+                      } else if (desc.contains('fert') || desc.contains('fmdfydr') || desc.contains('පොහොර')) {
+                        rowFert += amt;
+                      } else if (desc.contains('tea pkt') || desc.contains('tea packet') || desc.contains('f;a fld<') || desc.contains('තේ පැකට්') || desc.contains('තේ කොළ')) {
+                        rowTea += amt;
+                      } else {
+                        rowOth += amt;
+                      }
+                    }
+                  }
+                }
+              }
+              if (fert == 0 && rowFert > 0) fert = rowFert;
+              if (tea == 0 && rowTea > 0) tea = rowTea;
+              if (adv == 0 && rowAdv > 0) adv = rowAdv;
+              if (oth == 0 && rowOth > 0) oth = rowOth;
+            }
+
+            // Derive remaining other items from otherCosts if any
+            if (oth == 0) {
+              double otherCosts = _toDouble(bData['otherCosts']);
+              double knownDeductions = adv + fert + tea;
+              if (otherCosts > knownDeductions) {
+                oth = otherCosts - knownDeductions;
+              }
+            }
+
+            double exp = _toDouble(bData['otherCosts'] ?? (adv + fert + tea + oth));
+            if (exp < (adv + fert + tea + oth)) {
+              exp = adv + fert + tea + oth;
+            }
 
             customerYearWeight[cId] = (customerYearWeight[cId] ?? 0.0) + tw;
             customerYearIncome[cId] = (customerYearIncome[cId] ?? 0.0) + bGross;
@@ -808,28 +883,56 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
       }
 
+      // Check which customers already have finalized bills for the selected active month to prevent double-counting
+      final String selActiveMonthName = DateFormat('MMMM', 'en_US').format(DateTime(_selectedYear, _selectedMonth, 1));
+      final String activeMonthTag = '$_selectedYear-$selActiveMonthName';
+      final Set<String> customersWithFinalizedActiveMonth = {};
+      for (var bill in allBills) {
+        final id = (bill['id'] ?? '').toString();
+        if (id.endsWith('_$activeMonthTag') || id.endsWith('_$_selectedYear-$_selectedMonth')) {
+          final cId = (bill['customerId'] ?? '').toString();
+          if (cId.isNotEmpty) {
+            customersWithFinalizedActiveMonth.add(cId);
+          }
+        }
+      }
+
       // Add current unfinalized entries if in this year
       if (start.year == _selectedYear) {
         supplierWeightMap.forEach((cId, w) {
-          customerYearWeight[cId] = (customerYearWeight[cId] ?? 0.0) + w;
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            customerYearWeight[cId] = (customerYearWeight[cId] ?? 0.0) + w;
+          }
         });
         supplierIncomeMap.forEach((cId, inc) {
-          customerYearIncome[cId] = (customerYearIncome[cId] ?? 0.0) + inc;
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            customerYearIncome[cId] = (customerYearIncome[cId] ?? 0.0) + inc;
+          }
         });
         supplierExpenseMap.forEach((cId, exp) {
-          customerYearExpense[cId] = (customerYearExpense[cId] ?? 0.0) + exp;
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            customerYearExpense[cId] = (customerYearExpense[cId] ?? 0.0) + exp;
+          }
         });
         supplierAdvMap.forEach((cId, a) {
-          customerYearAdv[cId] = (customerYearAdv[cId] ?? 0.0) + a;
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            customerYearAdv[cId] = (customerYearAdv[cId] ?? 0.0) + a;
+          }
         });
         supplierFertMap.forEach((cId, f) {
-          customerYearFert[cId] = (customerYearFert[cId] ?? 0.0) + f;
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            customerYearFert[cId] = (customerYearFert[cId] ?? 0.0) + f;
+          }
         });
         supplierTeaMap.forEach((cId, t) {
-          customerYearTea[cId] = (customerYearTea[cId] ?? 0.0) + t;
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            customerYearTea[cId] = (customerYearTea[cId] ?? 0.0) + t;
+          }
         });
         supplierOtherMap.forEach((cId, o) {
-          customerYearOther[cId] = (customerYearOther[cId] ?? 0.0) + o;
+          if (!customersWithFinalizedActiveMonth.contains(cId)) {
+            customerYearOther[cId] = (customerYearOther[cId] ?? 0.0) + o;
+          }
         });
       }
 
