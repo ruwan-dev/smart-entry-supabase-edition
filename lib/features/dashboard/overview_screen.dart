@@ -2950,7 +2950,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     }
 
     final int totalSuppliers = _allSuppliers.length;
-    const int pageSize = 14;
+    const int pageSize = 22;
     final int totalPages = (totalSuppliers / pageSize).ceil();
     final int currentPage = _topSuppliersChartPageIndex.clamp(0, math.max(0, totalPages - 1));
     final int startIndex = currentPage * pageSize;
@@ -2958,15 +2958,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
     final displayedSuppliers = _allSuppliers.sublist(startIndex, endIndex);
 
     double maxVal = 0;
-    double sumIncome = 0;
-    double sumExpense = 0;
     for (final s in displayedSuppliers) {
       final inc = ((s['income'] ?? 0) as num).toDouble();
       final exp = ((s['expense'] ?? 0) as num).toDouble();
       if (inc > maxVal) maxVal = inc;
       if (exp > maxVal) maxVal = exp;
-      sumIncome += inc;
-      sumExpense += exp;
     }
     final double maxY = maxVal > 0 ? (maxVal * 1.25) : 50000;
 
@@ -3127,7 +3123,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             }
           },
           child: SizedBox(
-            height: 195,
+            height: 220,
             child: BarChart(
               BarChartData(
                 maxY: maxY,
@@ -3304,7 +3300,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 11,
+                          width: 12,
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(3.5)),
                         ),
                         BarChartRodData(
@@ -3317,7 +3313,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 11,
+                          width: 12,
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(3.5)),
                         ),
                       ],
@@ -3325,48 +3321,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ],
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.blueGrey.shade50),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.savings_outlined, size: 16, color: Colors.green.shade700),
-                  const SizedBox(width: 6),
-                  Text(
-                    'වාර්ෂික එකතුව (ප්‍රමුඛ ${startIndex + 1} - $endIndex):',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'ආදායම: Rs. ${currencyF.format(sumIncome)}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF059669), fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'වියදම: Rs. ${currencyF.format(sumExpense)}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFFD97706), fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-              Text(
-                'ශුද්ධ ශේෂය: Rs. ${currencyF.format(sumIncome - sumExpense)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: (sumIncome - sumExpense) >= 0 ? Colors.teal.shade700 : Colors.red.shade700,
-                ),
-              ),
-            ],
           ),
         ),
       ],
@@ -3429,7 +3383,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     }
 
     final int totalSuppliers = _allSuppliers.length;
-    const int pageSize = 14;
+    const int pageSize = 22;
     final int totalPages = (totalSuppliers / pageSize).ceil();
     final int currentPage = _incomeExpensePageIndex.clamp(0, math.max(0, totalPages - 1));
     final int startIndex = currentPage * pageSize;
@@ -3437,11 +3391,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
     final displayedSuppliers = _allSuppliers.sublist(startIndex, endIndex);
 
     double maxWeight = 0;
-    double sumTopSuppliers = 0;
     for (final s in displayedSuppliers) {
       final w = ((s['weight'] ?? 0) as num).toDouble();
       if (w > maxWeight) maxWeight = w;
-      sumTopSuppliers += w;
     }
     final double maxY = maxWeight > 0 ? (maxWeight * 1.25) : 100;
 
@@ -3556,7 +3508,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
             }
           },
           child: SizedBox(
-            height: 195,
+            height: 220,
             child: BarChart(
               BarChartData(
                 maxY: maxY,
@@ -3681,44 +3633,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ],
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.blueGrey.shade50),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.workspace_premium_rounded, size: 16, color: Colors.amber.shade700),
-                  const SizedBox(width: 6),
-                  Text(
-                    'වාර්ෂික එකතුව (ප්‍රමුඛ ${startIndex + 1} - $endIndex):',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${weightF.format(sumTopSuppliers)} Kg',
-                    style: TextStyle(fontSize: 12.5, color: primaryAppColor, fontWeight: FontWeight.w800),
-                  ),
-                ],
-              ),
-              if (_totalWeight > 0)
-                Text(
-                  'සමස්තයෙන් ${((sumTopSuppliers / _totalWeight) * 100).toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.teal.shade700,
-                  ),
-                ),
-            ],
           ),
         ),
       ],
