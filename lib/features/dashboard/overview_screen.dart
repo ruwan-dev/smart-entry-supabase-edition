@@ -2938,18 +2938,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 const SizedBox(width: 8),
                 _buildAnalyticsTabPill(
                   index: 1,
-                  icon: Icons.format_list_numbered_rounded,
-                  label: 'සැපයුම්කරුවන්ගේ විස්තර',
-                ),
-                const SizedBox(width: 8),
-                _buildAnalyticsTabPill(
-                  index: 2,
                   icon: Icons.eco_outlined,
                   label: 'දළු අස්වැන්න (Kg)',
                 ),
                 const SizedBox(width: 8),
                 _buildAnalyticsTabPill(
-                  index: 3,
+                  index: 2,
                   icon: Icons.inventory_2_outlined,
                   label: 'ද්‍රව්‍ය හා අත්තිකාරම්',
                 ),
@@ -3066,10 +3060,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       case 0:
         return _buildTopSuppliersBarChart(currencyF, weightF);
       case 1:
-        return _buildTopSuppliersGridView(weightF);
-      case 2:
         return _buildLeafWeightBarChart(weightF);
-      case 3:
+      case 2:
         return _buildInputsBreakdownBarChart(currencyF);
       default:
         return _buildTopSuppliersBarChart(currencyF, weightF);
@@ -3482,48 +3474,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ],
               ),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTopSuppliersGridView(NumberFormat weightF) {
-    if (_allSuppliers.isEmpty) {
-      return SizedBox(
-        height: 240,
-        child: Center(
-          child: Text(
-            AppStrings.noDataFound,
-            style: const TextStyle(color: Colors.grey),
-          ),
-        ),
-      );
-    }
-
-    final suppliers = _allSuppliers.take(10).toList();
-    final int half = (suppliers.length + 1) ~/ 2;
-    final leftCol = suppliers.sublist(0, half);
-    final rightCol = suppliers.sublist(half);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            children: [
-              for (int i = 0; i < leftCol.length; i++)
-                _buildCompactSupplierItem(leftCol[i], i + 1, weightF),
-            ],
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            children: [
-              for (int i = 0; i < rightCol.length; i++)
-                _buildCompactSupplierItem(rightCol[i], half + i + 1, weightF),
-            ],
           ),
         ),
       ],
