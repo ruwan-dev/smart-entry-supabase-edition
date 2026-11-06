@@ -2951,45 +2951,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ),
         ),
-        if (_allSuppliers.isNotEmpty) ...[
-          const SizedBox(width: 12),
-          TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TopSuppliersScreen(
-                    allSuppliers: _allSuppliers,
-                  ),
-                ),
-              );
-            },
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  AppStrings.viewAll,
-                  style: TextStyle(
-                    color: primaryAppColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12.5,
-                  ),
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 11,
-                  color: primaryAppColor,
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -3667,7 +3628,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           TextSpan(
                             text: 'දළු බර: ${weightF.format(wt)} Kg',
                             style: const TextStyle(
-                              color: Color(0xFF38BDF8),
+                              color: Color(0xFF2DD4BF),
                               fontWeight: FontWeight.w700,
                               fontSize: 12,
                             ),
@@ -3742,10 +3703,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       barRods: [
                         BarChartRodData(
                           toY: ((displayedSuppliers[i]['weight'] ?? 0) as num).toDouble(),
-                          gradient: LinearGradient(
+                          gradient: const LinearGradient(
                             colors: [
-                              primaryAppColor,
-                              primaryAppColor.withValues(alpha: 0.72),
+                              Color(0xFF0D9488),
+                              Color(0xFF2DD4BF),
                             ],
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
