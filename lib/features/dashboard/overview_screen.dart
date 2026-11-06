@@ -135,6 +135,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   List<Map<String, dynamic>> _topSuppliers = [];
   List<Map<String, dynamic>> _allSuppliers = [];
   List<Map<String, dynamic>> _allArrears = [];
+  List<dynamic> _cachedFinalizedBills = [];
   int _selectedAnalyticsTab = 0;
   int _incomeExpensePageIndex = 0;
   int _topSuppliersChartPageIndex = 0;
@@ -665,85 +666,182 @@ class _OverviewScreenState extends State<OverviewScreen> {
         }
       }
 
-      var sortedSuppliers = supplierWeightMap.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      _allSuppliers = sortedSuppliers
-          .map(
-            (e) => {
-              'id': e.key,
-              'name': customerNames[e.key] ?? 'Unknown',
-              'weight': e.value,
-              'income': supplierIncomeMap[e.key] ?? 0.0,
-              'expense': supplierExpenseMap[e.key] ?? 0.0,
-            },
-          )
-          .toList();
-      _topSuppliers = _allSuppliers.take(10).toList();
-
-      // Read from finalized_bills for true arrears (only on initial load or full refresh)
+      // Read from finalized_bills for true arrears and annual customer aggregation
       double totalOverallOutstanding = _overallOutstandingAdvances;
       List<Map<String, dynamic>> finalArrears = _allArrears;
 
-      if (!_hasFetchedLiveTodayAndArrears || isFullRefresh) {
+      if (!_hasFetchedLiveTodayAndArrears || isFullRefresh || _cachedFinalizedBills.isEmpty) {
         var allFinalizedBills = await Supabase.instance.client
             .from('finalized_bills')
-            .select('customerId, customerName, refNumber, billData, finalizedAt')
+            .select('id, customerId, customerName, refNumber, billData, finalizedAt')
             .eq('organization_id', orgId)
             .order('finalizedAt', ascending: false);
-
-        Map<String, Map<String, dynamic>> latestBillPerCustomer = {};
-        for (var bill in allFinalizedBills) {
-          String cId = bill['customerId'] ?? '';
-          if (cId.isEmpty) continue;
-          if (!latestBillPerCustomer.containsKey(cId)) {
-            latestBillPerCustomer[cId] = bill;
-          }
-        }
-
-        totalOverallOutstanding = 0.0;
-        Map<String, double> arrearsMap = {};
-
-        for (var entry in latestBillPerCustomer.entries) {
-          String cId = entry.key;
-          var bill = entry.value;
-          var billData = bill['billData'];
-          if (billData is! Map) continue;
-
-          double netPayable = _toDouble(billData['netPayable']);
-
-          if (netPayable < 0) {
-            double outstanding = netPayable.abs();
-            arrearsMap[cId] = outstanding;
-            totalOverallOutstanding += outstanding;
-          }
-        }
-
-        finalArrears =
-            arrearsMap.entries
-                .toList()
-                .map(
-                  (e) => {
-                    'id': e.key,
-                    'name':
-                        customerNames[e.key] ??
-                        latestBillPerCustomer[e.key]?['customerName'] ??
-                        'Unknown',
-                    'customerNumber':
-                        customersSnapshot.firstWhere(
-                          (c) => c['id'] == e.key,
-                          orElse: () => {'refNumber': ''},
-                        )['refNumber'] ??
-                        '',
-                    'amount': e.value,
-                  },
-                )
-                .toList()
-              ..sort(
-                (a, b) =>
-                    _toDouble(b['amount']).compareTo(_toDouble(a['amount'])),
-              );
-        _hasFetchedLiveTodayAndArrears = true;
+        _cachedFinalizedBills = allFinalizedBills;
       }
+
+      final allBills = _cachedFinalizedBills;
+      Map<String, Map<String, dynamic>> latestBillPerCustomer = {};
+      for (var bill in allBills) {
+        String cId = bill['customerId'] ?? '';
+        if (cId.isEmpty) continue;
+        if (!latestBillPerCustomer.containsKey(cId)) {
+          latestBillPerCustomer[cId] = bill;
+        }
+      }
+
+      totalOverallOutstanding = 0.0;
+      Map<String, double> arrearsMap = {};
+
+      for (var entry in latestBillPerCustomer.entries) {
+        String cId = entry.key;
+        var bill = entry.value;
+        var billData = bill['billData'];
+        if (billData is! Map) continue;
+
+        double netPayable = _toDouble(billData['netPayable']);
+
+        if (netPayable < 0) {
+          double outstanding = netPayable.abs();
+          arrearsMap[cId] = outstanding;
+          totalOverallOutstanding += outstanding;
+        }
+      }
+
+      finalArrears =
+          arrearsMap.entries
+              .toList()
+              .map(
+                (e) => {
+                  'id': e.key,
+                  'name':
+                      customerNames[e.key] ??
+                      latestBillPerCustomer[e.key]?['customerName'] ??
+                      'Unknown',
+                  'customerNumber':
+                      customersSnapshot.firstWhere(
+                        (c) => c['id'] == e.key,
+                        orElse: () => {'refNumber': ''},
+                      )['refNumber'] ??
+                      '',
+                  'amount': e.value,
+                },
+              )
+              .toList()
+            ..sort(
+              (a, b) =>
+                  _toDouble(b['amount']).compareTo(_toDouble(a['amount'])),
+            );
+      _hasFetchedLiveTodayAndArrears = true;
+
+      // --- Annual Customer Aggregation for $_selectedYear (All Customers + Arrears) ---
+      int extractBillYear(dynamic bill) {
+        if (bill == null) return 0;
+        final fAt = bill['finalizedAt']?.toString() ?? '';
+        if (fAt.isNotEmpty) {
+          final dt = DateTime.tryParse(fAt);
+          if (dt != null) return dt.year;
+        }
+        final bData = bill['billData'];
+        if (bData is Map) {
+          final y = int.tryParse(bData['year']?.toString() ?? '');
+          if (y != null && y > 2000) return y;
+          final mStr = bData['month']?.toString() ?? '';
+          final mParts = mStr.split('-');
+          if (mParts.isNotEmpty) {
+            final y2 = int.tryParse(mParts[0]);
+            if (y2 != null && y2 > 2000) return y2;
+          }
+        }
+        final id = bill['id']?.toString() ?? '';
+        final idParts = id.split('_');
+        for (var p in idParts) {
+          if (p.length >= 4) {
+            final y3 = int.tryParse(p.substring(0, 4));
+            if (y3 != null && y3 > 2000 && y3 < 2100) return y3;
+          }
+        }
+        return 0;
+      }
+
+      Map<String, double> customerYearWeight = {};
+      Map<String, double> customerYearIncome = {};
+      Map<String, double> customerYearExpense = {};
+
+      for (var bill in allBills) {
+        if (extractBillYear(bill) == _selectedYear) {
+          String cId = bill['customerId'] ?? '';
+          var bData = bill['billData'];
+          if (bData is Map && cId.isNotEmpty) {
+            double tw = _toDouble(bData['netWeight'] ?? bData['totalWeight']);
+            double bTeaRate = _toDouble(bData['teaRate']);
+            double bGross = _toDouble(bData['grossIncome'] ?? bData['gross']);
+            if (tw <= 0 && bTeaRate > 0 && bGross > 0) {
+              tw = bGross / bTeaRate;
+            }
+            double adv = _toDouble(bData['advTotal']);
+            double fert = _toDouble(bData['fertTotal']);
+            double tea = _toDouble(bData['teaTotal']);
+            double oth = _toDouble(bData['otherTotal']);
+            double exp = adv + fert + tea + oth;
+
+            customerYearWeight[cId] = (customerYearWeight[cId] ?? 0.0) + tw;
+            customerYearIncome[cId] = (customerYearIncome[cId] ?? 0.0) + bGross;
+            customerYearExpense[cId] = (customerYearExpense[cId] ?? 0.0) + exp;
+          }
+        }
+      }
+
+      // Add current unfinalized entries if in this year
+      if (start.year == _selectedYear) {
+        supplierWeightMap.forEach((cId, w) {
+          customerYearWeight[cId] = (customerYearWeight[cId] ?? 0.0) + w;
+        });
+        supplierIncomeMap.forEach((cId, inc) {
+          customerYearIncome[cId] = (customerYearIncome[cId] ?? 0.0) + inc;
+        });
+        supplierExpenseMap.forEach((cId, exp) {
+          customerYearExpense[cId] = (customerYearExpense[cId] ?? 0.0) + exp;
+        });
+      }
+
+      // Build comprehensive list of ALL customers (including arrears customers)
+      List<Map<String, dynamic>> yearCustomerList = [];
+      for (var c in customersSnapshot) {
+        String cId = (c['id'] ?? '').toString();
+        String cName = (c['name'] ?? 'Unknown').toString();
+        String cRef = (c['refNumber'] ?? '').toString();
+        double yrWeight = customerYearWeight[cId] ?? 0.0;
+        double yrIncome = customerYearIncome[cId] ?? 0.0;
+        double yrExpense = customerYearExpense[cId] ?? 0.0;
+        double arrears = arrearsMap[cId] ?? 0.0;
+
+        if (arrears > 0 && yrExpense < arrears) {
+          yrExpense = arrears;
+        }
+
+        yearCustomerList.add({
+          'id': cId,
+          'name': cName,
+          'refNumber': cRef,
+          'weight': yrWeight,
+          'income': yrIncome,
+          'expense': yrExpense,
+          'arrears': arrears,
+          'hasArrears': arrears > 0,
+        });
+      }
+
+      yearCustomerList.sort((a, b) {
+        double wA = (a['weight'] as num).toDouble();
+        double wB = (b['weight'] as num).toDouble();
+        if (wA != wB) return wB.compareTo(wA);
+        double eA = (a['expense'] as num).toDouble();
+        double eB = (b['expense'] as num).toDouble();
+        return eB.compareTo(eA);
+      });
+
+      _allSuppliers = yearCustomerList;
+      _topSuppliers = _allSuppliers.take(10).toList();
 
       // --- Factory Revenue Calculations ---
       final String factoryStartStr = DateFormat('yyyy-MM-dd').format(start);
@@ -2673,9 +2771,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            const Text(
-              'දත්ත විශ්ලේෂණය',
-              style: TextStyle(
+            Text(
+              'දත්ත විශ්ලේෂණය ($_selectedYear වාර්ෂික)',
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
                 color: Color(0xFF1F2937),
@@ -2849,7 +2947,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     }
 
     final int totalSuppliers = _allSuppliers.length;
-    const int pageSize = 8;
+    const int pageSize = 10;
     final int totalPages = (totalSuppliers / pageSize).ceil();
     final int currentPage = _topSuppliersChartPageIndex.clamp(0, math.max(0, totalPages - 1));
     final int startIndex = currentPage * pageSize;
@@ -2873,9 +2971,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'වැඩිම දළු සැපයුම්කරුවන් (බර අනුව)',
-                style: TextStyle(
+              Text(
+                'වැඩිම දළු සැපයුම්කරුවන් ($_selectedYear වාර්ෂික)',
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF374151),
@@ -2975,12 +3073,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
               }
             }
           },
-          child: SizedBox(
-            height: 180,
-            child: BarChart(
-              BarChartData(
-                maxY: maxY,
-                alignment: BarChartAlignment.spaceAround,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: math.max(460.0, displayedSuppliers.length * 68.0 + 50.0),
+              ),
+              child: SizedBox(
+                height: 185,
+                child: BarChart(
+                  BarChartData(
+                    maxY: maxY,
+                    alignment: BarChartAlignment.spaceAround,
                 barTouchData: BarTouchData(
                   enabled: true,
                   touchTooltipData: BarTouchTooltipData(
@@ -3094,7 +3197,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 24,
+                          width: 26,
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                         ),
                       ],
@@ -3104,6 +3207,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ),
         ),
+      ),
+    ),
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -3120,7 +3225,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   Icon(Icons.workspace_premium_rounded, size: 16, color: Colors.amber.shade700),
                   const SizedBox(width: 6),
                   Text(
-                    'ප්‍රමුඛ ${startIndex + 1} - $endIndex දෙනාගේ එකතුව:',
+                    'වාර්ෂික එකතුව (ප්‍රමුඛ ${startIndex + 1} - $endIndex):',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 4),
@@ -3365,172 +3470,189 @@ class _OverviewScreenState extends State<OverviewScreen> {
               }
             }
           },
-          child: SizedBox(
-            height: 180,
-            child: BarChart(
-              BarChartData(
-                maxY: maxY,
-                alignment: BarChartAlignment.spaceAround,
-                barTouchData: BarTouchData(
-                  enabled: true,
-                  touchTooltipData: BarTouchTooltipData(
-                    tooltipRoundedRadius: 8,
-                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    tooltipMargin: 6,
-                    fitInsideHorizontally: true,
-                    fitInsideVertically: true,
-                    getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
-                    tooltipBorder: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      width: 1,
-                    ),
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      if (groupIndex < 0 || groupIndex >= displayedSuppliers.length) return null;
-                      final s = displayedSuppliers[groupIndex];
-                      final inc = ((s['income'] ?? 0) as num).toDouble();
-                      final exp = ((s['expense'] ?? 0) as num).toDouble();
-                      final net = inc - exp;
-                      final rank = startIndex + groupIndex + 1;
-                      return BarTooltipItem(
-                        '#$rank ${s['name'] ?? ''}\n',
-                        const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: math.max(480.0, displayedSuppliers.length * 88.0 + 60.0),
+              ),
+              child: SizedBox(
+                height: 180,
+                child: BarChart(
+                  BarChartData(
+                    maxY: maxY,
+                    alignment: BarChartAlignment.spaceAround,
+                    barTouchData: BarTouchData(
+                      enabled: true,
+                      touchTooltipData: BarTouchTooltipData(
+                        tooltipRoundedRadius: 8,
+                        tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        tooltipMargin: 6,
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipColor: (_) => const Color(0xFF0F172A).withValues(alpha: 0.95),
+                        tooltipBorder: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          width: 1,
                         ),
-                        children: [
-                          TextSpan(
-                            text: 'ආදායම: Rs. ${currencyF.format(inc)}\n',
-                            style: const TextStyle(
-                              color: Color(0xFF34D399),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11.5,
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          if (groupIndex < 0 || groupIndex >= displayedSuppliers.length) return null;
+                          final s = displayedSuppliers[groupIndex];
+                          final inc = ((s['income'] ?? 0) as num).toDouble();
+                          final exp = ((s['expense'] ?? 0) as num).toDouble();
+                          final arrears = ((s['arrears'] ?? 0) as num).toDouble();
+                          final net = inc - exp;
+                          final rank = startIndex + groupIndex + 1;
+                          return BarTooltipItem(
+                            '#$rank ${s['name'] ?? ''}\n',
+                            const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
                             ),
-                          ),
-                          TextSpan(
-                            text: 'වියදම්: Rs. ${currencyF.format(exp)}\n',
-                            style: const TextStyle(
-                              color: Color(0xFFFBBF24),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          TextSpan(
-                            text: 'ශුද්ධ ඉතිරිය: Rs. ${currencyF.format(net)}',
-                            style: TextStyle(
-                              color: net >= 0 ? const Color(0xFF38BDF8) : const Color(0xFFF87171),
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 50,
-                      getTitlesWidget: (value, meta) {
-                        if (value == 0 || value == maxY) return const SizedBox();
-                        if (value >= 1000000) {
-                          return Text(
-                            '${(value / 1000000).toStringAsFixed(1)}M',
-                            style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
-                          );
-                        }
-                        if (value >= 1000) {
-                          return Text(
-                            '${(value / 1000).toInt()}K',
-                            style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
-                          );
-                        }
-                        return Text(
-                          '${value.toInt()}',
-                          style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
-                        final s = displayedSuppliers[idx];
-                        final name = (s['name'] ?? '').toString();
-                        final shortName = name.length > 7 ? '${name.substring(0, 6)}..' : name;
-                        final rank = startIndex + idx + 1;
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            '#$rank $shortName',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF374151),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: maxY > 0 ? (maxY / 4) : 10000,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.grey.shade200,
-                    strokeWidth: 1,
-                    dashArray: [4, 4],
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: [
-                  for (int i = 0; i < displayedSuppliers.length; i++)
-                    BarChartGroupData(
-                      x: i,
-                      barsSpace: 4,
-                      barRods: [
-                        BarChartRodData(
-                          toY: ((displayedSuppliers[i]['income'] ?? 0) as num).toDouble(),
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFF059669),
-                              Color(0xFF34D399),
+                            children: [
+                              TextSpan(
+                                text: 'දළු ආදායම: Rs. ${currencyF.format(inc)}\n',
+                                style: const TextStyle(
+                                  color: Color(0xFF34D399),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'අඩුකිරීම්/වියදම්: Rs. ${currencyF.format(exp)}\n',
+                                style: const TextStyle(
+                                  color: Color(0xFFFBBF24),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                              if (arrears > 0)
+                                TextSpan(
+                                  text: 'පසුගිය හිඟ: Rs. ${currencyF.format(arrears)}\n',
+                                  style: const TextStyle(
+                                    color: Color(0xFFF87171),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              TextSpan(
+                                text: 'ශුද්ධ ඉතිරිය: Rs. ${currencyF.format(net)}',
+                                style: TextStyle(
+                                  color: net >= 0 ? const Color(0xFF38BDF8) : const Color(0xFFF87171),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11.5,
+                                ),
+                              ),
                             ],
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                          ),
-                          width: 14,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                        ),
-                        BarChartRodData(
-                          toY: ((displayedSuppliers[i]['expense'] ?? 0) as num).toDouble(),
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFFD97706),
-                              Color(0xFFFBBF24),
-                            ],
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                          ),
-                          width: 14,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                        ),
-                      ],
+                          );
+                        },
+                      ),
                     ),
-                ],
+                    titlesData: FlTitlesData(
+                      show: true,
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 50,
+                          getTitlesWidget: (value, meta) {
+                            if (value == 0 || value == maxY) return const SizedBox();
+                            if (value >= 1000000) {
+                              return Text(
+                                '${(value / 1000000).toStringAsFixed(1)}M',
+                                style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                              );
+                            }
+                            if (value >= 1000) {
+                              return Text(
+                                '${(value / 1000).toInt()}K',
+                                style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                              );
+                            }
+                            return Text(
+                              '${value.toInt()}',
+                              style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600),
+                            );
+                          },
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30,
+                          getTitlesWidget: (value, meta) {
+                            final idx = value.toInt();
+                            if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
+                            final s = displayedSuppliers[idx];
+                            final name = (s['name'] ?? '').toString();
+                            final shortName = name.length > 7 ? '${name.substring(0, 6)}..' : name;
+                            final rank = startIndex + idx + 1;
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                '#$rank $shortName',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF374151),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: maxY > 0 ? (maxY / 4) : 10000,
+                      getDrawingHorizontalLine: (value) => FlLine(
+                        color: Colors.grey.shade200,
+                        strokeWidth: 1,
+                        dashArray: [4, 4],
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    barGroups: [
+                      for (int i = 0; i < displayedSuppliers.length; i++)
+                        BarChartGroupData(
+                          x: i,
+                          barsSpace: 4,
+                          barRods: [
+                            BarChartRodData(
+                              toY: ((displayedSuppliers[i]['income'] ?? 0) as num).toDouble(),
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF059669),
+                                  Color(0xFF34D399),
+                                ],
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                              ),
+                              width: 16,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                            ),
+                            BarChartRodData(
+                              toY: ((displayedSuppliers[i]['expense'] ?? 0) as num).toDouble(),
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFFD97706),
+                                  Color(0xFFFBBF24),
+                                ],
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                              ),
+                              width: 16,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -3551,7 +3673,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   Icon(Icons.savings_outlined, size: 16, color: Colors.green.shade700),
                   const SizedBox(width: 6),
                   Text(
-                    'ප්‍රමුඛ ${startIndex + 1} - $endIndex එකතුව:',
+                    'වාර්ෂික එකතුව (ප්‍රමුඛ ${startIndex + 1} - $endIndex):',
                     style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 6),
@@ -3609,9 +3731,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 195,
-          child: BarChart(
+        Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(380.0, items.length * 85.0 + 80.0),
+            ),
+            child: SizedBox(
+              height: 195,
+              child: BarChart(
             BarChartData(
               maxY: maxY,
               alignment: BarChartAlignment.spaceAround,
@@ -3731,6 +3858,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
           ),
         ),
+      ),
+    ),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -6539,15 +6668,41 @@ class _OverviewScreenState extends State<OverviewScreen> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              s['name'] ?? '',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 12.5,
-                color: Color(0xFF374151),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    s['name'] ?? '',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      color: Color(0xFF374151),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if ((s['arrears'] ?? 0) > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFFECACA), width: 0.8),
+                    ),
+                    child: Text(
+                      'හිඟ: Rs. ${NumberFormat('#,##0', 'en_US').format(s['arrears'])}',
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(width: 8),
