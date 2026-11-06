@@ -3196,8 +3196,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       final s = displayedSuppliers[groupIndex];
                       final rank = startIndex + groupIndex + 1;
                       final name = (s['name'] ?? 'නොදනී').toString();
-                      final ref = (s['refNumber'] ?? '').toString();
-                      final displayName = ref.isNotEmpty ? '#$rank $name ($ref)' : '#$rank $name';
+                      final ref = (s['refNumber'] ?? '').toString().trim();
+                      final custNumber = ref.isNotEmpty ? (ref.startsWith('#') ? ref : '#$ref') : '#$rank';
+                      final displayName = '$custNumber $name';
                       final inc = ((s['income'] ?? 0) as num).toDouble();
                       final exp = ((s['expense'] ?? 0) as num).toDouble();
                       final wt = ((s['weight'] ?? 0) as num).toDouble();
@@ -3307,13 +3308,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
                         if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
-                        final rank = startIndex + idx + 1;
+                        final s = displayedSuppliers[idx];
+                        final ref = (s['refNumber'] ?? '').toString().trim();
+                        final custNumber = ref.isNotEmpty ? ref : (startIndex + idx + 1).toString();
+                        final label = custNumber.startsWith('#') ? custNumber : '#$custNumber';
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
-                            '#$rank',
+                            label,
                             style: const TextStyle(
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               color: Color(0xFF374151),
                             ),
@@ -3338,7 +3342,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   for (int i = 0; i < displayedSuppliers.length; i++)
                     BarChartGroupData(
                       x: i,
-                      barsSpace: 3,
+                      barsSpace: 0,
                       barRods: [
                         BarChartRodData(
                           toY: ((displayedSuppliers[i]['income'] ?? 0) as num).toDouble(),
@@ -3350,8 +3354,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 12,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(3.5)),
+                          width: 13,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(3),
+                          ),
                         ),
                         BarChartRodData(
                           toY: ((displayedSuppliers[i]['expense'] ?? 0) as num).toDouble(),
@@ -3363,8 +3369,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 12,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(3.5)),
+                          width: 13,
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(3),
+                          ),
                         ),
                       ],
                     ),
@@ -3591,8 +3599,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       final s = displayedSuppliers[groupIndex];
                       final rank = startIndex + groupIndex + 1;
                       final name = (s['name'] ?? '').toString();
-                      final ref = (s['refNumber'] ?? '').toString();
-                      final displayName = ref.isNotEmpty ? '#$rank $name ($ref)' : '#$rank $name';
+                      final ref = (s['refNumber'] ?? '').toString().trim();
+                      final custNumber = ref.isNotEmpty ? (ref.startsWith('#') ? ref : '#$ref') : '#$rank';
+                      final displayName = '$custNumber $name';
                       final wt = ((s['weight'] ?? 0) as num).toDouble();
                       return BarTooltipItem(
                         '$displayName\n',
@@ -3643,13 +3652,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
                         if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
-                        final rank = startIndex + idx + 1;
+                        final s = displayedSuppliers[idx];
+                        final ref = (s['refNumber'] ?? '').toString().trim();
+                        final custNumber = ref.isNotEmpty ? ref : (startIndex + idx + 1).toString();
+                        final label = custNumber.startsWith('#') ? custNumber : '#$custNumber';
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
-                            '#$rank',
+                            label,
                             style: const TextStyle(
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               color: Color(0xFF374151),
                             ),
@@ -3885,8 +3897,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       final s = displayedSuppliers[groupIndex];
                       final rank = startIndex + groupIndex + 1;
                       final name = (s['name'] ?? 'නොදනී').toString();
-                      final ref = (s['refNumber'] ?? '').toString();
-                      final displayName = ref.isNotEmpty ? '#$rank $name ($ref)' : '#$rank $name';
+                      final ref = (s['refNumber'] ?? '').toString().trim();
+                      final custNumber = ref.isNotEmpty ? (ref.startsWith('#') ? ref : '#$ref') : '#$rank';
+                      final displayName = '$custNumber $name';
                       final adv = ((s['adv'] ?? 0) as num).toDouble();
                       final fert = ((s['fert'] ?? 0) as num).toDouble();
                       final tea = ((s['tea'] ?? 0) as num).toDouble();
@@ -4004,13 +4017,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
                         if (idx < 0 || idx >= displayedSuppliers.length) return const SizedBox();
-                        final rank = startIndex + idx + 1;
+                        final s = displayedSuppliers[idx];
+                        final ref = (s['refNumber'] ?? '').toString().trim();
+                        final custNumber = ref.isNotEmpty ? ref : (startIndex + idx + 1).toString();
+                        final label = custNumber.startsWith('#') ? custNumber : '#$custNumber';
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
-                            '#$rank',
+                            label,
                             style: const TextStyle(
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               color: Color(0xFF374151),
                             ),
