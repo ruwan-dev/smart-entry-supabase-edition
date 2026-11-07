@@ -83,7 +83,7 @@ class ItemService {
       }
     } catch (_) {}
 
-    return _getDefaultItems(orgId);
+    return [];
   }
 
   /// Default baseline items (Slots 1 to 4) mapped to existing legacy prices.
@@ -140,6 +140,11 @@ class ItemService {
           .eq('id', 'prices')
           .maybeSingle();
     } catch (_) {}
+
+    // Only migrate if legacy prices actually existed for this organization
+    if (priceDoc == null) {
+      return [];
+    }
 
     final defaultItems = _getDefaultItems(orgId, priceDoc);
     try {
