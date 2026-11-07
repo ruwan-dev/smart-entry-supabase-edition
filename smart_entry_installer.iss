@@ -1,14 +1,14 @@
 [Setup]
 AppId={{8B4F9C2D-1E3A-4F71-B536-12A456C9F28E}
 AppName=Smart Entry
-AppVersion=1.0.2
+AppVersion=1.0.3
 AppPublisher=OrbitView Innovations
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 DefaultDirName={autopf}\Smart Entry
 DisableProgramGroupPage=yes
-OutputDir=.\Installer
-OutputBaseFilename=SmartEntry_Setup_v1.0.2
+OutputDir=.\Installer\v1.0.3
+OutputBaseFilename=SmartEntry_Setup_v1.0.3
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
