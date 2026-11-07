@@ -56,3 +56,4 @@ check_entries.dart
 get_org_id.dart
 test_db.dart
 Installer/SmartEntry_Setup_v*.exe
+Installer/v*/
