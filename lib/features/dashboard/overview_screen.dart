@@ -45,20 +45,6 @@ class DashboardItemSummary {
   });
 }
 
-class _SupplierScatterSpot extends ScatterSpot {
-  final Map<String, dynamic> supplier;
-
-  _SupplierScatterSpot(
-    super.x,
-    super.y,
-    this.supplier, {
-    super.dotPainter,
-  });
-
-  @override
-  List<Object?> get props => [...super.props, supplier['id']];
-}
-
 class WeeklyHarvestData {
   final int weekNumber;
   final String label;
@@ -3045,8 +3031,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 const SizedBox(width: 8),
                 _buildAnalyticsTabPill(
                   index: 2,
-                  icon: Icons.scatter_plot_rounded,
-                  label: 'සැපයුම්කරුවන්ගේ විසිරුම (Scatter)',
+                  icon: Icons.grid_view_rounded,
+                  label: 'අවදානම් හා ලාභදායිත්ව Matrix',
                 ),
               ],
             ),
@@ -3124,7 +3110,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       case 1:
         return _buildLeafWeightBarChart(weightF);
       case 2:
-        return _buildSuppliersScatterChart(currencyF, weightF);
+        return _buildRiskProfitabilityMatrix(currencyF, weightF);
       default:
         return _buildTopSuppliersBarChart(currencyF, weightF);
     }
@@ -3826,43 +3812,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildScatterLegendBadge({
-    required Color color,
-    required String label,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: color.withValues(alpha: 0.95),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSuppliersScatterChart(
+  Widget _buildRiskProfitabilityMatrix(
     NumberFormat currencyF,
     NumberFormat weightF,
   ) {
@@ -3878,382 +3828,677 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    // Filter suppliers who have either leaf harvest weight or deductions
-    final activeSuppliers = _allSuppliers.where((s) {
+    final List<Map<String, dynamic>> highRiskSuppliers = [];
+    final List<Map<String, dynamic>> goldenSuppliers = [];
+    final List<Map<String, dynamic>> activeProducers = [];
+    final List<Map<String, dynamic>> smallholders = [];
+
+    double totalActiveWeight = 0;
+    int activeCount = 0;
+    for (final s in _allSuppliers) {
       final double w = ((s['weight'] ?? 0) as num).toDouble();
       final double exp = ((s['expense'] ?? 0) as num).toDouble();
-      return w > 0 || exp > 0;
-    }).toList();
-
-    if (activeSuppliers.isEmpty) {
-      return SizedBox(
-        height: 240,
-        child: Center(
-          child: Text(
-            AppStrings.noDataFound,
-            style: const TextStyle(color: Colors.grey),
-          ),
-        ),
-      );
-    }
-
-    double maxWeight = 0;
-    double maxExpense = 0;
-    int safeCount = 0;
-    int moderateCount = 0;
-    int riskCount = 0;
-
-    for (final s in activeSuppliers) {
-      final double w = ((s['weight'] ?? 0) as num).toDouble();
-      final double exp = ((s['expense'] ?? 0) as num).toDouble();
-      final double inc = ((s['income'] ?? 0) as num).toDouble();
       final double arrears = ((s['arrears'] ?? 0) as num).toDouble();
+      if (w > 0 || exp > 0 || arrears > 0) {
+        totalActiveWeight += w;
+        activeCount++;
+      }
+    }
+    final double avgWeight = activeCount > 0 ? (totalActiveWeight / activeCount) : 1000.0;
 
-      if (w > maxWeight) maxWeight = w;
-      if (exp > maxExpense) maxExpense = exp;
+    for (final s in _allSuppliers) {
+      final double w = ((s['weight'] ?? 0) as num).toDouble();
+      final double inc = ((s['income'] ?? 0) as num).toDouble();
+      final double exp = ((s['expense'] ?? 0) as num).toDouble();
+      final double arrears = ((s['arrears'] ?? 0) as num).toDouble();
+      if (w <= 0 && exp <= 0 && arrears <= 0) continue;
 
-      if (arrears > 0 || (exp > inc && inc > 0) || (w < 200 && exp > 50000)) {
-        riskCount++;
-      } else if (inc > 0 && exp > inc * 0.7) {
-        moderateCount++;
+      if (arrears > 0 || (exp > inc && inc > 0) || (w < 300 && exp > 25000)) {
+        highRiskSuppliers.add(s);
+      } else if ((w >= avgWeight || w >= 2500) && (exp <= inc * 0.5)) {
+        goldenSuppliers.add(s);
+      } else if ((w >= avgWeight || w >= 1500) && (exp > inc * 0.5)) {
+        activeProducers.add(s);
       } else {
-        safeCount++;
+        smallholders.add(s);
       }
     }
 
-    // Calculate neat buffer and intervals for X axis (Weight in Kg)
-    double bufferMaxX = (maxWeight > 0 ? maxWeight : 1000) * 1.15;
-    double xInterval;
-    if (bufferMaxX > 25000) {
-      xInterval = 5000;
-    } else if (bufferMaxX > 10000) {
-      xInterval = 2500;
-    } else if (bufferMaxX > 4000) {
-      xInterval = 1000;
-    } else if (bufferMaxX > 1000) {
-      xInterval = 500;
-    } else {
-      xInterval = 100;
-    }
-    bufferMaxX = (bufferMaxX / xInterval).ceil() * xInterval;
+    highRiskSuppliers.sort((a, b) {
+      final arrA = ((a['arrears'] ?? 0) as num).toDouble();
+      final arrB = ((b['arrears'] ?? 0) as num).toDouble();
+      final defA = arrA > 0 ? arrA : (((a['expense'] ?? 0) as num) - ((a['income'] ?? 0) as num)).toDouble();
+      final defB = arrB > 0 ? arrB : (((b['expense'] ?? 0) as num) - ((b['income'] ?? 0) as num)).toDouble();
+      return defB.compareTo(defA);
+    });
 
-    // Calculate neat buffer and intervals for Y axis (Expense in Rs.)
-    double bufferMaxY = (maxExpense > 0 ? maxExpense : 100000) * 1.15;
-    double yInterval;
-    if (bufferMaxY > 2000000) {
-      yInterval = 500000;
-    } else if (bufferMaxY > 1000000) {
-      yInterval = 250000;
-    } else if (bufferMaxY > 400000) {
-      yInterval = 100000;
-    } else if (bufferMaxY > 100000) {
-      yInterval = 25000;
-    } else {
-      yInterval = 10000;
-    }
-    bufferMaxY = (bufferMaxY / yInterval).ceil() * yInterval;
+    goldenSuppliers.sort((a, b) {
+      final netA = (((a['income'] ?? 0) as num) - ((a['expense'] ?? 0) as num)).toDouble();
+      final netB = (((b['income'] ?? 0) as num) - ((b['expense'] ?? 0) as num)).toDouble();
+      return netB.compareTo(netA);
+    });
 
-    // Build scatter spots for all active suppliers
-    final List<ScatterSpot> spots = [];
-    for (final s in activeSuppliers) {
-      final double w = ((s['weight'] ?? 0) as num).toDouble();
-      final double exp = ((s['expense'] ?? 0) as num).toDouble();
-      final double inc = ((s['income'] ?? 0) as num).toDouble();
-      final double arrears = ((s['arrears'] ?? 0) as num).toDouble();
+    activeProducers.sort((a, b) {
+      final wA = ((a['weight'] ?? 0) as num).toDouble();
+      final wB = ((b['weight'] ?? 0) as num).toDouble();
+      return wB.compareTo(wA);
+    });
 
-      Color dotColor;
-      if (arrears > 0 || (exp > inc && inc > 0) || (w < 200 && exp > 50000)) {
-        dotColor = const Color(0xFFEF4444); // Red: High risk / arrears
-      } else if (inc > 0 && exp > inc * 0.7) {
-        dotColor = const Color(0xFFF59E0B); // Amber: Moderate risk (Deductions > 70%)
-      } else {
-        dotColor = const Color(0xFF10B981); // Emerald: Safe / Low risk
-      }
+    smallholders.sort((a, b) {
+      final wA = ((a['weight'] ?? 0) as num).toDouble();
+      final wB = ((b['weight'] ?? 0) as num).toDouble();
+      return wB.compareTo(wA);
+    });
 
-      spots.add(
-        _SupplierScatterSpot(
-          w,
-          exp,
-          s,
-          dotPainter: FlDotCirclePainter(
-            radius: 3.2,
-            color: dotColor,
-            strokeWidth: 0.8,
-            strokeColor: Colors.white,
-          ),
-        ),
-      );
-    }
+    final card1 = _buildMatrixQuadrantCard(
+      context: context,
+      title: 'ප්‍රමුඛ ලාභදායී',
+      subtitle: 'ඉහළ අස්වැන්න - අඩු වියදම්',
+      icon: Icons.workspace_premium_rounded,
+      themeColor: const Color(0xFF059669),
+      bgTint: const Color(0xFFF0FDF4),
+      borderColor: const Color(0xFFA7F3D0),
+      suppliers: goldenSuppliers,
+      currencyF: currencyF,
+      weightF: weightF,
+      isRisk: false,
+    );
+
+    final card2 = _buildMatrixQuadrantCard(
+      context: context,
+      title: 'ක්‍රියාකාරී නිෂ්පාදකයින්',
+      subtitle: 'අස්වැන්නෙන් ණය පියවන අය',
+      icon: Icons.trending_up_rounded,
+      themeColor: const Color(0xFF0284C7),
+      bgTint: const Color(0xFFF0F9FF),
+      borderColor: const Color(0xFFBAE6FD),
+      suppliers: activeProducers,
+      currencyF: currencyF,
+      weightF: weightF,
+      isRisk: false,
+    );
+
+    final card3 = _buildMatrixQuadrantCard(
+      context: context,
+      title: 'අධි අවදානම් Alert',
+      subtitle: 'අස්වැන්නට වඩා වියදම් වැඩි/හිඟ',
+      icon: Icons.warning_amber_rounded,
+      themeColor: const Color(0xFFDC2626),
+      bgTint: const Color(0xFFFEF2F2),
+      borderColor: const Color(0xFFFECACA),
+      suppliers: highRiskSuppliers,
+      currencyF: currencyF,
+      weightF: weightF,
+      isRisk: true,
+    );
+
+    final card4 = _buildMatrixQuadrantCard(
+      context: context,
+      title: 'සුළු සැපයුම්කරුවන්',
+      subtitle: 'සුළු අස්වැන්නක් සහිත අය',
+      icon: Icons.eco_rounded,
+      themeColor: const Color(0xFFD97706),
+      bgTint: const Color(0xFFFFFBEB),
+      borderColor: const Color(0xFFFDE68A),
+      suppliers: smallholders,
+      currencyF: currencyF,
+      weightF: weightF,
+      isRisk: false,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header Row: Title, active supplier count, and Risk Category Badges
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Text(
-                    'සැපයුම්කරුවන්ගේ විසිරුම (දළු බර vs වියදම්) ($_selectedYear)',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF374151),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.blueGrey.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.blueGrey.shade200),
-                    ),
-                    child: Text(
-                      'සැපයුම්කරුවන්: ${activeSuppliers.length}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blueGrey.shade700,
-                      ),
-                    ),
-                  ),
-                ],
+              Text(
+                'අවදානම් සහ ලාභදායිත්ව විශ්ලේෂණය ($_selectedYear වාර්ෂික)',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF374151),
+                ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildScatterLegendBadge(
-                    color: const Color(0xFF10B981),
-                    label: 'ආරක්ෂිත ($safeCount)',
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blueGrey.shade200),
+                ),
+                child: Text(
+                  'සමස්ත සැපයුම්කරුවන්: $activeCount',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.blueGrey.shade700,
                   ),
-                  const SizedBox(width: 8),
-                  _buildScatterLegendBadge(
-                    color: const Color(0xFFF59E0B),
-                    label: 'මධ්‍යස්ථ ($moderateCount)',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildScatterLegendBadge(
-                    color: const Color(0xFFEF4444),
-                    label: 'අවදානම් ($riskCount)',
-                  ),
-                ],
+                ),
               ),
             ],
           ),
         ),
-        // Chart Area
-        SizedBox(
-          height: 240,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(6, 12, 16, 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blueGrey.shade50),
-            ),
-            child: ScatterChart(
-              ScatterChartData(
-                scatterSpots: spots,
-                minX: 0,
-                maxX: bufferMaxX,
-                minY: 0,
-                maxY: bufferMaxY,
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border(
-                    left: BorderSide(color: Colors.grey.shade300, width: 1),
-                    bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-                    top: BorderSide.none,
-                    right: BorderSide.none,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final bool isWide = constraints.maxWidth >= 950;
+            if (isWide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: card1),
+                  const SizedBox(width: 8),
+                  Expanded(child: card2),
+                  const SizedBox(width: 8),
+                  Expanded(child: card3),
+                  const SizedBox(width: 8),
+                  Expanded(child: card4),
+                ],
+              );
+            } else {
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: card1),
+                      const SizedBox(width: 8),
+                      Expanded(child: card2),
+                    ],
                   ),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawHorizontalLine: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: yInterval,
-                  verticalInterval: xInterval,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.grey.shade200,
-                    strokeWidth: 1,
-                    dashArray: [4, 4],
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: card3),
+                      const SizedBox(width: 8),
+                      Expanded(child: card4),
+                    ],
                   ),
-                  getDrawingVerticalLine: (value) => FlLine(
-                    color: Colors.grey.shade200,
-                    strokeWidth: 1,
-                    dashArray: [4, 4],
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    axisNameWidget: const Padding(
-                      padding: EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        'ලබාගත් මුදල් හා ද්‍රව්‍ය (Rs.)',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                    axisNameSize: 14,
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 50,
-                      interval: yInterval,
-                      getTitlesWidget: (value, meta) {
-                        if (value == 0 || value == bufferMaxY) return const SizedBox();
-                        String text;
-                        if (value >= 1000000) {
-                          text = '${(value / 1000000).toStringAsFixed(1)}M';
-                        } else if (value >= 1000) {
-                          text = '${(value / 1000).toStringAsFixed(0)}K';
-                        } else {
-                          text = value.toStringAsFixed(0);
-                        }
-                        return Text(
-                          text,
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    axisNameWidget: const Padding(
-                      padding: EdgeInsets.only(top: 2),
-                      child: Text(
-                        'සපයන ලද දළු අස්වැන්න (Kg)',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                    axisNameSize: 14,
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 22,
-                      interval: xInterval,
-                      getTitlesWidget: (value, meta) {
-                        if (value == 0 || value == bufferMaxX) return const SizedBox();
-                        String text;
-                        if (value >= 1000) {
-                          text = '${(value / 1000).toStringAsFixed(0)}K';
-                        } else {
-                          text = value.toStringAsFixed(0);
-                        }
-                        return Text(
-                          '$text Kg',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                scatterTouchData: ScatterTouchData(
-                  enabled: true,
-                  handleBuiltInTouches: true,
-                  touchSpotThreshold: 12.0,
-                  touchTooltipData: ScatterTouchTooltipData(
-                    tooltipRoundedRadius: 8,
-                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    maxContentWidth: 200,
-                    fitInsideHorizontally: true,
-                    fitInsideVertically: true,
-                    getTooltipColor: (ScatterSpot spot) => const Color(0xFF1E293B),
-                    getTooltipItems: (ScatterSpot touchedSpot) {
-                      if (touchedSpot is _SupplierScatterSpot) {
-                        final s = touchedSpot.supplier;
-                        final ref = (s['refNumber'] ?? '').toString().trim();
-                        final name = (s['name'] ?? '').toString();
-                        final w = ((s['weight'] ?? 0) as num).toDouble();
-                        final inc = ((s['income'] ?? 0) as num).toDouble();
-                        final exp = ((s['expense'] ?? 0) as num).toDouble();
-                        final arrears = ((s['arrears'] ?? 0) as num).toDouble();
-                        final margin = inc - exp;
-                        final label = ref.isNotEmpty
-                            ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
-                            : name;
+                ],
+              );
+            }
+          },
+        ),
+      ],
+    );
+  }
 
-                        return ScatterTooltipItem(
-                          '$label\n',
-                          textAlign: TextAlign.left,
-                          textStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11.5,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'දළු බර: ${weightF.format(w)} Kg\n',
-                              style: const TextStyle(
-                                color: Color(0xFF2DD4BF),
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'දළ ආදායම: Rs. ${currencyF.format(inc)}\n',
-                              style: const TextStyle(
-                                color: Color(0xFF93C5FD),
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'මුදල්/ද්‍රව්‍ය: Rs. ${currencyF.format(exp)}\n',
-                              style: const TextStyle(
-                                color: Color(0xFFFBBF24),
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'ශුද්ධ ශේෂය: Rs. ${currencyF.format(margin)}',
-                              style: TextStyle(
-                                color: margin >= 0 ? const Color(0xFF34D399) : const Color(0xFFF87171),
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (arrears > 0)
-                              TextSpan(
-                                text: '\n(හිඟ ශේෂය: Rs. ${currencyF.format(arrears)})',
-                                style: const TextStyle(
-                                  color: Color(0xFFEF4444),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                          ],
-                        );
-                      }
-                      return null;
-                    },
+  Widget _buildMatrixQuadrantCard({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color themeColor,
+    required Color bgTint,
+    required Color borderColor,
+    required List<Map<String, dynamic>> suppliers,
+    required NumberFormat currencyF,
+    required NumberFormat weightF,
+    required bool isRisk,
+  }) {
+    double totalWeight = 0;
+    double totalIncome = 0;
+    double totalExpense = 0;
+    double totalArrears = 0;
+
+    for (final s in suppliers) {
+      totalWeight += ((s['weight'] ?? 0) as num).toDouble();
+      totalIncome += ((s['income'] ?? 0) as num).toDouble();
+      totalExpense += ((s['expense'] ?? 0) as num).toDouble();
+      totalArrears += ((s['arrears'] ?? 0) as num).toDouble();
+    }
+    final double netBalance = totalIncome - totalExpense;
+    final top3 = suppliers.take(3).toList();
+
+    return Container(
+      height: 240,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgTint,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: themeColor.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Row
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: themeColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(icon, size: 14, color: themeColor),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: themeColor.withValues(alpha: 0.95),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: themeColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${suppliers.length}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: themeColor,
                   ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Summary Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'දළු අස්වැන්න',
+                      style: TextStyle(fontSize: 8.5, color: Colors.grey.shade600),
+                    ),
+                    Text(
+                      '${weightF.format(totalWeight)} Kg',
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      isRisk ? 'අවදානම් / හිඟ' : 'ශුද්ධ ශේෂය',
+                      style: TextStyle(fontSize: 8.5, color: Colors.grey.shade600),
+                    ),
+                    Text(
+                      isRisk
+                          ? (totalArrears > 0
+                              ? 'Rs. ${(totalArrears / 1000).toStringAsFixed(0)}K'
+                              : 'Rs. ${(totalExpense / 1000).toStringAsFixed(0)}K')
+                          : 'Rs. ${(netBalance / 1000).toStringAsFixed(0)}K',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: isRisk ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          // Top Recipients List
+          Expanded(
+            child: suppliers.isEmpty
+                ? Center(
+                    child: Text(
+                      'සැපයුම්කරුවන් නැත',
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                    ),
+                  )
+                : ListView.separated(
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    itemCount: top3.length,
+                    separatorBuilder: (c, i) => const SizedBox(height: 3),
+                    itemBuilder: (c, idx) {
+                      final s = top3[idx];
+                      final ref = (s['refNumber'] ?? '').toString().trim();
+                      final name = (s['name'] ?? '').toString();
+                      final inc = ((s['income'] ?? 0) as num).toDouble();
+                      final exp = ((s['expense'] ?? 0) as num).toDouble();
+                      final arrears = ((s['arrears'] ?? 0) as num).toDouble();
+                      final net = inc - exp;
+                      final label = ref.isNotEmpty ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name') : name;
+
+                      String trailingText;
+                      if (isRisk) {
+                        trailingText = arrears > 0 ? 'Rs. ${currencyF.format(arrears)}' : 'Rs. ${currencyF.format(exp)}';
+                      } else {
+                        trailingText = 'Rs. ${currencyF.format(net > 0 ? net : exp)}';
+                      }
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey.shade200, width: 0.6),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 14,
+                              height: 14,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: themeColor.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '${idx + 1}',
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: themeColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF334155),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              trailingText,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: isRisk ? const Color(0xFFDC2626) : const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          // View all footer button
+          if (suppliers.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () {
+                _showMatrixCategoryDialog(
+                  context,
+                  title: title,
+                  themeColor: themeColor,
+                  suppliers: suppliers,
+                  currencyF: currencyF,
+                  weightF: weightF,
+                  isRisk: isRisk,
+                );
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'සියල්ල බලන්න (${suppliers.length})',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: themeColor,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 8.5, color: themeColor),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showMatrixCategoryDialog(
+    BuildContext context, {
+    required String title,
+    required Color themeColor,
+    required List<Map<String, dynamic>> suppliers,
+    required NumberFormat currencyF,
+    required NumberFormat weightF,
+    required bool isRisk,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filtered = suppliers.where((s) {
+              if (query.trim().isEmpty) return true;
+              final q = query.trim().toLowerCase();
+              final name = (s['name'] ?? '').toString().toLowerCase();
+              final ref = (s['refNumber'] ?? '').toString().toLowerCase();
+              return name.contains(q) || ref.contains(q);
+            }).toList();
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Container(
+                width: 620,
+                height: 520,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: themeColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            isRisk ? Icons.warning_amber_rounded : Icons.people_alt_rounded,
+                            color: themeColor,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '$title (${suppliers.length})',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          splashRadius: 18,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        hintText: 'නම හෝ #Ref අංකයෙන් සොයන්න...',
+                        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: themeColor),
+                        ),
+                        isDense: true,
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          query = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.blueGrey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          SizedBox(width: 32, child: Text('#', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)))),
+                          Expanded(flex: 4, child: Text('සැපයුම්කරු', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)))),
+                          Expanded(flex: 3, child: Text('දළු බර (Kg)', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)))),
+                          Expanded(flex: 3, child: Text('වියදම් (Rs.)', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)))),
+                          Expanded(flex: 4, child: Text('ශුද්ධ ශේෂය (Rs.)', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)))),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                'ගැළපෙන සැපයුම්කරුවන් හමු නොවීය',
+                                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (c, i) => Divider(height: 1, thickness: 0.5, color: Colors.grey.shade100),
+                              itemBuilder: (c, idx) {
+                                final s = filtered[idx];
+                                final ref = (s['refNumber'] ?? '').toString().trim();
+                                final name = (s['name'] ?? '').toString();
+                                final w = ((s['weight'] ?? 0) as num).toDouble();
+                                final exp = ((s['expense'] ?? 0) as num).toDouble();
+                                final inc = ((s['income'] ?? 0) as num).toDouble();
+                                final arrears = ((s['arrears'] ?? 0) as num).toDouble();
+                                final net = inc - exp;
+                                final label = ref.isNotEmpty ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name') : name;
+
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 32,
+                                        child: Text(
+                                          '${idx + 1}',
+                                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 4,
+                                        child: Text(
+                                          label,
+                                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          weightF.format(w),
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(fontSize: 11, color: Color(0xFF0F766E), fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          currencyF.format(exp),
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(fontSize: 11, color: Color(0xFFD97706), fontWeight: FontWeight.w500),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 4,
+                                        child: Text(
+                                          arrears > 0
+                                              ? '-${currencyF.format(arrears)}'
+                                              : (net >= 0 ? '+${currencyF.format(net)}' : '-${currencyF.format(net.abs())}'),
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: (arrears > 0 || net < 0) ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -6563,9 +6808,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         builder: (context, constraints) {
           double w = constraints.maxWidth;
           bool isMobile = w < 550;
-          bool isTablet = w < 900;
           double w2 = isMobile ? w : (w - 16) / 2;
-          double w3 = isMobile ? w : (isTablet ? (w - 16) / 2 : (w - 32) / 3);
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -7170,91 +7413,5 @@ class _OverviewScreenState extends State<OverviewScreen> {
           )
           .toList(),
     );
-  }
-
-  Widget _buildIconToggleHeader(
-    String title,
-    String value,
-    List<String> options,
-    Map<String, IconData> iconMap,
-    Function(String) onChanged,
-  ) {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF1F2937),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30), // Pill shape
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: options.map((option) {
-              bool isSelected = value == option;
-              return Tooltip(
-                message: _getFilterLabel(option),
-                child: InkWell(
-                  onTap: () => onChanged(option),
-                  borderRadius: BorderRadius.circular(30), // Pill shape
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16, // slightly wider for a perfect pill look
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? primaryAppColor.withValues(alpha: 0.12)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(30), // Pill shape
-                    ),
-                    child: Icon(
-                      iconMap[option] ?? Icons.filter_alt_rounded,
-                      size: 20,
-                      color: isSelected
-                          ? primaryAppColor
-                          : Colors.blueGrey.shade400,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _getFilterLabel(String option) {
-    switch (option) {
-      case 'Today':
-        return AppStrings.today;
-      case 'This Week':
-        return AppStrings.thisWeek;
-      case 'This Month':
-        return AppStrings.thisMonth;
-      case 'Last 6 Months':
-        return AppStrings.last6Months;
-      case 'Last Year':
-        return AppStrings.lastYear;
-      case 'Monthly':
-        return AppStrings.monthly;
-      case 'Yearly':
-        return AppStrings.yearly;
-      default:
-        return option;
-    }
   }
 }
