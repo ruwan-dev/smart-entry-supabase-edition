@@ -3976,9 +3976,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
           exp,
           s,
           dotPainter: FlDotCirclePainter(
-            radius: 5.5,
+            radius: 3.2,
             color: dotColor,
-            strokeWidth: 1.5,
+            strokeWidth: 0.8,
             strokeColor: Colors.white,
           ),
         ),
@@ -4170,6 +4170,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 scatterTouchData: ScatterTouchData(
                   enabled: true,
                   handleBuiltInTouches: true,
+                  touchSpotThreshold: 12.0,
                   touchTooltipData: ScatterTouchTooltipData(
                     tooltipRoundedRadius: 8,
                     tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
