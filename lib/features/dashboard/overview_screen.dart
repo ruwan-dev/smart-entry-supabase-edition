@@ -45,6 +45,20 @@ class DashboardItemSummary {
   });
 }
 
+class _SupplierScatterSpot extends ScatterSpot {
+  final Map<String, dynamic> supplier;
+
+  _SupplierScatterSpot(
+    super.x,
+    super.y,
+    this.supplier, {
+    super.dotPainter,
+  });
+
+  @override
+  List<Object?> get props => [...super.props, supplier['id']];
+}
+
 class WeeklyHarvestData {
   final int weekNumber;
   final String label;
@@ -125,26 +139,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
     Color(0xFFF59E0B), // Slot 7: Amber
     Color(0xFFEF4444), // Slot 8: Rose Red
   ];
-
-  Map<int, String> _orgSlotNames = {};
-
-  String _getSlotDisplayName(int slot) {
-    if (_orgSlotNames.containsKey(slot) && _orgSlotNames[slot]!.trim().isNotEmpty) {
-      return _orgSlotNames[slot]!;
-    }
-    switch (slot) {
-      case 1:
-        return AppStrings.fertilizer1;
-      case 2:
-        return AppStrings.fertilizer2;
-      case 3:
-        return AppStrings.teaPacket1;
-      case 4:
-        return AppStrings.teaPacket2;
-      default:
-        return 'ද්‍රව්‍ය $slot';
-    }
-  }
 
   Map<String, dynamic>? _latestSummaryData;
   String? _latestSummaryId;
@@ -1288,7 +1282,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
         _activeItemsSummary = activeItems;
         _itemBreakdownQuantities = itemBreakdownQ;
         _itemBreakdownAmounts = itemBreakdownA;
-        _orgSlotNames = currentOrgSlotNames;
 
         _isLoading = false;
         _isInitialLoad = false;
@@ -3052,8 +3045,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 const SizedBox(width: 8),
                 _buildAnalyticsTabPill(
                   index: 2,
-                  icon: Icons.donut_small_rounded,
-                  label: 'ද්‍රව්‍ය හා මුදල් බෙදීයාම',
+                  icon: Icons.scatter_plot_rounded,
+                  label: 'සැපයුම්කරුවන්ගේ විසිරුම (Scatter)',
                 ),
               ],
             ),
@@ -3131,7 +3124,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       case 1:
         return _buildLeafWeightBarChart(weightF);
       case 2:
-        return _buildInputsBreakdownDonutChart(currencyF);
+        return _buildSuppliersScatterChart(currencyF, weightF);
       default:
         return _buildTopSuppliersBarChart(currencyF, weightF);
     }
@@ -3833,95 +3826,46 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildTop5RecipientCard({
-    required String title,
-    required IconData icon,
+  Widget _buildScatterLegendBadge({
     required Color color,
-    required List<Map<String, dynamic>> items,
-    required String emptyMessage,
-    required double Function(Map<String, dynamic>) getAmount,
-    required NumberFormat currencyF,
+    required String label,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(
-                  icon,
-                  size: 13,
-                  color: color,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1F2937),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
           ),
-          const Divider(height: 12, thickness: 0.6),
-          Expanded(
-            child: items.isEmpty
-                ? Center(
-                    child: Text(
-                      emptyMessage,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade400,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : ListView.separated(
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: EdgeInsets.zero,
-                    itemCount: items.length,
-                    separatorBuilder: (ctx, i) => const SizedBox(height: 4),
-                    itemBuilder: (context, idx) {
-                      final item = items[idx];
-                      final ref = (item['refNumber'] ?? '').toString().trim();
-                      final name = (item['name'] ?? '').toString();
-                      final amt = getAmount(item);
-                      final label = ref.isNotEmpty
-                          ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
-                          : name;
-                      return _buildCompactRecipientRow(
-                        rank: idx + 1,
-                        title: label,
-                        amount: 'Rs. ${currencyF.format(amt)}',
-                        badgeColor: color,
-                      );
-                    },
-                  ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: color.withValues(alpha: 0.95),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInputsBreakdownDonutChart(NumberFormat currencyF) {
+  Widget _buildSuppliersScatterChart(
+    NumberFormat currencyF,
+    NumberFormat weightF,
+  ) {
     if (_allSuppliers.isEmpty) {
       return SizedBox(
         height: 240,
@@ -3934,444 +3878,381 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
     }
 
-    double totalAdv = 0;
-    final Map<int, double> slotTotals = {};
+    // Filter suppliers who have either leaf harvest weight or deductions
+    final activeSuppliers = _allSuppliers.where((s) {
+      final double w = ((s['weight'] ?? 0) as num).toDouble();
+      final double exp = ((s['expense'] ?? 0) as num).toDouble();
+      return w > 0 || exp > 0;
+    }).toList();
 
-    for (final s in _allSuppliers) {
-      totalAdv += ((s['adv'] ?? 0) as num).toDouble();
-      final Map sSlots = (s['slotAmounts'] as Map?) ?? {};
-      sSlots.forEach((k, v) {
-        final int slot = (k as num).toInt();
-        final double amt = (v as num).toDouble();
-        if (slot >= 1 && slot <= 8 && amt > 0) {
-          slotTotals[slot] = (slotTotals[slot] ?? 0.0) + amt;
-        }
-      });
-    }
-
-    // Fallback if slotAmounts was empty but legacy totals were present
-    if (slotTotals.isEmpty) {
-      double totalFert = 0;
-      double totalTea = 0;
-      double totalOther = 0;
-      for (final s in _allSuppliers) {
-        totalFert += ((s['fert'] ?? 0) as num).toDouble();
-        totalTea += ((s['tea'] ?? 0) as num).toDouble();
-        totalOther += ((s['other'] ?? 0) as num).toDouble();
-      }
-      if (totalFert > 0) slotTotals[1] = totalFert;
-      if (totalTea > 0) slotTotals[3] = totalTea;
-      if (totalOther > 0) slotTotals[5] = totalOther;
-    }
-
-    final double totalItems = slotTotals.values.fold(0.0, (sum, val) => sum + val);
-    final double totalDeductions = totalAdv + totalItems;
-
-    if (totalDeductions <= 0) {
+    if (activeSuppliers.isEmpty) {
       return SizedBox(
         height: 240,
         child: Center(
           child: Text(
-            'ද්‍රව්‍ය හෝ අත්තිකාරම් දත්ත හමු නොවීය',
-            style: TextStyle(color: Colors.grey.shade500),
+            AppStrings.noDataFound,
+            style: const TextStyle(color: Colors.grey),
           ),
         ),
       );
     }
 
-    // Build Donut sections
-    final List<PieChartSectionData> sections = [];
-    if (totalAdv > 0) {
-      final double pct = (totalAdv / totalDeductions) * 100;
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFFF59E0B),
-          value: totalAdv,
-          title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
-          radius: 28,
-          titleStyle: const TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-    for (int s = 1; s <= 8; s++) {
-      final amt = slotTotals[s] ?? 0.0;
-      if (amt > 0) {
-        final double pct = (amt / totalDeductions) * 100;
-        sections.add(
-          PieChartSectionData(
-            color: _itemSlotColors[s - 1],
-            value: amt,
-            title: pct >= 6 ? '${pct.toStringAsFixed(1)}%' : '',
-            radius: 28,
-            titleStyle: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        );
-      }
-    }
+    double maxWeight = 0;
+    double maxExpense = 0;
+    int safeCount = 0;
+    int moderateCount = 0;
+    int riskCount = 0;
 
-    // Build dynamic legend rows
-    final List<Widget> legendRows = [];
-    for (int s = 1; s <= 8; s++) {
-      final amt = slotTotals[s] ?? 0.0;
-      if (amt > 0) {
-        if (legendRows.isNotEmpty) {
-          legendRows.add(const SizedBox(height: 5));
-        }
-        legendRows.add(
-          _buildDonutStatRow(
-            color: _itemSlotColors[s - 1],
-            label: _getSlotDisplayName(s),
-            amount: amt,
-            total: totalDeductions,
-            currencyF: currencyF,
-          ),
-        );
-      }
-    }
+    for (final s in activeSuppliers) {
+      final double w = ((s['weight'] ?? 0) as num).toDouble();
+      final double exp = ((s['expense'] ?? 0) as num).toDouble();
+      final double inc = ((s['income'] ?? 0) as num).toDouble();
+      final double arrears = ((s['arrears'] ?? 0) as num).toDouble();
 
-    // Rank active item categories by total expenditure to dynamically configure Top 5 cards
-    final activeSlots = slotTotals.entries
-        .where((e) => e.value > 0)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+      if (w > maxWeight) maxWeight = w;
+      if (exp > maxExpense) maxExpense = exp;
 
-    String card1Title = 'වැඩිම ද්‍රව්‍ය (Top 5)';
-    IconData card1Icon = Icons.eco_rounded;
-    Color card1Color = const Color(0xFF10B981);
-    String card1Empty = 'ද්‍රව්‍ය ලබාගත් අය නැත';
-    List<Map<String, dynamic>> card1Top5 = [];
-    double Function(Map<String, dynamic>) card1GetAmount = (m) => 0.0;
-
-    String card2Title = 'වැඩිම ද්‍රව්‍ය (Top 5)';
-    IconData card2Icon = Icons.inventory_2_rounded;
-    Color card2Color = const Color(0xFF06B6D4);
-    String card2Empty = 'ද්‍රව්‍ය ලබාගත් අය නැත';
-    List<Map<String, dynamic>> card2Top5 = [];
-    double Function(Map<String, dynamic>) card2GetAmount = (m) => 0.0;
-
-    if (activeSlots.isNotEmpty) {
-      final slot1 = activeSlots[0].key;
-      final name1 = _getSlotDisplayName(slot1);
-      card1Title = 'වැඩිම $name1 (Top 5)';
-      card1Icon = slot1 <= 2 ? Icons.eco_rounded : Icons.inventory_2_rounded;
-      card1Color = _itemSlotColors[slot1 - 1];
-      card1Empty = '$name1 ලබාගත් අය නැත';
-      card1GetAmount = (m) {
-        final Map slots = (m['slotAmounts'] as Map?) ?? {};
-        return ((slots[slot1] ?? 0) as num).toDouble();
-      };
-      card1Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
-          .where((s) => card1GetAmount(s) > 0)
-          .toList()
-        ..sort((a, b) => card1GetAmount(b).compareTo(card1GetAmount(a)));
-      card1Top5 = card1Top5.take(5).toList();
-
-      if (activeSlots.length >= 2) {
-        final slot2 = activeSlots[1].key;
-        final name2 = _getSlotDisplayName(slot2);
-        card2Title = 'වැඩිම $name2 (Top 5)';
-        card2Icon = slot2 <= 2 ? Icons.eco_rounded : Icons.inventory_2_rounded;
-        card2Color = _itemSlotColors[slot2 - 1];
-        card2Empty = '$name2 ලබාගත් අය නැත';
-        card2GetAmount = (m) {
-          final Map slots = (m['slotAmounts'] as Map?) ?? {};
-          return ((slots[slot2] ?? 0) as num).toDouble();
-        };
-        card2Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
-            .where((s) => card2GetAmount(s) > 0)
-            .toList()
-          ..sort((a, b) => card2GetAmount(b).compareTo(card2GetAmount(a)));
-        card2Top5 = card2Top5.take(5).toList();
+      if (arrears > 0 || (exp > inc && inc > 0) || (w < 200 && exp > 50000)) {
+        riskCount++;
+      } else if (inc > 0 && exp > inc * 0.7) {
+        moderateCount++;
       } else {
-        card2Title = 'වැඩිම අත්තිකාරම් (Top 5)';
-        card2Icon = Icons.payments_rounded;
-        card2Color = const Color(0xFFF59E0B);
-        card2Empty = 'අත්තිකාරම් ලබාගත් අය නැත';
-        card2GetAmount = (m) => ((m['adv'] ?? 0) as num).toDouble();
-        card2Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
-            .where((s) => card2GetAmount(s) > 0)
-            .toList()
-          ..sort((a, b) => card2GetAmount(b).compareTo(card2GetAmount(a)));
-        card2Top5 = card2Top5.take(5).toList();
+        safeCount++;
       }
-    } else {
-      card1Title = 'වැඩිම අත්තිකාරම් (Top 5)';
-      card1Icon = Icons.payments_rounded;
-      card1Color = const Color(0xFFF59E0B);
-      card1Empty = 'අත්තිකාරම් ලබාගත් අය නැත';
-      card1GetAmount = (m) => ((m['adv'] ?? 0) as num).toDouble();
-      card1Top5 = List<Map<String, dynamic>>.from(_allSuppliers)
-          .where((s) => card1GetAmount(s) > 0)
-          .toList()
-        ..sort((a, b) => card1GetAmount(b).compareTo(card1GetAmount(a)));
-      card1Top5 = card1Top5.take(5).toList();
+    }
 
-      card2Title = 'අමතර ද්‍රව්‍ය (Top 5)';
-      card2Icon = Icons.inventory_2_rounded;
-      card2Color = Colors.grey;
-      card2Empty = 'ද්‍රව්‍ය දත්ත නොමැත';
-      card2Top5 = [];
+    // Calculate neat buffer and intervals for X axis (Weight in Kg)
+    double bufferMaxX = (maxWeight > 0 ? maxWeight : 1000) * 1.15;
+    double xInterval;
+    if (bufferMaxX > 25000) {
+      xInterval = 5000;
+    } else if (bufferMaxX > 10000) {
+      xInterval = 2500;
+    } else if (bufferMaxX > 4000) {
+      xInterval = 1000;
+    } else if (bufferMaxX > 1000) {
+      xInterval = 500;
+    } else {
+      xInterval = 100;
+    }
+    bufferMaxX = (bufferMaxX / xInterval).ceil() * xInterval;
+
+    // Calculate neat buffer and intervals for Y axis (Expense in Rs.)
+    double bufferMaxY = (maxExpense > 0 ? maxExpense : 100000) * 1.15;
+    double yInterval;
+    if (bufferMaxY > 2000000) {
+      yInterval = 500000;
+    } else if (bufferMaxY > 1000000) {
+      yInterval = 250000;
+    } else if (bufferMaxY > 400000) {
+      yInterval = 100000;
+    } else if (bufferMaxY > 100000) {
+      yInterval = 25000;
+    } else {
+      yInterval = 10000;
+    }
+    bufferMaxY = (bufferMaxY / yInterval).ceil() * yInterval;
+
+    // Build scatter spots for all active suppliers
+    final List<ScatterSpot> spots = [];
+    for (final s in activeSuppliers) {
+      final double w = ((s['weight'] ?? 0) as num).toDouble();
+      final double exp = ((s['expense'] ?? 0) as num).toDouble();
+      final double inc = ((s['income'] ?? 0) as num).toDouble();
+      final double arrears = ((s['arrears'] ?? 0) as num).toDouble();
+
+      Color dotColor;
+      if (arrears > 0 || (exp > inc && inc > 0) || (w < 200 && exp > 50000)) {
+        dotColor = const Color(0xFFEF4444); // Red: High risk / arrears
+      } else if (inc > 0 && exp > inc * 0.7) {
+        dotColor = const Color(0xFFF59E0B); // Amber: Moderate risk (Deductions > 70%)
+      } else {
+        dotColor = const Color(0xFF10B981); // Emerald: Safe / Low risk
+      }
+
+      spots.add(
+        _SupplierScatterSpot(
+          w,
+          exp,
+          s,
+          dotPainter: FlDotCirclePainter(
+            radius: 5.5,
+            color: dotColor,
+            strokeWidth: 1.5,
+            strokeColor: Colors.white,
+          ),
+        ),
+      );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Header Row: Title, active supplier count, and Risk Category Badges
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'ද්‍රව්‍ය හා මුදල් බෙදීයාමේ විශ්ලේෂණය ($_selectedYear වාර්ෂික)',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF374151),
-                ),
+              Row(
+                children: [
+                  Text(
+                    'සැපයුම්කරුවන්ගේ විසිරුම (දළු බර vs වියදම්) ($_selectedYear)',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF374151),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.blueGrey.shade200),
+                    ),
+                    child: Text(
+                      'සැපයුම්කරුවන්: ${activeSuppliers.length}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blueGrey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                'මුළු වියදම්: Rs. ${currencyF.format(totalDeductions)}',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.grey.shade700,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildScatterLegendBadge(
+                    color: const Color(0xFF10B981),
+                    label: 'ආරක්ෂිත ($safeCount)',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildScatterLegendBadge(
+                    color: const Color(0xFFF59E0B),
+                    label: 'මධ්‍යස්ථ ($moderateCount)',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildScatterLegendBadge(
+                    color: const Color(0xFFEF4444),
+                    label: 'අවදානම් ($riskCount)',
+                  ),
+                ],
               ),
             ],
           ),
         ),
+        // Chart Area
         SizedBox(
-          height: 220,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Left: Donut Chart + Legend Badges
-              Expanded(
-                flex: 4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blueGrey.shade50),
+          height: 240,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(6, 12, 16, 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blueGrey.shade50),
+            ),
+            child: ScatterChart(
+              ScatterChartData(
+                scatterSpots: spots,
+                minX: 0,
+                maxX: bufferMaxX,
+                minY: 0,
+                maxY: bufferMaxY,
+                borderData: FlBorderData(
+                  show: true,
+                  border: Border(
+                    left: BorderSide(color: Colors.grey.shade300, width: 1),
+                    bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                    top: BorderSide.none,
+                    right: BorderSide.none,
                   ),
-                  child: Row(
-                    children: [
-                      // Donut with center text
-                      Expanded(
-                        flex: 5,
-                        child: Stack(
-                          alignment: Alignment.center,
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawHorizontalLine: true,
+                  drawVerticalLine: true,
+                  horizontalInterval: yInterval,
+                  verticalInterval: xInterval,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                  ),
+                  getDrawingVerticalLine: (value) => FlLine(
+                    color: Colors.grey.shade200,
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    axisNameWidget: const Padding(
+                      padding: EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        'ලබාගත් මුදල් හා ද්‍රව්‍ය (Rs.)',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                    axisNameSize: 14,
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 50,
+                      interval: yInterval,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0 || value == bufferMaxY) return const SizedBox();
+                        String text;
+                        if (value >= 1000000) {
+                          text = '${(value / 1000000).toStringAsFixed(1)}M';
+                        } else if (value >= 1000) {
+                          text = '${(value / 1000).toStringAsFixed(0)}K';
+                        } else {
+                          text = value.toStringAsFixed(0);
+                        }
+                        return Text(
+                          text,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    axisNameWidget: const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Text(
+                        'සපයන ලද දළු අස්වැන්න (Kg)',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                    axisNameSize: 14,
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 22,
+                      interval: xInterval,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0 || value == bufferMaxX) return const SizedBox();
+                        String text;
+                        if (value >= 1000) {
+                          text = '${(value / 1000).toStringAsFixed(0)}K';
+                        } else {
+                          text = value.toStringAsFixed(0);
+                        }
+                        return Text(
+                          '$text Kg',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                scatterTouchData: ScatterTouchData(
+                  enabled: true,
+                  handleBuiltInTouches: true,
+                  touchTooltipData: ScatterTouchTooltipData(
+                    tooltipRoundedRadius: 8,
+                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    maxContentWidth: 200,
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipColor: (ScatterSpot spot) => const Color(0xFF1E293B),
+                    getTooltipItems: (ScatterSpot touchedSpot) {
+                      if (touchedSpot is _SupplierScatterSpot) {
+                        final s = touchedSpot.supplier;
+                        final ref = (s['refNumber'] ?? '').toString().trim();
+                        final name = (s['name'] ?? '').toString();
+                        final w = ((s['weight'] ?? 0) as num).toDouble();
+                        final inc = ((s['income'] ?? 0) as num).toDouble();
+                        final exp = ((s['expense'] ?? 0) as num).toDouble();
+                        final arrears = ((s['arrears'] ?? 0) as num).toDouble();
+                        final margin = inc - exp;
+                        final label = ref.isNotEmpty
+                            ? (ref.startsWith('#') ? '$ref $name' : '#$ref $name')
+                            : name;
+
+                        return ScatterTooltipItem(
+                          '$label\n',
+                          textAlign: TextAlign.left,
+                          textStyle: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11.5,
+                          ),
                           children: [
-                            PieChart(
-                              PieChartData(
-                                sectionsSpace: 2,
-                                centerSpaceRadius: 42,
-                                sections: sections,
+                            TextSpan(
+                              text: 'දළු බර: ${weightF.format(w)} Kg\n',
+                              style: const TextStyle(
+                                color: Color(0xFF2DD4BF),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'මුළු අඩුකිරීම්',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    color: Colors.grey.shade600,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  totalDeductions >= 1000000
-                                      ? 'Rs. ${(totalDeductions / 1000000).toStringAsFixed(2)}M'
-                                      : totalDeductions >= 1000
-                                          ? 'Rs. ${(totalDeductions / 1000).toStringAsFixed(0)}K'
-                                          : 'Rs. ${totalDeductions.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF1E293B),
-                                  ),
-                                ),
-                              ],
+                            TextSpan(
+                              text: 'දළ ආදායම: Rs. ${currencyF.format(inc)}\n',
+                              style: const TextStyle(
+                                color: Color(0xFF93C5FD),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Legend stats column
-                      Expanded(
-                        flex: 6,
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (totalAdv > 0) ...[
-                                _buildDonutStatRow(
-                                  color: const Color(0xFFF59E0B),
-                                  label: 'අත්තිකාරම්',
-                                  amount: totalAdv,
-                                  total: totalDeductions,
-                                  currencyF: currencyF,
+                            TextSpan(
+                              text: 'මුදල්/ද්‍රව්‍ය: Rs. ${currencyF.format(exp)}\n',
+                              style: const TextStyle(
+                                color: Color(0xFFFBBF24),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            TextSpan(
+                              text: 'ශුද්ධ ශේෂය: Rs. ${currencyF.format(margin)}',
+                              style: TextStyle(
+                                color: margin >= 0 ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (arrears > 0)
+                              TextSpan(
+                                text: '\n(හිඟ ශේෂය: Rs. ${currencyF.format(arrears)})',
+                                style: const TextStyle(
+                                  color: Color(0xFFEF4444),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                if (legendRows.isNotEmpty) const SizedBox(height: 5),
-                              ],
-                              ...legendRows,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                              ),
+                          ],
+                        );
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              // Right: 2 dynamic ranking lists
-              Expanded(
-                flex: 5,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildTop5RecipientCard(
-                        title: card1Title,
-                        icon: card1Icon,
-                        color: card1Color,
-                        items: card1Top5,
-                        emptyMessage: card1Empty,
-                        getAmount: card1GetAmount,
-                        currencyF: currencyF,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildTop5RecipientCard(
-                        title: card2Title,
-                        icon: card2Icon,
-                        color: card2Color,
-                        items: card2Top5,
-                        emptyMessage: card2Empty,
-                        getAmount: card2GetAmount,
-                        currencyF: currencyF,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildDonutStatRow({
-    required Color color,
-    required String label,
-    required double amount,
-    required double total,
-    required NumberFormat currencyF,
-  }) {
-    final double pct = total > 0 ? (amount / total) * 100 : 0;
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF475569),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Text(
-          '${pct.toStringAsFixed(1)}%',
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompactRecipientRow({
-    required int rank,
-    required String title,
-    required String amount,
-    required Color badgeColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 16,
-            height: 16,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '$rank',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: badgeColor,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF334155),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text(
-            amount,
-            style: const TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1E293B),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
